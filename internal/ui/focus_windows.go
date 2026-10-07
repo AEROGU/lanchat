@@ -56,16 +56,22 @@ func enumWindow(h windows.HWND, _ uintptr) uintptr {
 // focusWindow trae al frente (y restaura si está minimizada) la ventana de
 // LanChat. Devuelve false si no la encuentra.
 func focusWindow() bool {
+	h := findWindow()
+	if h == 0 {
+		return false
+	}
+	if minimized, _, _ := procIsIconic.Call(uintptr(h)); minimized != 0 {
+		procShowWindow.Call(uintptr(h), swRestore)
+	}
+	procSetForegroundWindow.Call(uintptr(h))
+	return true
+}
+
+// findWindow devuelve la ventana de LanChat, o 0 si no está abierta.
+func findWindow() windows.HWND {
 	enumMu.Lock()
 	defer enumMu.Unlock()
 	enumFound = 0
 	windows.EnumWindows(enumCB, nil) // devuelve error cuando el callback se detiene: es lo esperado
-	if enumFound == 0 {
-		return false
-	}
-	if minimized, _, _ := procIsIconic.Call(uintptr(enumFound)); minimized != 0 {
-		procShowWindow.Call(uintptr(enumFound), swRestore)
-	}
-	procSetForegroundWindow.Call(uintptr(enumFound))
-	return true
+	return enumFound
 }

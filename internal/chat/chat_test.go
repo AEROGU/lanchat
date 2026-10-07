@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
@@ -38,7 +39,7 @@ func newTestService(t *testing.T) *Service {
 func post(t *testing.T, s *Service, m wireMessage) int {
 	t.Helper()
 	b, _ := json.Marshal(m)
-	req := httptest.NewRequest(http.MethodPost, msgPath, strings.NewReader(string(b)))
+	req := httptest.NewRequest(http.MethodPost, protocol.RouteMessage, strings.NewReader(string(b)))
 	req.RemoteAddr = "192.168.1.30:51234"
 	rec := httptest.NewRecorder()
 	s.handleMsg(rec, req)

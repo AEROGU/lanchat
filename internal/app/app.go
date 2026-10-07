@@ -1,5 +1,6 @@
-// Package app une descubrimiento, almacenamiento, servidor entre equipos y chat.
-// Es lo único que usa la interfaz (consola ahora, web en el Hito 3).
+// Package app une descubrimiento, almacenamiento, servidor entre equipos, chat
+// y transferencias de archivos.
+// Es lo único que usa la interfaz (web o consola).
 package app
 
 import (
@@ -7,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -21,10 +23,13 @@ import (
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/transfer"
 )
 
 const (
 	dbFileName = "lanchat.db"
+	// stagingDirName guarda copias temporales de archivos arrastrados a la ventana.
+	stagingDirName = "outbox"
 	// shutdownTimeout: espera máxima a que terminen las peticiones en curso al cerrar.
 	shutdownTimeout = 5 * time.Second
 	eventBuffer     = 256
@@ -42,15 +47,16 @@ type Options struct {
 }
 
 type App struct {
-	dir   string
-	host  string
-	log   *slog.Logger
-	store *store.Store
-	srv   *peer.Server
-	disc  *discovery.Service
-	chat  *chat.Service
+	dir      string
+	host     string
+	log      *slog.Logger
+	store    *store.Store
+	srv      *peer.Server
+	disc     *discovery.Service
+	chat     *chat.Service
+	transfer *transfer.Service
 
-	// events lleva discovery.Event y chat.Event.
+	// events lleva discovery.Event, chat.Event y transfer.Event.
 	events chan any
 
 	mu  sync.Mutex
@@ -121,7 +127,7 @@ func New(o Options) (a *App, err error) {
 		st, disc, peer.NewClient(), o.Log)
 	ch.Register(srv)
 
-	return &App{
+	a = &App{
 		dir:    o.Dir,
 		host:   o.Hostname,
 		log:    o.Log,
@@ -131,10 +137,17 @@ func New(o Options) (a *App, err error) {
 		chat:   ch,
 		events: make(chan any, eventBuffer),
 		cfg:    cfg,
-	}, nil
+	}
+	a.transfer = transfer.New(transfer.Config{
+		StagingDir:  filepath.Join(o.Dir, stagingDirName),
+		DownloadDir: a.configuredDownloadDir,
+	}, st, disc, ch, o.Log)
+	a.transfer.Register(srv)
+	return a, nil
 }
 
-// Events entrega discovery.Event y chat.Event. Debe leerse hasta que se cierre.
+// Events entrega discovery.Event, chat.Event y transfer.Event. Debe leerse
+// hasta que se cierre.
 func (a *App) Events() <-chan any { return a.events }
 
 // Run funciona hasta que ctx se cancele; luego se despide de la red y cierra todo.
@@ -143,11 +156,18 @@ func (a *App) Run(ctx context.Context) error {
 	go func() { serveErr <- a.srv.Serve() }()
 
 	a.chat.Start()
+	a.transfer.Start()
 	var fwd sync.WaitGroup
-	fwd.Add(1)
+	fwd.Add(2)
 	go func() {
 		defer fwd.Done()
 		for ev := range a.chat.Events() {
+			a.events <- ev
+		}
+	}()
+	go func() {
+		defer fwd.Done()
+		for ev := range a.transfer.Events() {
 			a.events <- ev
 		}
 	}()
@@ -160,10 +180,13 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	discRunErr := <-discErr
 
+	// Primero se cortan los envíos largos para que el servidor no los espere.
+	a.transfer.Stop()
 	sctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	shutdownErr := a.srv.Shutdown(sctx)
 	a.chat.Close()
+	a.transfer.Close()
 	fwd.Wait()
 	close(a.events)
 
@@ -312,10 +335,8 @@ func (a *App) MarkRead(ctx context.Context, peerID string) (changed bool, err er
 
 // Send envía (o deja en cola) un mensaje para el contacto.
 func (a *App) Send(ctx context.Context, peerID, body string) (store.Message, error) {
-	if _, ok, err := a.Contact(ctx, peerID); err != nil {
+	if err := a.requireContact(ctx, peerID); err != nil {
 		return store.Message{}, err
-	} else if !ok {
-		return store.Message{}, fmt.Errorf("contacto %s desconocido", peerID)
 	}
 	return a.chat.Send(ctx, peerID, body)
 }
@@ -383,4 +404,97 @@ func (a *App) SetManualPeers(peers []string) error {
 func cleanName(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	return s, protocol.ValidateName(s)
+}
+
+// ---------- Archivos ----------
+
+// OfferFiles ofrece archivos (rutas locales) al contacto.
+func (a *App) OfferFiles(ctx context.Context, peerID string, paths []string) (store.Message, error) {
+	if err := a.requireContact(ctx, peerID); err != nil {
+		return store.Message{}, err
+	}
+	return a.transfer.Offer(ctx, peerID, paths)
+}
+
+// Upload recibe archivos que no tienen ruta local (los arrastrados a la
+// ventana): next devuelve el siguiente nombre y contenido, o io.EOF al
+// terminar. Se copian a una carpeta temporal y se ofrecen al contacto.
+func (a *App) Upload(ctx context.Context, peerID string, next func() (string, io.Reader, error)) (store.Message, error) {
+	if err := a.requireContact(ctx, peerID); err != nil {
+		return store.Message{}, err
+	}
+	dir, err := a.transfer.NewStaging()
+	if err != nil {
+		return store.Message{}, err
+	}
+	var paths []string
+	for {
+		name, r, err := next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err == nil {
+			var p string
+			p, err = a.transfer.SaveStaged(dir, name, r)
+			paths = append(paths, p)
+		}
+		if err != nil {
+			a.transfer.DiscardStaging(dir)
+			return store.Message{}, err
+		}
+	}
+	m, err := a.transfer.Offer(ctx, peerID, paths)
+	if err != nil {
+		a.transfer.DiscardStaging(dir)
+	}
+	return m, err
+}
+
+func (a *App) AcceptTransfer(ctx context.Context, id string) error { return a.transfer.Accept(ctx, id) }
+func (a *App) RejectTransfer(ctx context.Context, id string) error { return a.transfer.Reject(ctx, id) }
+func (a *App) CancelTransfer(ctx context.Context, id string) error { return a.transfer.Cancel(ctx, id) }
+
+func (a *App) Transfer(ctx context.Context, id string) (store.Transfer, bool, error) {
+	return a.store.Transfer(ctx, id)
+}
+
+func (a *App) TransfersByID(ctx context.Context, ids []string) (map[string]store.Transfer, error) {
+	return a.store.TransfersByID(ctx, ids)
+}
+
+// DownloadDir es la carpeta donde se guardan los archivos recibidos.
+func (a *App) DownloadDir() string {
+	return cmp.Or(a.configuredDownloadDir(), transfer.DefaultDownloadDir())
+}
+
+func (a *App) configuredDownloadDir() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.cfg.DownloadDir
+}
+
+// SetDownloadDir cambia la carpeta de descargas ("" = la predeterminada).
+func (a *App) SetDownloadDir(dir string) error {
+	dir = strings.TrimSpace(dir)
+	if dir != "" {
+		if !filepath.IsAbs(dir) {
+			return errors.New(`escribe la ruta completa de la carpeta, p. ej. D:\Recibidos`)
+		}
+		dir = filepath.Clean(dir)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return fmt.Errorf("no se pudo usar la carpeta: %w", err)
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.DownloadDir = dir
+	return a.cfg.Save(a.dir)
+}
+
+func (a *App) requireContact(ctx context.Context, peerID string) error {
+	_, ok, err := a.Contact(ctx, peerID)
+	if err == nil && !ok {
+		err = fmt.Errorf("contacto %s desconocido", peerID)
+	}
+	return err
 }

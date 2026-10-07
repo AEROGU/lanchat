@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"mime"
@@ -33,10 +34,13 @@ import (
 	"github.com/AEROGU/lanchat/internal/discovery"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/transfer"
 )
 
 const (
-	cookieName = "lanchat_session"
+	// cookiePrefix + puerto: las cookies no distinguen puertos, y dos instancias
+	// en 127.0.0.1 (otro usuario de Windows, pruebas) se pisarían la sesión.
+	cookiePrefix = "lanchat_session_"
 	// maxRequestBytes acota el JSON de la página: el mensaje más los demás campos.
 	maxRequestBytes = 2 * protocol.MaxMessageBytes
 	// historyPage es cuántos mensajes se cargan cada vez en una conversación.
@@ -66,6 +70,16 @@ type Backend interface {
 	SetAlias(ctx context.Context, peerID, alias string) error
 	ManualPeers() []string
 	SetManualPeers(peers []string) error
+
+	OfferFiles(ctx context.Context, peerID string, paths []string) (store.Message, error)
+	Upload(ctx context.Context, peerID string, next func() (string, io.Reader, error)) (store.Message, error)
+	AcceptTransfer(ctx context.Context, id string) error
+	RejectTransfer(ctx context.Context, id string) error
+	CancelTransfer(ctx context.Context, id string) error
+	Transfer(ctx context.Context, id string) (store.Transfer, bool, error)
+	TransfersByID(ctx context.Context, ids []string) (map[string]store.Transfer, error)
+	DownloadDir() string
+	SetDownloadDir(dir string) error
 }
 
 type Server struct {
@@ -162,10 +176,16 @@ func (s *Server) Publish(ctx context.Context, ev any) {
 	case discovery.Event:
 		s.publishContact(ctx, e.Peer.ID)
 	case chat.Event:
-		s.hub.broadcast("message", toMessageJSON(e.Message))
+		s.hub.broadcast("message", s.messageJSON(ctx, e.Message))
 		if e.Type == chat.MessageReceived {
 			s.publishContact(ctx, e.Message.PeerID)
 			s.unreadChanged(ctx)
+		}
+	case transfer.Event:
+		if e.Type == transfer.TransferProgress {
+			s.hub.broadcast("progress", toProgressJSON(e.Progress))
+		} else {
+			s.hub.broadcast("transfer", toTransferJSON(e.Transfer))
 		}
 	}
 }
@@ -210,6 +230,12 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/manual-peers", s.handleManualPeers)
 	mux.HandleFunc("POST /api/presence", s.handlePresence)
 	mux.HandleFunc("POST /api/open", s.handleOpen)
+	mux.HandleFunc("POST /api/files/pick", s.handlePickFiles)
+	mux.HandleFunc("POST "+uploadPath, s.handleUpload)
+	mux.HandleFunc("POST /api/transfers/{action}", s.handleTransferAction)
+	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
+	mux.HandleFunc("POST /api/download-dir", s.handleDownloadDir)
+	mux.HandleFunc("POST /api/download-dir/open", s.handleOpenDownloadDir)
 	return s.guard(mux)
 }
 
@@ -233,7 +259,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 				return
 			}
 			http.SetCookie(w, &http.Cookie{
-				Name: cookieName, Value: s.token, Path: "/",
+				Name: s.cookieName(), Value: s.token, Path: "/",
 				HttpOnly: true, SameSite: http.SameSiteStrictMode,
 			})
 			http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -244,15 +270,20 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			return
 		}
 		if r.Method == http.MethodPost {
-			if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt != "application/json" {
-				http.Error(w, "se esperaba JSON", http.StatusUnsupportedMediaType)
-				return
-			}
 			if o := r.Header.Get("Origin"); o != "" && o != "http://"+s.host {
 				http.Error(w, "origen no permitido", http.StatusForbidden)
 				return
 			}
-			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
+			// Solo la subida de archivos arrastrados acepta multipart (y sin límite de tamaño).
+			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			switch {
+			case r.URL.Path == uploadPath && mt == "multipart/form-data":
+			case mt == "application/json":
+				r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
+			default:
+				http.Error(w, "se esperaba JSON", http.StatusUnsupportedMediaType)
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -263,7 +294,7 @@ func (s *Server) validToken(t string) bool {
 }
 
 func (s *Server) authorized(r *http.Request) bool {
-	if c, err := r.Cookie(cookieName); err == nil && s.validToken(c.Value) {
+	if c, err := r.Cookie(s.cookieName()); err == nil && s.validToken(c.Value) {
 		return true
 	}
 	t, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -280,6 +311,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		Self:        toSelfJSON(s.b.Self()),
 		Contacts:    make([]contactJSON, len(contacts)),
 		ManualPeers: s.b.ManualPeers(),
+		DownloadDir: s.b.DownloadDir(),
 		Limits:      limitsJSON{MaxName: protocol.MaxNameLen, MaxMessageBytes: protocol.MaxMessageBytes},
 	}
 	for i, c := range contacts {
@@ -342,9 +374,10 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
-	out := make([]messageJSON, len(msgs))
-	for i, m := range msgs {
-		out[i] = toMessageJSON(m)
+	out, err := s.messagesJSON(r.Context(), msgs)
+	if err != nil {
+		s.fail(w, http.StatusInternalServerError, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -362,7 +395,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toMessageJSON(m))
+	writeJSON(w, http.StatusCreated, s.messageJSON(r.Context(), m))
 }
 
 func (s *Server) handleRead(w http.ResponseWriter, r *http.Request) {
@@ -475,3 +508,5 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
+
+func (s *Server) cookieName() string { return cookiePrefix + strconv.Itoa(s.Port()) }

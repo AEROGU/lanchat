@@ -42,6 +42,32 @@ var migrations = [][]string{
 		`ALTER TABLE messages ADD COLUMN unread INTEGER NOT NULL DEFAULT 0`,
 		`CREATE INDEX messages_unread ON messages(peer_id) WHERE unread = 1`,
 	},
+	{
+		// kind distingue los mensajes de texto de las ofertas de archivos.
+		`ALTER TABLE messages ADD COLUMN kind INTEGER NOT NULL DEFAULT 0`,
+		`CREATE TABLE transfers (
+			id         TEXT PRIMARY KEY, -- igual al id del mensaje de la oferta
+			peer_id    TEXT NOT NULL,
+			outgoing   INTEGER NOT NULL,
+			state      INTEGER NOT NULL,
+			token      TEXT NOT NULL,
+			expires_at INTEGER NOT NULL,
+			dir        TEXT NOT NULL DEFAULT '',
+			error      TEXT NOT NULL DEFAULT '',
+			updated_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX transfers_state ON transfers(outgoing, state)`,
+		`CREATE TABLE transfer_files (
+			transfer_id TEXT NOT NULL,
+			idx         INTEGER NOT NULL,
+			name        TEXT NOT NULL,
+			size        INTEGER NOT NULL,
+			mod_time    INTEGER NOT NULL DEFAULT 0,
+			path        TEXT NOT NULL DEFAULT '',
+			done        INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (transfer_id, idx)
+		)`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -192,21 +218,49 @@ type Message struct {
 	Status Status
 	// Unread: entrante que el usuario aún no ha visto.
 	Unread bool
+	Kind   Kind
 }
 
-const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread`
+type Kind int
+
+const (
+	KindText Kind = 0
+	// KindFiles: oferta de archivos; los detalles están en Transfer con el mismo ID.
+	KindFiles Kind = 1
+)
+
+const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind`
 
 // InsertMessage guarda el mensaje; inserted es false si ese ID ya existía
 // (un reenvío del mismo mensaje).
 func (s *Store) InsertMessage(ctx context.Context, m Message) (inserted bool, err error) {
-	res, err := s.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread)
+	return s.InsertMessageWithTransfer(ctx, m, nil)
+}
+
+// InsertMessageWithTransfer guarda el mensaje y, si t no es nil, su oferta de
+// archivos, todo en una transacción. Si el mensaje ya existía no cambia nada.
+func (s *Store) InsertMessageWithTransfer(ctx context.Context, m Message, t *Transfer) (inserted bool, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
-	n, err := res.RowsAffected()
-	return n > 0, err
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx,
+		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind)
+	if err != nil {
+		return false, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return false, err
+	}
+	if t != nil {
+		if err := insertTransfer(ctx, tx, *t); err != nil {
+			return false, err
+		}
+	}
+	return true, tx.Commit()
 }
 
 func (s *Store) MarkDelivered(ctx context.Context, id string) error {
@@ -304,7 +358,7 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 	for rows.Next() {
 		var m Message
 		var at, sent int64
-		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread); err != nil {
+		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread, &m.Kind); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)

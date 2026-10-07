@@ -41,7 +41,10 @@
       <div id="offline-note" class="note" hidden></div>
       <div id="messages" aria-live="polite"></div>
 
+      <div id="drop-overlay" hidden></div>
+
       <form id="composer" hidden>
+        <button type="button" id="attach-btn" class="icon-btn" title="Enviar archivos (también puedes arrastrarlos aquí)" aria-label="Enviar archivos">📎</button>
         <textarea id="input" rows="1" placeholder="Escribe un mensaje (Enter envía, Shift+Enter nueva línea)"></textarea>
         <button type="submit" class="primary">Enviar</button>
       </form>
@@ -61,6 +64,13 @@
       <label for="peers-input">Equipos de otras subredes</label>
       <textarea id="peers-input" rows="4" spellcheck="false"></textarea>
       <small class="help">Uno por línea: IP o nombre del equipo, con <code>:puerto</code> opcional. Ej.: <code>10.0.5.20</code> o <code>PC-VENTAS</code>.</small>
+
+      <label for="download-input">Carpeta para archivos recibidos</label>
+      <div class="input-row">
+        <input id="download-input" autocomplete="off" spellcheck="false">
+        <button type="button" id="open-downloads" class="text-btn">Abrir</button>
+      </div>
+      <small class="help">Vacío = la carpeta Descargas\LanChat.</small>
 
       <p id="settings-error" class="error" hidden></p>
       <p class="about" id="about"></p>

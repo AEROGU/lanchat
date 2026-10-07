@@ -58,7 +58,22 @@ func (s *Server) Close() error {
 // Shutdown deja de aceptar peticiones y espera a que terminen las que están en curso.
 func (s *Server) Shutdown(ctx context.Context) error { return s.srv.Shutdown(ctx) }
 
+// NewStreamClient es para descargas largas: sin límite de tiempo total (cada
+// descarga controla por su cuenta si se traba), pero sí para conectar y para
+// recibir la respuesta.
+func NewStreamClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 3 * time.Second}).DialContext,
+			ResponseHeaderTimeout: 30 * time.Second,
+			MaxIdleConnsPerHost:   2,
+			IdleConnTimeout:       60 * time.Second,
+		},
+	}
+}
+
 // NewClient devuelve un cliente HTTP con tiempos de espera pensados para una LAN.
+// Su límite total de 10 s no sirve para descargas: para eso, NewStreamClient.
 func NewClient() *http.Client {
 	return &http.Client{
 		Timeout: 10 * time.Second,

@@ -27,6 +27,8 @@ type Config struct {
 	HTTPPort int    `json:"http_port"`
 	// ManualPeers son equipos de otras subredes: "ip", "ip:puerto" o "hostname[:puerto]".
 	ManualPeers []string `json:"manual_peers"`
+	// DownloadDir es donde se guardan los archivos recibidos ("" = Descargas\LanChat).
+	DownloadDir string `json:"download_dir"`
 }
 
 // DefaultDir devuelve %APPDATA%\LanChat (o su equivalente en otros sistemas).

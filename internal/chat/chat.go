@@ -1,7 +1,7 @@
 // Package chat envía y recibe mensajes 1 a 1 entre equipos.
 //
 // Un mensaje saliente se guarda primero como pendiente y luego se entrega con
-// POST a msgPath en el equipo destino. Solo se marca como entregado cuando el
+// POST a protocol.RouteMessage en el equipo destino. Solo se marca como entregado cuando el
 // otro equipo responde 204 (ya lo guardó). Si el destino está desconectado, el
 // mensaje espera y se reintenta cuando vuelve a aparecer o cada retryInterval.
 package chat
@@ -29,14 +29,13 @@ import (
 const (
 	// retryInterval: cada cuánto se reintentan los pendientes a equipos en línea.
 	retryInterval = 30 * time.Second
-	// maxRequestBytes acota el JSON recibido: el texto más los demás campos.
-	maxRequestBytes = 2 * protocol.MaxMessageBytes
+	// maxRequestBytes acota el JSON recibido: el texto (con margen por el
+	// escapado JSON) más una oferta con el máximo de archivos.
+	maxRequestBytes = 2*protocol.MaxMessageBytes + protocol.MaxOfferFiles*(2*protocol.MaxFileNameLen+64)
 	// maxResponseDrain: cuánto se lee de una respuesta que no nos interesa.
 	maxResponseDrain = 4 << 10
 	eventBuffer      = 256
 )
-
-var msgPath = protocol.APIPrefix + "/msg"
 
 // Directory dice dónde está cada equipo; lo implementa discovery.Service.
 type Directory interface {
@@ -72,18 +71,75 @@ type wireMessage struct {
 	From     string `json:"from"`
 	FromName string `json:"from_name,omitempty"`
 	FromHost string `json:"from_host,omitempty"`
-	Body     string `json:"body"`
-	SentAt   int64  `json:"sent_at"` // Unix en milisegundos
+	// Body es el texto; en una oferta, un resumen legible ("📎 2 archivos…").
+	Body   string     `json:"body"`
+	SentAt int64      `json:"sent_at"` // Unix en milisegundos
+	Offer  *wireOffer `json:"offer,omitempty"`
+}
+
+// wireOffer acompaña a un mensaje que ofrece archivos.
+type wireOffer struct {
+	// Token autoriza al destinatario a descargar (encabezado protocol.TokenHeader).
+	Token     string     `json:"token"`
+	ExpiresAt int64      `json:"expires_at"` // Unix en milisegundos
+	Files     []wireFile `json:"files"`
+}
+
+type wireFile struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
 }
 
 func (m wireMessage) validate() error {
-	return errors.Join(
+	err := errors.Join(
 		protocol.ValidateID(m.ID),
 		protocol.ValidateID(m.From),
 		protocol.ValidateName(m.FromName),
 		protocol.ValidateHostname(m.FromHost),
 		protocol.ValidateMessage(m.Body),
 	)
+	if err != nil || m.Offer == nil {
+		return err
+	}
+	o := m.Offer
+	if len(o.Files) == 0 || len(o.Files) > protocol.MaxOfferFiles {
+		return fmt.Errorf("una oferta lleva de 1 a %d archivos", protocol.MaxOfferFiles)
+	}
+	errs := []error{protocol.ValidateToken(o.Token)}
+	for _, f := range o.Files {
+		errs = append(errs, protocol.ValidateFileName(f.Name))
+		if f.Size < 0 {
+			errs = append(errs, errors.New("tamaño de archivo negativo"))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func toWireOffer(t store.Transfer) *wireOffer {
+	o := &wireOffer{Token: t.Token, ExpiresAt: t.ExpiresAt.UnixMilli(), Files: make([]wireFile, len(t.Files))}
+	for i, f := range t.Files {
+		o.Files[i] = wireFile{Name: f.Name, Size: f.Size}
+	}
+	return o
+}
+
+// incomingTransfer arma la transferencia que se guarda al recibir una oferta.
+func (m wireMessage) incomingTransfer(now time.Time) store.Transfer {
+	t := store.Transfer{
+		ID:        m.ID,
+		PeerID:    m.From,
+		State:     store.TransferOffered,
+		Token:     m.Offer.Token,
+		ExpiresAt: time.UnixMilli(m.Offer.ExpiresAt),
+		Files:     make([]store.TransferFile, len(m.Offer.Files)),
+	}
+	if !now.Before(t.ExpiresAt) {
+		t.State = store.TransferExpired
+	}
+	for i, f := range m.Offer.Files {
+		t.Files[i] = store.TransferFile{Index: i, Name: f.Name, Size: f.Size}
+	}
+	return t
 }
 
 type Service struct {
@@ -120,7 +176,7 @@ func New(self Identity, st *store.Store, dir Directory, client *http.Client, log
 
 // Register agrega la ruta de mensajes al servidor entre equipos.
 func (s *Service) Register(srv *peer.Server) {
-	srv.Handle("POST "+msgPath, http.HandlerFunc(s.handleMsg))
+	srv.Handle("POST "+protocol.RouteMessage, http.HandlerFunc(s.handleMsg))
 }
 
 // Events debe leerse hasta que se cierre (en Close).
@@ -144,24 +200,27 @@ func (s *Service) Close() {
 
 // Send guarda el mensaje como pendiente e intenta entregarlo de inmediato.
 func (s *Service) Send(ctx context.Context, peerID, body string) (store.Message, error) {
-	if err := protocol.ValidateMessage(body); err != nil {
+	return s.send(ctx, store.Message{ID: ids.New(), PeerID: peerID, Body: body}, nil)
+}
+
+// SendOffer envía una oferta de archivos como un mensaje con resumen body. El
+// ID de la transferencia es el del mensaje; t.ID y t.PeerID se completan aquí.
+func (s *Service) SendOffer(ctx context.Context, peerID, body string, t store.Transfer) (store.Message, error) {
+	t.ID, t.PeerID, t.Outgoing = ids.New(), peerID, true
+	return s.send(ctx, store.Message{ID: t.ID, PeerID: peerID, Body: body, Kind: store.KindFiles}, &t)
+}
+
+func (s *Service) send(ctx context.Context, m store.Message, t *store.Transfer) (store.Message, error) {
+	if err := protocol.ValidateMessage(m.Body); err != nil {
 		return store.Message{}, err
 	}
 	now := time.Now()
-	m := store.Message{
-		ID:       ids.New(),
-		PeerID:   peerID,
-		Outgoing: true,
-		Body:     body,
-		At:       now,
-		SentAt:   now,
-		Status:   store.StatusPending,
-	}
-	if _, err := s.store.InsertMessage(ctx, m); err != nil {
+	m.Outgoing, m.At, m.SentAt, m.Status = true, now, now, store.StatusPending
+	if _, err := s.store.InsertMessageWithTransfer(ctx, m, t); err != nil {
 		return store.Message{}, err
 	}
 	s.emit(Event{MessageQueued, m})
-	s.Flush(peerID)
+	s.Flush(m.PeerID)
 	return m, nil
 }
 
@@ -225,19 +284,30 @@ func (s *Service) flush(peerID string) {
 }
 
 func (s *Service) deliver(p discovery.Peer, m store.Message) error {
-	b, err := json.Marshal(wireMessage{
+	wm := wireMessage{
 		ID:       m.ID,
 		From:     s.self.ID,
 		FromName: s.self.Name(),
 		FromHost: s.self.Hostname,
 		Body:     m.Body,
 		SentAt:   m.SentAt.UnixMilli(),
-	})
+	}
+	if m.Kind == store.KindFiles {
+		t, ok, err := s.store.Transfer(s.ctx, m.ID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("oferta %s sin transferencia", m.ID)
+		}
+		wm.Offer = toWireOffer(t)
+	}
+	b, err := json.Marshal(wm)
 	if err != nil {
 		return err
 	}
 	req, err := http.NewRequestWithContext(s.ctx, http.MethodPost,
-		"http://"+p.HTTPAddr().String()+msgPath, bytes.NewReader(b))
+		"http://"+p.HTTPAddr().String()+protocol.RouteMessage, bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
@@ -293,7 +363,13 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 		Status: store.StatusDelivered,
 		Unread: true,
 	}
-	inserted, err := s.store.InsertMessage(r.Context(), m)
+	var t *store.Transfer
+	if wm.Offer != nil {
+		m.Kind = store.KindFiles
+		tr := wm.incomingTransfer(now)
+		t = &tr
+	}
+	inserted, err := s.store.InsertMessageWithTransfer(r.Context(), m, t)
 	if err != nil {
 		s.log.Error("guardando mensaje", "err", err)
 		http.Error(w, "error interno", http.StatusInternalServerError)

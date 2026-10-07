@@ -221,6 +221,81 @@ button, input, textarea { font: inherit; color: inherit; }
 .msg.pending .meta::after { content: " · pendiente"; }
 .msg.out.delivered .meta::after { content: " ✓"; }
 
+/* ---------- Archivos ---------- */
+
+.msg.files { white-space: normal; min-width: min(340px, 75%); }
+.files-title { font-weight: 600; }
+
+.file-list {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+
+.file-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.file-size { color: var(--muted); font-size: 12px; flex: none; }
+.file-list .text-btn { padding: 2px 6px; font-size: 12px; color: var(--brand); flex: none; }
+
+.msg.files .status { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.msg.files.failed .status { color: var(--danger); }
+
+.progress {
+  height: 6px;
+  margin: 6px 0 2px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress > div {
+  height: 100%;
+  width: 0;
+  background: var(--brand);
+  transition: width 0.25s linear;
+}
+
+.progress-info { color: var(--muted); font-size: 12px; }
+
+.actions-row { display: flex; gap: 8px; margin-top: 8px; }
+.primary.small { padding: 5px 14px; }
+
+#chat { position: relative; }
+
+#drop-overlay {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px dashed var(--brand);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  color: var(--brand);
+  font-size: 18px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#attach-btn { font-size: 18px; align-self: center; }
+
+.input-row { display: flex; gap: 6px; }
+.input-row input { flex: 1; }
+
 #composer {
   display: flex;
   gap: 8px;

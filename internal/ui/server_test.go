@@ -2,11 +2,13 @@ package ui
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -87,6 +89,66 @@ func (f *fakeBackend) SetManualPeers(p []string) error {
 	f.manual = p
 	return nil
 }
+
+// Archivos: una oferta "t1" recibida y completada, y una "t2" enviada.
+var testTransfers = map[string]store.Transfer{
+	"t1": {ID: "t1", PeerID: "c1", State: store.TransferCompleted,
+		Files: []store.TransferFile{{Index: 0, Name: "a.pdf", Size: 3, Done: true, Path: `C:\no\existe\a (1).pdf`}}},
+	"t2": {ID: "t2", PeerID: "c1", Outgoing: true, State: store.TransferOffered,
+		Files: []store.TransferFile{{Index: 0, Name: "b.txt", Size: 5, Path: `C:\docs\b.txt`}}},
+}
+
+func (f *fakeBackend) OfferFiles(context.Context, string, []string) (store.Message, error) {
+	return store.Message{}, errors.New("no usado")
+}
+func (f *fakeBackend) Upload(_ context.Context, peer string, next func() (string, io.Reader, error)) (store.Message, error) {
+	var names []string
+	for {
+		name, r, err := next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return store.Message{}, err
+		}
+		b, _ := io.ReadAll(r)
+		names = append(names, name+"="+string(b))
+	}
+	f.mu.Lock()
+	f.sent = append(f.sent, names...)
+	f.mu.Unlock()
+	return store.Message{ID: "t2", PeerID: peer, Outgoing: true, Body: "📎", Kind: store.KindFiles}, nil
+}
+func (f *fakeBackend) record(action, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, action+":"+id)
+	return nil
+}
+func (f *fakeBackend) AcceptTransfer(_ context.Context, id string) error {
+	return f.record("accept", id)
+}
+func (f *fakeBackend) RejectTransfer(_ context.Context, id string) error {
+	return f.record("reject", id)
+}
+func (f *fakeBackend) CancelTransfer(_ context.Context, id string) error {
+	return f.record("cancel", id)
+}
+func (f *fakeBackend) Transfer(_ context.Context, id string) (store.Transfer, bool, error) {
+	t, ok := testTransfers[id]
+	return t, ok, nil
+}
+func (f *fakeBackend) TransfersByID(_ context.Context, ids []string) (map[string]store.Transfer, error) {
+	out := map[string]store.Transfer{}
+	for _, id := range ids {
+		if t, ok := testTransfers[id]; ok {
+			out[id] = t
+		}
+	}
+	return out, nil
+}
+func (f *fakeBackend) DownloadDir() string         { return `C:\Descargas\LanChat` }
+func (f *fakeBackend) SetDownloadDir(string) error { return nil }
 
 func startServer(t *testing.T) (*Server, *fakeBackend) {
 	t.Helper()
@@ -316,6 +378,82 @@ func readEvents(t *testing.T, r io.Reader, n int) []rawEvent {
 		t.Fatalf("solo llegaron %d de %d eventos", len(out), n)
 	}
 	return out
+}
+
+func TestFileRoutes(t *testing.T) {
+	s, b := startServer(t)
+	c := loggedClient(t, s)
+
+	// Acciones sobre transferencias.
+	for _, action := range []string{"accept", "reject", "cancel"} {
+		resp, _ := postJSON(c, base(s)+"/api/transfers/"+action, `{"id":"t1"}`)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Errorf("%s: %d", action, resp.StatusCode)
+		}
+	}
+	resp, _ := postJSON(c, base(s)+"/api/transfers/borrar", `{"id":"t1"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("acción desconocida: %d", resp.StatusCode)
+	}
+
+	// Solo se abren archivos recibidos y completados.
+	for _, body := range []string{`{"id":"t2","index":0}`, `{"id":"t1","index":5}`, `{"id":"nada","index":0}`} {
+		resp, _ := postJSON(c, base(s)+"/api/files/open", body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("abrir %s: %d", body, resp.StatusCode)
+		}
+	}
+
+	// Subida multipart: permitida solo en su ruta.
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("files", "nota.txt")
+	fw.Write([]byte("hola"))
+	mw.Close()
+	resp, _ = c.Post(base(s)+uploadPath+"?peer=c1", mw.FormDataContentType(), bytes.NewReader(buf.Bytes()))
+	var m messageJSON
+	json.NewDecoder(resp.Body).Decode(&m)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated || m.Kind != "files" || m.Transfer == nil || m.Transfer.Files[0].Name != "b.txt" {
+		t.Errorf("subida: %d %+v", resp.StatusCode, m)
+	}
+	resp, _ = c.Post(base(s)+"/api/messages", mw.FormDataContentType(), bytes.NewReader(buf.Bytes()))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("multipart fuera de la subida: %d", resp.StatusCode)
+	}
+
+	want := []string{"accept:t1", "reject:t1", "cancel:t1", "nota.txt=hola"}
+	if strings.Join(b.sent, ",") != strings.Join(want, ",") {
+		t.Errorf("acciones = %v", b.sent)
+	}
+}
+
+func TestTransferJSON(t *testing.T) {
+	tj := toTransferJSON(testTransfers["t1"])
+	if tj.State != "completed" || tj.Files[0].SavedName != "a (1).pdf" || tj.Total != 3 {
+		t.Errorf("recibida: %+v", tj)
+	}
+	if tj := toTransferJSON(testTransfers["t2"]); tj.Files[0].SavedName != "" {
+		t.Errorf("la enviada no debe exponer su ruta: %+v", tj)
+	}
+}
+
+func TestSplitMultiSelect(t *testing.T) {
+	cases := map[string][]string{
+		"C:\\docs\\a.pdf\x00\x00":              {`C:\docs\a.pdf`},
+		"C:\\docs\x00a.pdf\x00b c.txt\x00\x00": {`C:\docs\a.pdf`, `C:\docs\b c.txt`},
+		"C:\\\x00a.pdf\x00\x00":                {`C:\a.pdf`},
+		"\x00\x00":                             nil,
+	}
+	for in, want := range cases {
+		if got := splitMultiSelect(in); strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("%q: %v, quería %v", in, got, want)
+		}
+	}
 }
 
 func TestEncodeICO(t *testing.T) {

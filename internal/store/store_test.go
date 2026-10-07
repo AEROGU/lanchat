@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,6 +121,55 @@ func TestUnread(t *testing.T) {
 	h, _ := s.History(ctx, "b", "", 10)
 	if len(h) != 2 || !h[0].Unread && !h[1].Unread {
 		t.Errorf("historial debía conservar unread: %+v", h)
+	}
+}
+
+func TestTransfers(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	now := time.Now()
+	mod := time.Unix(1_700_000_000, 123456789)
+	tr := Transfer{
+		ID: "o1", PeerID: "a", Outgoing: true, State: TransferOffered, Token: "tok",
+		ExpiresAt: now.Add(time.Hour),
+		Files: []TransferFile{
+			{Index: 0, Name: "informe.pdf", Size: 1000, ModTime: mod, Path: `C:\docs\informe.pdf`},
+			{Index: 1, Name: "foto.jpg", Size: 2000, Path: `C:\docs\foto.jpg`},
+		},
+	}
+	m := Message{ID: "o1", PeerID: "a", Outgoing: true, Body: "2 archivos", At: now, SentAt: now, Kind: KindFiles}
+	if ok, err := s.InsertMessageWithTransfer(ctx, m, &tr); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	// Repetir el mensaje no debe duplicar ni fallar por la transferencia.
+	if ok, err := s.InsertMessageWithTransfer(ctx, m, &tr); err != nil || ok {
+		t.Fatalf("repetido: %v %v", ok, err)
+	}
+
+	got, ok, err := s.Transfer(ctx, "o1")
+	if err != nil || !ok || got.TotalSize() != 3000 || len(got.Files) != 2 || !got.Files[0].ModTime.Equal(mod) {
+		t.Fatalf("Transfer = %+v %v %v", got, ok, err)
+	}
+	if h, _ := s.History(ctx, "a", "", 1); len(h) != 1 || h[0].Kind != KindFiles {
+		t.Errorf("el mensaje debía ser KindFiles: %+v", h)
+	}
+
+	if err := s.SetTransferState(ctx, "o1", TransferDownloading, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkFileDone(ctx, "o1", 1, ""); err != nil {
+		t.Fatal(err)
+	}
+	active, err := s.TransfersInState(ctx, true, TransferOffered, TransferDownloading)
+	if err != nil || len(active) != 1 || !active[0].Files[1].Done || active[0].Files[1].Path != `C:\docs\foto.jpg` {
+		t.Fatalf("activas = %+v, %v", active, err)
+	}
+	byID, err := s.TransfersByID(ctx, []string{"o1", "nada"})
+	if err != nil || len(byID) != 1 || byID["o1"].State != TransferDownloading {
+		t.Errorf("TransfersByID = %+v, %v", byID, err)
+	}
+	if err := s.SetTransferState(ctx, "nada", TransferCanceled, ""); !errors.Is(err, ErrNotFound) {
+		t.Errorf("estado de una transferencia inexistente: %v", err)
 	}
 }
 

@@ -40,22 +40,26 @@ Paquetes JSON: `{"m":"lanchat","v":1,"t":"hello|announce|bye","id":"…","name":
 - Si llega un paquete con nuestro ID desde otra IP → aviso de ID duplicado (config copiada entre PCs).
 
 ### Comunicación — HTTP :50001 (entre equipos)
-- `POST /msg` — mensaje de chat (con ID para acuse y deduplicar).
-- `POST /offer` — oferta de archivos (nombre, tamaño, id, token).
-- `POST /offer/{id}/accept|reject|cancel`
-- `GET /file/{id}?token=…` — descarga (soporta `Range` para reanudar).
+Rutas definidas en `internal/protocol/routes.go`:
+- `POST /v1/msg` — mensaje de chat (ID para acuse y deduplicar). Una oferta de archivos es un mensaje con el campo `offer` (nombres, tamaños, token, caducidad), así reutiliza la cola para equipos desconectados.
+- `GET /v1/transfers/{id}/files/{idx}` — descarga; encabezado `X-Lanchat-Token`, admite `Range: bytes=N-` y manda el SHA-256 del archivo completo en el trailer `X-Lanchat-Sha256`.
+- `POST /v1/transfers/{id}/files/{idx}/done` — el destinatario confirma que llegó íntegro.
+- `POST /v1/transfers/{id}/state` — avisa un rechazo o cancelación al otro equipo.
 
 ### Reglas de archivos
 1. El remitente ofrece; nada se transfiere hasta que el destinatario **acepta**.
 2. El destinatario descarga desde el remitente; progreso, velocidad y cancelación en ambos lados.
-3. Al completarse con hash SHA-256 correcto, el token se invalida → `410 Gone`. Para volver a recibirlo, el remitente debe reenviarlo.
-4. Una descarga interrumpida puede reanudarse mientras no se haya completado.
-5. La oferta caduca si el remitente cierra el programa, cancela o pasa el plazo (24 h por defecto).
+3. Al confirmar un archivo con SHA-256 correcto, el remitente responde `410 Gone` a nuevas descargas. Para volver a recibirlo, el remitente debe reenviarlo.
+4. Una descarga interrumpida se reanuda desde el `.lanchat-part` (Reintentar).
+5. La oferta caduca a las 24 h o si el remitente la cancela. Se guarda en SQLite: sobrevive a reinicios del remitente.
 6. Si el archivo original cambia (tamaño/fecha) antes de enviarse → error claro.
-7. Nombres sanitizados (sin rutas, sin `..`), colisiones → `archivo (1).pdf`.
+7. Nombres adaptados a Windows (sin rutas, caracteres prohibidos ni nombres reservados), colisiones → `archivo (1).pdf`.
+8. Los archivos recibidos llevan la "marca de la Web" (Zone.Identifier) como los descargados por un navegador: Windows/Office avisan antes de ejecutar programas o macros. La interfaz pide confirmación para abrir programas o scripts.
+9. Se comprueba el espacio libre antes de aceptar.
+10. Archivos arrastrados a la ventana: el navegador no da su ruta, así que se copian a `%APPDATA%\LanChat\outbox` y se borran al terminar la oferta.
 
 ## Almacenamiento
-`%APPDATA%\LanChat\`: `config.json`, `lanchat.db` (SQLite, `modernc.org/sqlite`): alias, historial, cola de pendientes, ofertas.
+`%APPDATA%\LanChat\`: `config.json` (preferencias), `lanchat.db` (SQLite embebido en el ejecutable con `modernc.org/sqlite`, sin instalar nada): alias, historial, cola de pendientes, ofertas de archivos.
 
 ## Estructura
 ```
@@ -79,7 +83,7 @@ internal/ui/          servidor web local, frontend embebido, bandeja, notificaci
 - [x] **Hito 1 — Descubrimiento**: los equipos se ven, aparecen y desaparecen (salida por consola).
 - [x] **Hito 2 — Mensajería**: chat 1 a 1, historial SQLite, cola para desconectados, acuse de entrega (por ahora desde consola: `/ayuda`).
 - [x] **Hito 3 — Interfaz**: UI web + `msedge --app` + bandeja + notificaciones + alias + cambio de nombre propio + instancia única + equipos manuales editables + no leídos.
-- [ ] **Hito 4 — Archivos**: ofertas, aceptar/rechazar, descarga única, progreso, cancelar, reanudar.
+- [x] **Hito 4 — Archivos**: ofertas, aceptar/rechazar, descarga única, progreso, cancelar, reanudar, verificación SHA-256, arrastrar y soltar.
 - [ ] **Hito 5 — Distribución**: `.exe` sin consola, script de firewall (`netsh`), arranque con Windows.
 
 ### Fase 2
