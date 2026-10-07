@@ -497,3 +497,33 @@ dialog input, dialog textarea {
 .group-header:hover { color: var(--text); }
 .select-row { flex-wrap: wrap; }
 .group-buttons { display: contents; }
+
+/* ---------- Acerca de ---------- */
+
+.about-box { text-align: center; }
+.about-logo { width: 64px; height: 64px; margin: 4px auto 8px; display: block; }
+.about-box h2 { margin-bottom: 2px; }
+.about-version { color: var(--muted); margin: 0 0 12px; }
+
+.about-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  text-align: left;
+  margin: 0 auto 12px;
+  max-width: 340px;
+}
+
+.about-list dt { color: var(--muted); }
+.about-list dd { margin: 0; }
+.about-box .actions { justify-content: center; }
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--brand);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}

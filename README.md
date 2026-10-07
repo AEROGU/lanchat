@@ -23,6 +23,20 @@ manifest del .exe, target `resources`); el archivo no se versiona. El texto de
 La versión del ejecutable sale de `git describe`: para publicar la 1.0.0 se
 crea la etiqueta `git tag v1.0.0` y se compila.
 
+## Aviso de Windows SmartScreen
+
+LanChat no está firmado con un certificado de firma de código (cuestan
+dinero cada año). Por eso, la primera vez que se abre un `lanchat.exe`
+descargado de Internet, Windows puede mostrar **"Windows protegió su PC"**.
+Para abrirlo:
+
+1. Haz clic en **Más información**.
+2. Haz clic en **Ejecutar de todas formas**.
+
+Solo hace falta la primera vez en cada PC. Descarga LanChat únicamente de la
+página oficial del proyecto (https://github.com/AEROGU/LanChat) y, si
+quieres verificarlo, compila tú mismo el código fuente (ver arriba).
+
 ## Uso
 
 `dist/lanchat.exe` abre la ventana y queda en la bandeja del sistema (clic

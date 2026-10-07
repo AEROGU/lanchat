@@ -27,14 +27,17 @@ type limitsJSON struct {
 }
 
 type selfJSON struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Hostname   string `json:"hostname"`
-	Version    string `json:"version"`
-	Copyright  string `json:"copyright"`
-	License    string `json:"license"`
-	Status     string `json:"status"`
-	StatusText string `json:"statusText"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Hostname    string `json:"hostname"`
+	Version     string `json:"version"`
+	AppName     string `json:"appName"`
+	Copyright   string `json:"copyright"`
+	LicenseName string `json:"licenseName"`
+	Repository  string `json:"repository"`
+	License     string `json:"license"`
+	Status      string `json:"status"`
+	StatusText  string `json:"statusText"`
 	// Idle: ahora se anuncia Ausente por inactividad.
 	Idle     bool `json:"idle"`
 	AutoAway bool `json:"autoAway"`
@@ -45,7 +48,8 @@ type selfJSON struct {
 func toSelfJSON(s app.Self) selfJSON {
 	return selfJSON{
 		ID: s.ID, Name: s.Name, Hostname: s.Hostname, Version: version.App,
-		Copyright: version.Copyright, License: version.License,
+		AppName: version.Name, Copyright: version.Copyright, License: version.License,
+		LicenseName: version.LicenseName, Repository: version.Repository,
 		Status: s.Status, StatusText: s.StatusText, Idle: s.Idle, AutoAway: s.AutoAwayEnabled,
 		ReadReceipts: s.ReadReceipts,
 	}

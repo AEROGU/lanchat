@@ -812,6 +812,18 @@ async function saveSettings(ev) {
   }
 }
 
+// ---------- Acerca de ----------
+
+function openAbout() {
+  const s = state.self;
+  $("about-name").textContent = s.appName;
+  $("about-version").textContent = `Versión ${s.version}`;
+  $("about-license").textContent = s.licenseName;
+  $("about-repo").textContent = s.repository.replace("https://", "");
+  $("about-copyright").textContent = s.copyright;
+  $("about-dialog").showModal();
+}
+
 // ---------- Mensaje a varios ----------
 
 function openMany() {
@@ -1006,6 +1018,13 @@ function bind() {
   $("settings-btn").addEventListener("click", openSettings);
   $("status-btn").addEventListener("click", openStatus);
   $("many-btn").addEventListener("click", openMany);
+  $("about-btn").addEventListener("click", openAbout);
+  $("settings-about").addEventListener("click", () => {
+    $("settings").close();
+    openAbout();
+  });
+  $("about-repo").addEventListener("click", () =>
+    request("POST", "/api/open-repository", {}).catch((e) => showBanner(e.message, 5000)));
   $("many-form").addEventListener("submit", sendMany);
   for (const b of document.querySelectorAll("[data-select]")) {
     b.addEventListener("click", () => selectMany(b.dataset.select));

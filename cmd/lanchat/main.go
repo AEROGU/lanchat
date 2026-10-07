@@ -34,7 +34,8 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("LanChat %s (protocolo v%d)\n%s\n%s\n", version.App, protocol.Version, version.Copyright, version.License)
+		fmt.Printf("%s %s (protocolo v%d)\n%s\n%s\n%s\n", version.Name, version.App, protocol.Version,
+			version.Copyright, version.License, version.Repository)
 		return
 	}
 	if *firewallOp != "" {

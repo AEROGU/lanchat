@@ -19,6 +19,9 @@
         <button id="many-btn" class="icon-btn" title="Mensaje a varios" aria-label="Mensaje a varios">
           <span aria-hidden="true">📢</span>
         </button>
+        <button id="about-btn" class="icon-btn" title="Acerca de LanChat" aria-label="Acerca de LanChat">
+          <span aria-hidden="true">ℹ</span>
+        </button>
         <button id="settings-btn" class="icon-btn" title="Ajustes" aria-label="Ajustes">
           <span aria-hidden="true">⚙</span>
         </button>
@@ -101,9 +104,29 @@
 
       <p id="settings-error" class="error" hidden></p>
       <p class="about" id="about"></p>
+      <p class="help"><button type="button" id="settings-about" class="link-btn">Acerca de LanChat</button></p>
       <div class="actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button id="settings-save" value="save" class="primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="about-dialog">
+    <form method="dialog" class="about-box">
+      <img src="/icon.png" alt="" class="about-logo">
+      <h2 id="about-name"></h2>
+      <p id="about-version" class="about-version"></p>
+      <dl class="about-list">
+        <dt>Licencia</dt>
+        <dd id="about-license"></dd>
+        <dt>Proyecto</dt>
+        <dd><button type="button" id="about-repo" class="link-btn"></button></dd>
+      </dl>
+      <p id="about-copyright" class="help"></p>
+      <p class="help">Software libre: puedes usarlo, modificarlo y compartirlo según la GPL v3. Se distribuye sin ninguna garantía.</p>
+      <div class="actions">
+        <button value="close" class="primary">Cerrar</button>
       </div>
     </form>
   </dialog>

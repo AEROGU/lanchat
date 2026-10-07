@@ -36,6 +36,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/transfer"
+	"github.com/AEROGU/lanchat/internal/version"
 )
 
 const (
@@ -244,6 +245,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/manual-peers", s.handleManualPeers)
 	mux.HandleFunc("POST /api/presence", s.handlePresence)
 	mux.HandleFunc("POST /api/open", s.handleOpen)
+	mux.HandleFunc("POST /api/open-repository", s.handleOpenRepository)
 	mux.HandleFunc("POST /api/files/pick", s.handlePickFiles)
 	mux.HandleFunc("POST /api/files/pick-folder", s.handlePickFolder)
 	mux.HandleFunc("POST /api/files/open-dir", s.handleOpenDir)
@@ -607,5 +609,15 @@ func (s *Server) handleGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.publishContact(r.Context(), req.Peer)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleOpenRepository abre la página del proyecto en el navegador del
+// usuario (solo esa dirección fija, nunca una que mande la página).
+func (s *Server) handleOpenRepository(w http.ResponseWriter, r *http.Request) {
+	if err := openPath(version.Repository); err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
