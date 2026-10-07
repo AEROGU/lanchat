@@ -745,7 +745,7 @@ function openSettings() {
   $("peers-input").value = (state.manualPeers ?? []).join("\n");
   $("download-input").value = state.downloadDir;
   $("receipts-input").checked = state.self.readReceipts;
-  $("about").textContent = `LanChat ${s.version} · ${s.hostname}`;
+  $("about").textContent = [`LanChat ${s.version} · ${s.hostname}`, s.copyright, s.license].join("\n");
   $("settings-error").hidden = true;
   $("settings").showModal();
   api.system().then(renderSystem).catch(() => {});

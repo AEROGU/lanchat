@@ -53,3 +53,12 @@ PARA EL ADMINISTRADOR
       lanchat.exe -firewall remove
 - Opciones: -hidden (arrancar en la bandeja), -dir carpeta (otros datos),
   -version.
+
+LICENCIA
+--------
+Copyright (C) 2026 Arturo Enrique Rosas Gutiérrez.
+LanChat es software libre bajo la Licencia Pública General de GNU, versión 3
+(GPL v3): puedes usarlo, modificarlo y redistribuirlo conservando este aviso
+y la mención del autor, y publicando el código fuente bajo la misma
+licencia. Se distribuye SIN NINGUNA GARANTÍA. Texto completo: LICENSE.txt.
+Licencias de las librerías incluidas: THIRD_PARTY_NOTICES.txt.

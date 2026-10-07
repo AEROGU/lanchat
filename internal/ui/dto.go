@@ -31,6 +31,8 @@ type selfJSON struct {
 	Name       string `json:"name"`
 	Hostname   string `json:"hostname"`
 	Version    string `json:"version"`
+	Copyright  string `json:"copyright"`
+	License    string `json:"license"`
 	Status     string `json:"status"`
 	StatusText string `json:"statusText"`
 	// Idle: ahora se anuncia Ausente por inactividad.
@@ -43,6 +45,7 @@ type selfJSON struct {
 func toSelfJSON(s app.Self) selfJSON {
 	return selfJSON{
 		ID: s.ID, Name: s.Name, Hostname: s.Hostname, Version: version.App,
+		Copyright: version.Copyright, License: version.License,
 		Status: s.Status, StatusText: s.StatusText, Idle: s.Idle, AutoAway: s.AutoAwayEnabled,
 		ReadReceipts: s.ReadReceipts,
 	}

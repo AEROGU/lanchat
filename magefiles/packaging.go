@@ -4,6 +4,7 @@ package main
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"image"
 	"io"
@@ -95,9 +96,10 @@ func numericVersion(v string) [4]uint16 {
 	return out
 }
 
-// Dist arma dist/LanChat-<versión>.zip con el ejecutable y LEEME.txt.
+// Dist arma dist/LanChat-<versión>.zip con el ejecutable, LEEME.txt, la
+// licencia y los avisos de terceros.
 func Dist() error {
-	mg.Deps(Build)
+	mg.Deps(Build, Notices)
 	v := appVersion()
 	readme, err := os.ReadFile(readmeSource)
 	if err != nil {
@@ -112,7 +114,11 @@ func Dist() error {
 		return err
 	}
 	zw := zip.NewWriter(f)
-	err = addFile(zw, productName+"/"+exeName, filepath.Join(distDir, exeName))
+	err = errors.Join(
+		addFile(zw, productName+"/"+exeName, filepath.Join(distDir, exeName)),
+		addFile(zw, productName+"/LICENSE.txt", "LICENSE"),
+		addFile(zw, productName+"/"+noticesName, filepath.Join(distDir, noticesName)),
+	)
 	if err == nil {
 		var w io.Writer
 		hdr := &zip.FileHeader{Name: productName + "/" + readmeName, Method: zip.Deflate, Modified: time.Now()}

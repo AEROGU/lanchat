@@ -13,7 +13,7 @@ go tool mage          # compila dist/lanchat.exe, sin consola (target build)
 go tool mage debug    # compila dist/lanchat-debug.exe, con consola
 go tool mage check    # gofmt, go vet, staticcheck y pruebas: correr antes de cada commit
 go tool mage race     # pruebas con detector de carreras (requiere gcc)
-go tool mage dist     # dist/LanChat-<versión>.zip listo para copiar a las PCs
+go tool mage dist     # dist/LanChat-<versión>.zip: exe, LEEME, licencia y avisos de terceros
 ```
 
 `build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y
@@ -64,3 +64,23 @@ tiene consola:
 | `ui.json` | puerto y token de la ventana; existe mientras LanChat está abierto |
 | `icon.png` | icono que usan las notificaciones |
 | `edge\` | perfil de Edge de la ventana de LanChat |
+
+## Licencia
+
+Copyright © 2026 Arturo Enrique Rosas Gutiérrez.
+
+LanChat es software libre: puedes usarlo, estudiarlo, modificarlo y
+redistribuirlo bajo los términos de la **Licencia Pública General de GNU,
+versión 3** (GPL v3), publicada por la Free Software Foundation. Quien
+distribuya LanChat o una versión modificada debe conservar este aviso y la
+mención del autor original, y publicar el código fuente bajo la misma
+licencia.
+
+Se distribuye con la esperanza de que sea útil, pero **sin ninguna
+garantía**, ni siquiera la implícita de comerciabilidad o de idoneidad para
+un propósito particular. Ver el texto completo en [LICENSE](LICENSE).
+
+Las librerías de terceros incluidas en el ejecutable (todas con licencias
+BSD, MIT o Apache 2.0, compatibles con la GPL v3) se listan con sus avisos
+en `THIRD_PARTY_NOTICES.txt`, que genera `go tool mage notices` y se incluye
+en el zip.

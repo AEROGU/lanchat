@@ -430,7 +430,7 @@ dialog input, dialog textarea {
 }
 
 .help { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
-.about { color: var(--muted); font-size: 12px; margin: 16px 0 0; }
+.about { color: var(--muted); font-size: 12px; margin: 16px 0 0; white-space: pre-line; }
 
 .actions {
   display: flex;
