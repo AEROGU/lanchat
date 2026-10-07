@@ -34,7 +34,7 @@ Para abrirlo:
 2. Haz clic en **Ejecutar de todas formas**.
 
 Solo hace falta la primera vez en cada PC. Descarga LanChat únicamente de la
-página oficial del proyecto (https://github.com/AEROGU/LanChat) y, si
+página oficial del proyecto (https://github.com/AEROGU/lanchat) y, si
 quieres verificarlo, compila tú mismo el código fuente (ver arriba).
 
 ## Uso

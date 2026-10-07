@@ -825,7 +825,7 @@ function openAbout() {
   $("about-name").textContent = s.appName;
   $("about-version").textContent = `Versión ${s.version}`;
   $("about-license").textContent = s.licenseName;
-  $("about-repo").textContent = s.repository.replace("https://", "");
+  $("about-repo").textContent = s.repository;
   $("about-copyright").textContent = s.copyright;
   $("about-dialog").showModal();
 }
