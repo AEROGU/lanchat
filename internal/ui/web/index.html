@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LanChat</title>
+  <link rel="icon" href="/icon.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <header class="me">
+        <img src="/icon.png" alt="" class="logo">
+        <div class="who">
+          <strong id="me-name"></strong>
+          <small id="me-detail"></small>
+        </div>
+        <button id="settings-btn" class="icon-btn" title="Ajustes" aria-label="Ajustes">
+          <span aria-hidden="true">⚙</span>
+        </button>
+      </header>
+      <input id="search" type="search" placeholder="Buscar contacto" autocomplete="off">
+      <ul id="contacts" aria-label="Contactos"></ul>
+      <p id="no-contacts" class="hint" hidden>Aún no se ha visto ningún equipo en la red.</p>
+    </aside>
+
+    <main id="chat">
+      <div id="empty" class="hint">Elige un contacto para conversar.</div>
+
+      <header id="chat-header" hidden>
+        <button id="back-btn" class="icon-btn" title="Volver" aria-label="Volver">‹</button>
+        <span id="peer-dot" class="dot"></span>
+        <div class="who">
+          <strong id="peer-name"></strong>
+          <small id="peer-detail"></small>
+        </div>
+        <button id="alias-btn" class="text-btn" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
+      </header>
+
+      <div id="offline-note" class="note" hidden></div>
+      <div id="messages" aria-live="polite"></div>
+
+      <form id="composer" hidden>
+        <textarea id="input" rows="1" placeholder="Escribe un mensaje (Enter envía, Shift+Enter nueva línea)"></textarea>
+        <button type="submit" class="primary">Enviar</button>
+      </form>
+      <p id="send-error" class="error" hidden></p>
+    </main>
+  </div>
+
+  <div id="banner" hidden></div>
+
+  <dialog id="settings">
+    <form method="dialog" id="settings-form">
+      <h2>Ajustes</h2>
+      <label for="name-input">Tu nombre</label>
+      <input id="name-input" autocomplete="off">
+      <small id="name-help" class="help"></small>
+
+      <label for="peers-input">Equipos de otras subredes</label>
+      <textarea id="peers-input" rows="4" spellcheck="false"></textarea>
+      <small class="help">Uno por línea: IP o nombre del equipo, con <code>:puerto</code> opcional. Ej.: <code>10.0.5.20</code> o <code>PC-VENTAS</code>.</small>
+
+      <p id="settings-error" class="error" hidden></p>
+      <p class="about" id="about"></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button id="settings-save" value="save" class="primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="alias-dialog">
+    <form method="dialog" id="alias-form">
+      <h2>Renombrar contacto</h2>
+      <label for="alias-input">Nombre que verás tú</label>
+      <input id="alias-input" autocomplete="off">
+      <small class="help">Solo lo ves tú. Déjalo vacío para usar el nombre que eligió el otro usuario.</small>
+      <p id="alias-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

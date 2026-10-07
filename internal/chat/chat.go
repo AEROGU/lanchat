@@ -291,6 +291,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 		At:     now,
 		SentAt: time.UnixMilli(wm.SentAt),
 		Status: store.StatusDelivered,
+		Unread: true,
 	}
 	inserted, err := s.store.InsertMessage(r.Context(), m)
 	if err != nil {

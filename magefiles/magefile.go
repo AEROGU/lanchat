@@ -15,20 +15,31 @@ import (
 )
 
 const (
-	module  = "github.com/AEROGU/lanchat"
-	mainPkg = "./cmd/lanchat"
-	distDir = "dist"
-	exeName = "lanchat.exe"
+	module       = "github.com/AEROGU/lanchat"
+	mainPkg      = "./cmd/lanchat"
+	distDir      = "dist"
+	exeName      = "lanchat.exe"
+	debugExeName = "lanchat-debug.exe"
 )
 
 var Default = Build
 
-// Build compila dist/lanchat.exe para Windows con la versión tomada de git.
+// Build compila dist/lanchat.exe para Windows, sin consola, con la versión de git.
 func Build() error {
+	return build(exeName, "-s -w -H=windowsgui")
+}
+
+// Debug compila dist/lanchat-debug.exe: igual pero con consola, para ver el
+// registro (-debug) o usar el modo -console.
+func Debug() error {
+	return build(debugExeName, "")
+}
+
+func build(name, extraLdflags string) error {
 	v := appVersion()
-	ldflags := fmt.Sprintf("-s -w -X %s/internal/version.App=%s", module, v)
+	ldflags := strings.TrimSpace(fmt.Sprintf("%s -X %s/internal/version.App=%s", extraLdflags, module, v))
 	env := map[string]string{"CGO_ENABLED": "0", "GOOS": "windows", "GOARCH": "amd64"}
-	out := filepath.Join(distDir, exeName)
+	out := filepath.Join(distDir, name)
 	if err := sh.RunWithV(env, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", out, mainPkg); err != nil {
 		return err
 	}

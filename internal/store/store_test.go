@@ -88,6 +88,41 @@ func TestMessagesPendingAndHistory(t *testing.T) {
 	}
 }
 
+func TestUnread(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	now := time.Now()
+	msgs := []Message{
+		{ID: "1", PeerID: "a", Body: "x", At: now, SentAt: now, Status: StatusDelivered, Unread: true},
+		{ID: "2", PeerID: "a", Body: "x", At: now, SentAt: now, Status: StatusDelivered, Unread: true},
+		{ID: "3", PeerID: "b", Body: "x", At: now, SentAt: now, Status: StatusDelivered, Unread: true},
+		{ID: "4", PeerID: "b", Body: "x", At: now, SentAt: now, Outgoing: true},
+	}
+	for _, m := range msgs {
+		if _, err := s.InsertMessage(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	counts, err := s.UnreadCounts(ctx)
+	if err != nil || counts["a"] != 2 || counts["b"] != 1 {
+		t.Fatalf("counts = %v, %v", counts, err)
+	}
+	if changed, err := s.MarkRead(ctx, "a"); err != nil || !changed {
+		t.Fatalf("MarkRead = %v, %v", changed, err)
+	}
+	if changed, _ := s.MarkRead(ctx, "a"); changed {
+		t.Error("la segunda vez no debía cambiar nada")
+	}
+	counts, _ = s.UnreadCounts(ctx)
+	if _, ok := counts["a"]; ok || counts["b"] != 1 {
+		t.Errorf("counts tras leer = %v", counts)
+	}
+	h, _ := s.History(ctx, "b", "", 10)
+	if len(h) != 2 || !h[0].Unread && !h[1].Unread {
+		t.Errorf("historial debía conservar unread: %+v", h)
+	}
+}
+
 // Mensajes en el mismo milisegundo no deben perderse al paginar.
 func TestHistorySameMillisecond(t *testing.T) {
 	s := openTest(t)

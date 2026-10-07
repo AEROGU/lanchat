@@ -1,29 +1,32 @@
-// Comando lanchat. Hasta que exista la interfaz web (Hito 3) se usa desde la
-// consola: escribe /ayuda para ver los comandos.
+// Comando lanchat: mensajería en la LAN. Por defecto abre la ventana y queda
+// en la bandeja del sistema; con -console funciona desde la consola.
 package main
 
 import (
-	"bufio"
-	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
-	"os/signal"
-	"strconv"
-	"strings"
+	"path/filepath"
 
-	"github.com/AEROGU/lanchat/internal/app"
-	"github.com/AEROGU/lanchat/internal/chat"
-	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/config"
 	"github.com/AEROGU/lanchat/internal/protocol"
-	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/ui"
 	"github.com/AEROGU/lanchat/internal/version"
+)
+
+const (
+	logFileName = "lanchat.log"
+	// maxLogSize: al superarlo, el registro anterior pasa a lanchat.log.1.
+	maxLogSize = 1 << 20
 )
 
 func main() {
 	dir := flag.String("dir", "", `carpeta de datos (por defecto %APPDATA%\LanChat)`)
-	debug := flag.Bool("debug", false, "mostrar mensajes de depuración")
+	debug := flag.Bool("debug", false, "registro detallado en la consola en vez de lanchat.log")
+	consoleMode := flag.Bool("console", false, "usar desde la consola, sin ventana")
+	hidden := flag.Bool("hidden", false, "arrancar solo en la bandeja, sin abrir la ventana")
 	showVersion := flag.Bool("version", false, "mostrar la versión y salir")
 	flag.Parse()
 
@@ -31,183 +34,54 @@ func main() {
 		fmt.Printf("LanChat %s (protocolo v%d)\n", version.App, protocol.Version)
 		return
 	}
+	if *dir == "" {
+		d, err := config.DefaultDir()
+		if err != nil {
+			ui.ShowError("LanChat no encontró la carpeta de datos: " + err.Error())
+			os.Exit(1)
+		}
+		*dir = d
+	}
 
 	level := slog.LevelInfo
 	if *debug {
 		level = slog.LevelDebug
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	if err := run(*dir, log); err != nil {
+	if *consoleMode {
+		log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+		if err := runConsole(*dir, log); err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+
+	out := io.Writer(os.Stderr)
+	if !*debug {
+		f, err := openLog(*dir)
+		if err == nil {
+			defer f.Close()
+			out = f
+		}
+	}
+	log := slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: level}))
+	log.Info("iniciando", "version", version.App)
+	if err := ui.RunGUI(ui.Options{Dir: *dir, Hidden: *hidden, Log: log}); err != nil {
 		log.Error(err.Error())
+		ui.ShowError("LanChat no pudo iniciar:\n\n" + err.Error())
 		os.Exit(1)
 	}
 }
 
-func run(dir string, log *slog.Logger) error {
-	a, err := app.New(app.Options{Dir: dir, Log: log})
-	if err != nil {
-		return err
+// openLog abre lanchat.log para agregar; si creció demasiado, lo rota.
+func openLog(dir string) (*os.File, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
 	}
-	self := a.Self()
-	name := self.Name
-	if name == "" {
-		name = "(sin nombre)"
+	path := filepath.Join(dir, logFileName)
+	if fi, err := os.Stat(path); err == nil && fi.Size() > maxLogSize {
+		os.Rename(path, path+".1")
 	}
-	fmt.Printf("LanChat %s — %s · %s\nDatos en %s\nEscribe /ayuda para ver los comandos.\n\n",
-		version.App, name, self.Hostname, self.Dir)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	c := &console{app: a, quit: stop}
-	printed := make(chan struct{})
-	go func() {
-		defer close(printed)
-		for ev := range a.Events() {
-			c.printEvent(ev)
-		}
-	}()
-	go c.readLoop()
-
-	err = a.Run(ctx)
-	<-printed
-	return err
-}
-
-type console struct {
-	app  *app.App
-	quit func()
-	// list es la última lista mostrada; los comandos usan su numeración.
-	list []app.Contact
-}
-
-// historySize es cuántos mensajes muestra /hist.
-const historySize = 20
-
-const help = `Comandos:
-  /lista              muestra los contactos numerados
-  @N texto            envía "texto" al contacto N de la lista
-  /hist N             últimos mensajes con el contacto N
-  /nombre texto       cambia tu nombre (vacío = usar el hostname)
-  /alias N texto      pone un alias local al contacto N (vacío = quitarlo)
-  /salir              cierra LanChat`
-
-func (c *console) readLoop() {
-	sc := bufio.NewScanner(os.Stdin)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			continue
-		}
-		if err := c.command(line); err != nil {
-			fmt.Println("  error:", err)
-		}
-	}
-}
-
-func (c *console) command(line string) error {
-	ctx := context.Background()
-	cmd, rest, _ := strings.Cut(line, " ")
-	rest = strings.TrimSpace(rest)
-
-	switch {
-	case cmd == "/ayuda" || cmd == "/?":
-		fmt.Println(help)
-	case cmd == "/salir":
-		c.quit()
-	case cmd == "/lista":
-		return c.printList(ctx)
-	case cmd == "/nombre":
-		return c.app.SetName(rest)
-	case cmd == "/hist":
-		ct, err := c.pick(rest)
-		if err != nil {
-			return err
-		}
-		msgs, err := c.app.History(ctx, ct.ID, "", historySize)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("── %s (%s) ──\n", ct.DisplayName(), ct.Detail())
-		for _, m := range msgs {
-			who := ct.DisplayName()
-			if m.Outgoing {
-				who = "Yo"
-			}
-			fmt.Printf("  [%s] %s: %s%s\n", m.At.Format("02/01 15:04"), who, m.Body, statusMark(m))
-		}
-	case cmd == "/alias":
-		n, alias, _ := strings.Cut(rest, " ")
-		ct, err := c.pick(n)
-		if err != nil {
-			return err
-		}
-		return c.app.SetAlias(ctx, ct.ID, alias)
-	case strings.HasPrefix(cmd, "@"):
-		ct, err := c.pick(cmd[1:])
-		if err != nil {
-			return err
-		}
-		_, err = c.app.Send(ctx, ct.ID, rest)
-		return err
-	default:
-		return fmt.Errorf("comando desconocido; escribe /ayuda")
-	}
-	return nil
-}
-
-func (c *console) printList(ctx context.Context) error {
-	list, err := c.app.Contacts(ctx)
-	if err != nil {
-		return err
-	}
-	c.list = list
-	if len(list) == 0 {
-		fmt.Println("  (aún no se ha visto ningún equipo)")
-	}
-	for i, ct := range list {
-		state := "○"
-		if ct.Online {
-			state = "●"
-		}
-		fmt.Printf("  %2d %s %s  (%s)\n", i+1, state, ct.DisplayName(), ct.Detail())
-	}
-	return nil
-}
-
-func (c *console) pick(s string) (app.Contact, error) {
-	n, err := strconv.Atoi(s)
-	if err != nil || n < 1 || n > len(c.list) {
-		return app.Contact{}, fmt.Errorf("número de contacto inválido; usa /lista")
-	}
-	return c.list[n-1], nil
-}
-
-func (c *console) printEvent(ev any) {
-	ctx := context.Background()
-	switch e := ev.(type) {
-	case discovery.Event:
-		ct, _, _ := c.app.Contact(ctx, e.Peer.ID)
-		fmt.Printf("[%s] %s (%s)\n", e.Type, ct.DisplayName(), ct.Detail())
-	case chat.Event:
-		ct, _, _ := c.app.Contact(ctx, e.Message.PeerID)
-		switch e.Type {
-		case chat.MessageReceived:
-			fmt.Printf("\a[%s] %s: %s\n", e.Message.At.Format("15:04"), ct.DisplayName(), e.Message.Body)
-		case chat.MessageQueued:
-			if !ct.Online {
-				fmt.Printf("  … %s está desconectado; se entregará cuando se conecte\n", ct.DisplayName())
-			}
-		case chat.MessageDelivered:
-			fmt.Printf("  ✓ entregado a %s\n", ct.DisplayName())
-		}
-	}
-}
-
-func statusMark(m store.Message) string {
-	if m.Outgoing && m.Status == store.StatusPending {
-		return "  (pendiente)"
-	}
-	return ""
+	return os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 }

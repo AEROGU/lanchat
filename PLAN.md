@@ -78,7 +78,7 @@ internal/ui/          servidor web local, frontend embebido, bandeja, notificaci
 
 - [x] **Hito 1 — Descubrimiento**: los equipos se ven, aparecen y desaparecen (salida por consola).
 - [x] **Hito 2 — Mensajería**: chat 1 a 1, historial SQLite, cola para desconectados, acuse de entrega (por ahora desde consola: `/ayuda`).
-- [ ] **Hito 3 — Interfaz**: UI web + `msedge --app` + bandeja + notificaciones + alias + cambio de nombre propio + instancia única.
+- [x] **Hito 3 — Interfaz**: UI web + `msedge --app` + bandeja + notificaciones + alias + cambio de nombre propio + instancia única + equipos manuales editables + no leídos.
 - [ ] **Hito 4 — Archivos**: ofertas, aceptar/rechazar, descarga única, progreso, cancelar, reanudar.
 - [ ] **Hito 5 — Distribución**: `.exe` sin consola, script de firewall (`netsh`), arranque con Windows.
 

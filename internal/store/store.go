@@ -37,6 +37,11 @@ var migrations = [][]string{
 		`CREATE INDEX messages_peer_at ON messages(peer_id, at)`,
 		`CREATE INDEX messages_pending ON messages(peer_id, at) WHERE status = 0`,
 	},
+	{
+		// unread = 1: mensaje entrante que el usuario aún no ha visto.
+		`ALTER TABLE messages ADD COLUMN unread INTEGER NOT NULL DEFAULT 0`,
+		`CREATE INDEX messages_unread ON messages(peer_id) WHERE unread = 1`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -185,16 +190,18 @@ type Message struct {
 	// SentAt es la hora del remitente.
 	SentAt time.Time
 	Status Status
+	// Unread: entrante que el usuario aún no ha visto.
+	Unread bool
 }
 
-const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status`
+const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread`
 
 // InsertMessage guarda el mensaje; inserted es false si ese ID ya existía
 // (un reenvío del mismo mensaje).
 func (s *Store) InsertMessage(ctx context.Context, m Message) (inserted bool, err error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status)
+		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread)
 	if err != nil {
 		return false, err
 	}
@@ -205,6 +212,38 @@ func (s *Store) InsertMessage(ctx context.Context, m Message) (inserted bool, er
 func (s *Store) MarkDelivered(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE messages SET status = ? WHERE id = ?`, StatusDelivered, id)
 	return err
+}
+
+// MarkRead marca como leídos los mensajes entrantes de peerID; changed indica
+// si había alguno sin leer.
+func (s *Store) MarkRead(ctx context.Context, peerID string) (changed bool, err error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE messages SET unread = 0 WHERE peer_id = ? AND unread = 1`, peerID)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// UnreadCounts devuelve cuántos mensajes sin leer hay por contacto.
+func (s *Store) UnreadCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT peer_id, COUNT(*) FROM messages WHERE unread = 1 GROUP BY peer_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
 }
 
 // Pending devuelve los mensajes salientes sin entregar a peerID, del más antiguo al más nuevo.
@@ -265,7 +304,7 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 	for rows.Next() {
 		var m Message
 		var at, sent int64
-		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status); err != nil {
+		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)

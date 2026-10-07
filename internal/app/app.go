@@ -207,6 +207,8 @@ type Contact struct {
 	AppVersion string
 	Online     bool
 	LastSeen   time.Time
+	// Unread es la cantidad de mensajes suyos sin leer.
+	Unread int
 }
 
 func contactFromStore(r store.Peer) Contact {
@@ -239,6 +241,10 @@ func (a *App) Contacts(ctx context.Context) ([]Contact, error) {
 	if err != nil {
 		return nil, err
 	}
+	unread, err := a.store.UnreadCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
 	byID := make(map[string]int, len(recs))
 	out := make([]Contact, 0, len(recs))
 	for _, r := range recs {
@@ -252,6 +258,9 @@ func (a *App) Contacts(ctx context.Context) ([]Contact, error) {
 			out = append(out, Contact{})
 		}
 		out[i].overlay(p)
+	}
+	for i := range out {
+		out[i].Unread = unread[out[i].ID]
 	}
 
 	slices.SortStableFunc(out, func(x, y Contact) int {
@@ -277,7 +286,28 @@ func (a *App) Contact(ctx context.Context, id string) (Contact, bool, error) {
 		c.overlay(p)
 		ok = true
 	}
+	unread, err := a.store.UnreadCounts(ctx)
+	if err != nil {
+		return Contact{}, false, err
+	}
+	c.Unread = unread[id]
 	return c, ok, nil
+}
+
+// TotalUnread es la cantidad de mensajes sin leer de todos los contactos.
+func (a *App) TotalUnread(ctx context.Context) (int, error) {
+	unread, err := a.store.UnreadCounts(ctx)
+	total := 0
+	for _, n := range unread {
+		total += n
+	}
+	return total, err
+}
+
+// MarkRead marca como leídos los mensajes de peerID; changed indica si había
+// alguno sin leer.
+func (a *App) MarkRead(ctx context.Context, peerID string) (changed bool, err error) {
+	return a.store.MarkRead(ctx, peerID)
 }
 
 // Send envía (o deja en cola) un mensaje para el contacto.
@@ -320,6 +350,34 @@ func (a *App) SetAlias(ctx context.Context, peerID, alias string) error {
 		return err
 	}
 	return a.store.SetAlias(ctx, peerID, alias)
+}
+
+// ManualPeers devuelve los equipos de otras subredes configurados a mano.
+func (a *App) ManualPeers() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.cfg.ManualPeers)
+}
+
+// SetManualPeers reemplaza los equipos manuales (se ignoran líneas vacías y
+// repetidas), los aplica sin reiniciar y los guarda en config.json.
+func (a *App) SetManualPeers(peers []string) error {
+	var clean []string
+	for _, p := range peers {
+		if p = strings.TrimSpace(p); p != "" && !slices.Contains(clean, p) {
+			clean = append(clean, p)
+		}
+	}
+	if clean == nil {
+		clean = []string{}
+	}
+	if err := a.disc.SetManualPeers(clean); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.ManualPeers = clean
+	return a.cfg.Save(a.dir)
 }
 
 func cleanName(s string) (string, error) {

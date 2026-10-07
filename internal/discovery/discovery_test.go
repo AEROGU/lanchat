@@ -81,6 +81,26 @@ func TestDiscoveryUnicastBothWays(t *testing.T) {
 	waitEvent(t, a, PeerOffline, "B")
 }
 
+// Agregar un equipo manual en caliente lo descubre sin esperar al siguiente anuncio.
+func TestSetManualPeers(t *testing.T) {
+	a := newTestService(t, "A")
+	b := newTestService(t, "B")
+	for _, s := range []*Service{a, b} {
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		go s.Run(ctx)
+	}
+
+	if err := b.SetManualPeers([]string{"10.0.0.1:0"}); err == nil {
+		t.Error("una entrada inválida debía rechazarse")
+	}
+	if err := b.SetManualPeers([]string{fmt.Sprintf("127.0.0.1:%d", a.LocalPort())}); err != nil {
+		t.Fatal(err)
+	}
+	waitEvent(t, a, PeerOnline, "B")
+	waitEvent(t, b, PeerOnline, "A")
+}
+
 func TestRegistryExpire(t *testing.T) {
 	r := newRegistry()
 	now := time.Now()

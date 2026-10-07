@@ -3,6 +3,7 @@
 package discovery
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -55,10 +56,12 @@ type Service struct {
 	reg    *registry
 	log    *slog.Logger
 	events chan Event
-	manual []manualPeer
+	// refresh pide a Run resolver de nuevo los equipos manuales.
+	refresh chan struct{}
 
 	mu         sync.Mutex
 	name       string
+	manual     []manualPeer
 	manualAddr []netip.AddrPort // última resolución de manual
 	dupWarned  bool
 }
@@ -72,14 +75,9 @@ func New(cfg Config, log *slog.Logger) (*Service, error) {
 	if cfg.TTL <= 0 {
 		cfg.TTL = protocol.PeerTTL
 	}
-	var manual []manualPeer
-	for _, s := range cfg.ManualPeers {
-		m, err := parseManual(s, cfg.UDPPort)
-		if err != nil {
-			log.Warn("equipo manual ignorado", "err", err)
-			continue
-		}
-		manual = append(manual, m)
+	manual, errs := parseManualList(cfg.ManualPeers, cfg.UDPPort)
+	for _, err := range errs {
+		log.Warn("equipo manual ignorado", "err", err)
 	}
 
 	laddr := &net.UDPAddr{Port: cfg.UDPPort}
@@ -92,13 +90,14 @@ func New(cfg Config, log *slog.Logger) (*Service, error) {
 	}
 	cfg.UDPPort = conn.LocalAddr().(*net.UDPAddr).Port
 	return &Service{
-		cfg:    cfg,
-		conn:   conn,
-		reg:    newRegistry(),
-		log:    log,
-		events: make(chan Event, eventBuffer),
-		manual: manual,
-		name:   cfg.Name,
+		cfg:     cfg,
+		conn:    conn,
+		reg:     newRegistry(),
+		log:     log,
+		events:  make(chan Event, eventBuffer),
+		refresh: make(chan struct{}, 1),
+		manual:  manual,
+		name:    cfg.Name,
 	}, nil
 }
 
@@ -150,6 +149,9 @@ func (s *Service) Run(ctx context.Context) error {
 			<-done
 			close(s.events)
 			return nil
+		case <-s.refresh:
+			s.resolveManual(ctx)
+			s.sendAll(typeHello)
 		case now := <-t.C:
 			// Se resuelve en cada ciclo porque las IPs por DHCP cambian.
 			s.resolveManual(ctx)
@@ -164,8 +166,12 @@ func (s *Service) Run(ctx context.Context) error {
 // resolveManual actualiza las direcciones de los equipos manuales. Se hace
 // aquí y no al enviar para que SetName nunca espere al DNS.
 func (s *Service) resolveManual(ctx context.Context) {
+	s.mu.Lock()
+	manual := s.manual
+	s.mu.Unlock()
+
 	var addrs []netip.AddrPort
-	for _, m := range s.manual {
+	for _, m := range manual {
 		rctx, cancel := context.WithTimeout(ctx, dnsTimeout)
 		aps, err := m.resolve(rctx)
 		cancel()
@@ -310,4 +316,38 @@ func (s *Service) targets() []netip.AddrPort {
 		}
 	}
 	return out
+}
+
+// parseManualList interpreta las entradas válidas y devuelve un error por cada
+// inválida. Sin puerto explícito se usa el de descubrimiento de este equipo.
+func parseManualList(list []string, udpPort int) ([]manualPeer, []error) {
+	defPort := cmp.Or(udpPort, protocol.DefaultUDPPort)
+	var out []manualPeer
+	var errs []error
+	for _, s := range list {
+		m, err := parseManual(s, defPort)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out, errs
+}
+
+// SetManualPeers reemplaza los equipos manuales y los saluda de inmediato. Si
+// alguna entrada es inválida no cambia nada.
+func (s *Service) SetManualPeers(list []string) error {
+	manual, errs := parseManualList(list, s.cfg.UDPPort)
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	s.mu.Lock()
+	s.manual = manual
+	s.mu.Unlock()
+	select {
+	case s.refresh <- struct{}{}:
+	default: // ya hay una actualización pendiente
+	}
+	return nil
 }
