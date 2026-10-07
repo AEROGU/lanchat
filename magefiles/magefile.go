@@ -22,8 +22,6 @@ const (
 	debugExeName = "lanchat-debug.exe"
 )
 
-var Default = Build
-
 // Build compila dist/lanchat.exe para Windows, sin consola, con la versión de
 // git y su ícono.
 func Build() error {

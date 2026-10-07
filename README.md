@@ -8,12 +8,12 @@ Requiere Go (la versión indicada en `go.mod`). Mage y staticcheck se instalan
 solos como herramientas del módulo (`tool` en `go.mod`), no hace falta nada más.
 
 ```bash
-go tool mage -l       # lista los targets
-go tool mage          # compila dist/lanchat.exe, sin consola (target build)
-go tool mage debug    # compila dist/lanchat-debug.exe, con consola
-go tool mage check    # gofmt, go vet, staticcheck y pruebas: correr antes de cada commit
-go tool mage race     # pruebas con detector de carreras (requiere gcc)
-go tool mage dist     # dist/LanChat-<versión>.zip: exe, LEEME, licencia y avisos de terceros
+go tool mage         # lista los targets con su descripción
+go tool mage build   # compila dist/lanchat.exe (sin consola)
+go tool mage debug   # compila dist/lanchat-debug.exe, con consola
+go tool mage check   # gofmt, go vet, staticcheck y pruebas: correr antes de cada commit
+go tool mage race    # pruebas con detector de carreras (requiere gcc)
+go tool mage dist    # dist/LanChat-<versión>.zip: exe, LEEME, licencia y avisos de terceros
 ```
 
 `build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y
