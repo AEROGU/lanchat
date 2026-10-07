@@ -125,6 +125,15 @@ func (r *registry) expire(now time.Time, ttl time.Duration) []Event {
 	return evs
 }
 
+func (r *registry) get(id string) (Peer, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p, ok := r.peers[id]; ok {
+		return *p, true
+	}
+	return Peer{}, false
+}
+
 // snapshot devuelve una copia de todos los equipos ordenada por hostname.
 func (r *registry) snapshot() []Peer {
 	r.mu.Lock()

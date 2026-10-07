@@ -1,21 +1,27 @@
-// Comando lanchat. Por ahora (Hito 1) solo muestra en consola los equipos que
-// aparecen y desaparecen de la red.
+// Comando lanchat. Hasta que exista la interfaz web (Hito 3) se usa desde la
+// consola: escribe /ayuda para ver los comandos.
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
+	"time"
 
-	"github.com/AEROGU/lanchat/internal/config"
+	"github.com/AEROGU/lanchat/internal/app"
+	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/store"
 )
 
 func main() {
-	dir := flag.String("dir", "", `carpeta de configuración (por defecto %APPDATA%\LanChat)`)
+	dir := flag.String("dir", "", `carpeta de datos (por defecto %APPDATA%\LanChat)`)
 	debug := flag.Bool("debug", false, "mostrar mensajes de depuración")
 	flag.Parse()
 
@@ -32,62 +38,165 @@ func main() {
 }
 
 func run(dir string, log *slog.Logger) error {
-	if dir == "" {
-		d, err := config.DefaultDir()
-		if err != nil {
-			return err
-		}
-		dir = d
-	}
-	cfg, err := config.Load(dir)
+	a, err := app.New(app.Options{Dir: dir, Log: log})
 	if err != nil {
 		return err
 	}
-	host, err := os.Hostname()
-	if err != nil {
-		log.Warn("no se pudo leer el hostname; se mostrará la IP", "err", err)
+	self := a.Self()
+	name := self.Name
+	if name == "" {
+		name = "(sin nombre)"
 	}
-
-	svc, err := discovery.New(discovery.Config{
-		ID:          cfg.ID,
-		Name:        cfg.Name,
-		Hostname:    host,
-		UDPPort:     cfg.UDPPort,
-		HTTPPort:    cfg.HTTPPort,
-		ManualPeers: cfg.ManualPeers,
-	}, log)
-	if err != nil {
-		return err
-	}
-
-	log.Info("LanChat iniciado", "id", cfg.ID, "host", host, "udp", cfg.UDPPort, "config", dir)
+	fmt.Printf("LanChat — %s · %s\nDatos en %s\nEscribe /ayuda para ver los comandos.\n\n", name, self.Hostname, self.Dir)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	c := &console{app: a, quit: stop}
 	printed := make(chan struct{})
 	go func() {
 		defer close(printed)
-		for ev := range svc.Events() {
-			fmt.Printf("[%-7s] %s\n", ev.Type, label(ev.Peer))
+		for ev := range a.Events() {
+			c.printEvent(ev)
 		}
 	}()
+	go c.readLoop()
 
-	err = svc.Run(ctx)
+	err = a.Run(ctx)
 	<-printed
 	return err
 }
 
-// label: "Nombre (HOSTNAME · IP)"; sin nombre ni hostname se usa la IP.
-func label(p discovery.Peer) string {
-	ip := p.IP.String()
-	switch {
-	case p.Name != "" && p.Hostname != "":
-		return fmt.Sprintf("%s (%s · %s)", p.Name, p.Hostname, ip)
-	case p.Name != "":
-		return fmt.Sprintf("%s (%s)", p.Name, ip)
-	case p.Hostname != "":
-		return fmt.Sprintf("%s (%s)", p.Hostname, ip)
+type console struct {
+	app  *app.App
+	quit func()
+	// list es la última lista mostrada; los comandos usan su numeración.
+	list []app.Contact
+}
+
+const help = `Comandos:
+  /lista              muestra los contactos numerados
+  @N texto            envía "texto" al contacto N de la lista
+  /hist N             últimos 20 mensajes con el contacto N
+  /nombre texto       cambia tu nombre (vacío = usar el hostname)
+  /alias N texto      pone un alias local al contacto N (vacío = quitarlo)
+  /salir              cierra LanChat`
+
+func (c *console) readLoop() {
+	sc := bufio.NewScanner(os.Stdin)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		if err := c.command(line); err != nil {
+			fmt.Println("  error:", err)
+		}
 	}
-	return ip
+}
+
+func (c *console) command(line string) error {
+	ctx := context.Background()
+	cmd, rest, _ := strings.Cut(line, " ")
+	rest = strings.TrimSpace(rest)
+
+	switch {
+	case cmd == "/ayuda" || cmd == "/?":
+		fmt.Println(help)
+	case cmd == "/salir":
+		c.quit()
+	case cmd == "/lista":
+		return c.printList(ctx)
+	case cmd == "/nombre":
+		return c.app.SetName(rest)
+	case cmd == "/hist":
+		ct, err := c.pick(rest)
+		if err != nil {
+			return err
+		}
+		msgs, err := c.app.History(ctx, ct.ID, time.Time{}, 20)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("── %s (%s) ──\n", ct.DisplayName(), ct.Detail())
+		for _, m := range msgs {
+			who := ct.DisplayName()
+			if m.Outgoing {
+				who = "Yo"
+			}
+			fmt.Printf("  [%s] %s: %s%s\n", m.At.Format("02/01 15:04"), who, m.Body, statusMark(m))
+		}
+	case cmd == "/alias":
+		n, alias, _ := strings.Cut(rest, " ")
+		ct, err := c.pick(n)
+		if err != nil {
+			return err
+		}
+		return c.app.SetAlias(ctx, ct.ID, alias)
+	case strings.HasPrefix(cmd, "@"):
+		ct, err := c.pick(cmd[1:])
+		if err != nil {
+			return err
+		}
+		_, err = c.app.Send(ctx, ct.ID, rest)
+		return err
+	default:
+		return fmt.Errorf("comando desconocido; escribe /ayuda")
+	}
+	return nil
+}
+
+func (c *console) printList(ctx context.Context) error {
+	list, err := c.app.Contacts(ctx)
+	if err != nil {
+		return err
+	}
+	c.list = list
+	if len(list) == 0 {
+		fmt.Println("  (aún no se ha visto ningún equipo)")
+	}
+	for i, ct := range list {
+		state := "○"
+		if ct.Online {
+			state = "●"
+		}
+		fmt.Printf("  %2d %s %s  (%s)\n", i+1, state, ct.DisplayName(), ct.Detail())
+	}
+	return nil
+}
+
+func (c *console) pick(s string) (app.Contact, error) {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 || n > len(c.list) {
+		return app.Contact{}, fmt.Errorf("número de contacto inválido; usa /lista")
+	}
+	return c.list[n-1], nil
+}
+
+func (c *console) printEvent(ev any) {
+	ctx := context.Background()
+	switch e := ev.(type) {
+	case discovery.Event:
+		ct, _, _ := c.app.Contact(ctx, e.Peer.ID)
+		fmt.Printf("[%s] %s (%s)\n", e.Type, ct.DisplayName(), ct.Detail())
+	case chat.Event:
+		ct, _, _ := c.app.Contact(ctx, e.Message.PeerID)
+		switch e.Type {
+		case chat.MessageReceived:
+			fmt.Printf("\a[%s] %s: %s\n", e.Message.At.Format("15:04"), ct.DisplayName(), e.Message.Body)
+		case chat.MessageQueued:
+			if !ct.Online {
+				fmt.Printf("  … %s está desconectado; se entregará cuando se conecte\n", ct.DisplayName())
+			}
+		case chat.MessageDelivered:
+			fmt.Printf("  ✓ entregado a %s\n", ct.DisplayName())
+		}
+	}
+}
+
+func statusMark(m store.Message) string {
+	if m.Outgoing && m.Status == store.StatusPending {
+		return "  (pendiente)"
+	}
+	return ""
 }

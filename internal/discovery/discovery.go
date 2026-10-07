@@ -85,8 +85,18 @@ func (s *Service) LocalPort() int { return s.cfg.UDPPort }
 // cierre, lo cual ocurre cuando termina Run.
 func (s *Service) Events() <-chan Event { return s.events }
 
-// Peers devuelve todos los equipos conocidos, conectados o no.
+// Peers devuelve todos los equipos vistos desde que arrancó, conectados o no.
 func (s *Service) Peers() []Peer { return s.reg.snapshot() }
+
+// Peer devuelve un equipo visto desde que arrancó (ver Peer.Online).
+func (s *Service) Peer(id string) (Peer, bool) { return s.reg.get(id) }
+
+// Name es el nombre propio que se anuncia.
+func (s *Service) Name() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.name
+}
 
 // SetName cambia el nombre propio y lo anuncia de inmediato.
 func (s *Service) SetName(name string) {

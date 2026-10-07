@@ -2,13 +2,14 @@
 package config
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/AEROGU/lanchat/internal/ids"
 )
 
 const (
@@ -54,7 +55,7 @@ func Load(dir string) (*Config, error) {
 
 	changed := false
 	if c.ID == "" {
-		c.ID = newID()
+		c.ID = ids.New()
 		changed = true
 	}
 	if c.UDPPort == 0 {
@@ -91,15 +92,4 @@ func (c *Config) Save(dir string) error {
 		return err
 	}
 	return os.Rename(tmp, filepath.Join(dir, fileName))
-}
-
-// newID genera un UUID v4.
-func newID() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		panic(err)
-	}
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
