@@ -16,10 +16,15 @@ import (
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/config"
+	"github.com/AEROGU/lanchat/internal/icon"
+	"github.com/AEROGU/lanchat/internal/platform"
 )
 
 const (
-	iconFileName   = "icon.png"
+	iconFileName = "icon.png"
+	// faviconSize y toastSize: ícono de la página y de las notificaciones.
+	faviconSize    = 64
+	toastSize      = 128
 	edgeProfileDir = "edge"
 	// reopenGuard evita abrir dos ventanas si el usuario hace doble clic en la
 	// bandeja antes de que la primera termine de cargar.
@@ -33,6 +38,10 @@ const (
 type Options struct {
 	// Dir es la carpeta de datos; vacío = %APPDATA%\LanChat.
 	Dir string
+	// CustomDir: Dir se eligió con -dir (pruebas, otra copia). Entonces no se
+	// activa ni se actualiza solo el inicio con Windows, para no reemplazar el
+	// de la instalación normal.
+	CustomDir bool
 	// Hidden arranca solo en la bandeja, sin abrir la ventana (inicio con Windows).
 	Hidden bool
 	Log    *slog.Logger
@@ -81,8 +90,14 @@ func RunGUI(o Options) error {
 		return err
 	}
 	iconPath := filepath.Join(o.Dir, iconFileName)
-	if err := os.WriteFile(iconPath, iconPNG(toastSize, false), 0o600); err != nil {
+	if err := os.WriteFile(iconPath, icon.PNG(toastSize, false), 0o600); err != nil {
 		o.Log.Warn("guardando icono", "err", err)
+	}
+
+	if o.CustomDir {
+		srv.AutostartArgs = []string{"-dir", o.Dir}
+	} else {
+		setupAutostart(a, o.Log)
 	}
 
 	g := &gui{app: a, srv: srv, log: o.Log, profileDir: filepath.Join(o.Dir, edgeProfileDir)}
@@ -192,7 +207,7 @@ func (g *gui) setUnread(total int) {
 }
 
 func (g *gui) applyTray(unread int) {
-	systray.SetIcon(iconICO(unread > 0))
+	systray.SetIcon(icon.ICO(unread > 0))
 	if unread > 0 {
 		systray.SetTooltip(fmt.Sprintf("LanChat — %d sin leer", unread))
 	} else {
@@ -217,4 +232,22 @@ func preview(s string) string {
 		return s
 	}
 	return string([]rune(s)[:notifyPreview]) + "…"
+}
+
+// setupAutostart activa el inicio con Windows en la primera ejecución y, si
+// está activo, actualiza la ruta por si el programa se movió de carpeta.
+func setupAutostart(a *app.App, log *slog.Logger) {
+	exe, err := platform.Executable()
+	if err != nil {
+		return
+	}
+	first, err := a.FirstRun()
+	if err != nil {
+		log.Warn("guardando la primera ejecución", "err", err)
+	}
+	if first || platform.AutostartEnabled() {
+		if err := platform.SetAutostart(true, exe); err != nil && !errors.Is(err, platform.ErrUnsupported) {
+			log.Warn("configurando el inicio con Windows", "err", err)
+		}
+	}
 }

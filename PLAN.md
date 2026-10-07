@@ -76,6 +76,9 @@ internal/chat/        mensajes, cola offline, acuses
 internal/transfer/    ofertas, tokens de un solo uso, progreso, hash
 internal/store/       SQLite
 internal/ui/          servidor web local, frontend embebido, bandeja, notificaciones
+internal/icon/        ícono dibujado por código (bandeja, página, .exe)
+internal/platform/    Windows: inicio automático, firewall, permisos de administrador
+packaging/            LEEME.txt del zip
 ```
 
 ## Hitos
@@ -84,7 +87,7 @@ internal/ui/          servidor web local, frontend embebido, bandeja, notificaci
 - [x] **Hito 2 — Mensajería**: chat 1 a 1, historial SQLite, cola para desconectados, acuse de entrega (por ahora desde consola: `/ayuda`).
 - [x] **Hito 3 — Interfaz**: UI web + `msedge --app` + bandeja + notificaciones + alias + cambio de nombre propio + instancia única + equipos manuales editables + no leídos.
 - [x] **Hito 4 — Archivos**: ofertas, aceptar/rechazar, descarga única, progreso, cancelar, reanudar, verificación SHA-256, arrastrar y soltar.
-- [ ] **Hito 5 — Distribución**: `.exe` sin consola, script de firewall (`netsh`), arranque con Windows.
+- [x] **Hito 5 — Distribución**: `.exe` sin consola con ícono, versión y manifest; regla del firewall (`-firewall`, botón en Ajustes); inicio con Windows; `mage dist` arma el zip con LEEME.txt.
 
 ### Fase 2
 Mensaje a varios / a todos · grupos locales de contactos · estados (Disponible/Ausente/Ocupado) con auto-ausente · confirmación de lectura · envío de carpetas · intercambio de listas de equipos entre PCs (gossip) para otras subredes.

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/AEROGU/lanchat/internal/config"
+	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/ui"
 	"github.com/AEROGU/lanchat/internal/version"
@@ -26,7 +27,9 @@ func main() {
 	dir := flag.String("dir", "", `carpeta de datos (por defecto %APPDATA%\LanChat)`)
 	debug := flag.Bool("debug", false, "registro detallado en la consola en vez de lanchat.log")
 	consoleMode := flag.Bool("console", false, "usar desde la consola, sin ventana")
-	hidden := flag.Bool("hidden", false, "arrancar solo en la bandeja, sin abrir la ventana")
+	hidden := flag.Bool(platform.HiddenFlag, false, "arrancar solo en la bandeja, sin abrir la ventana")
+	firewallOp := flag.String("firewall", "", "add o remove: regla del Firewall de Windows (pide permiso de administrador)")
+	elevated := flag.Bool(elevatedFlag, false, "uso interno: proceso relanzado como administrador")
 	showVersion := flag.Bool("version", false, "mostrar la versión y salir")
 	flag.Parse()
 
@@ -34,6 +37,10 @@ func main() {
 		fmt.Printf("LanChat %s (protocolo v%d)\n", version.App, protocol.Version)
 		return
 	}
+	if *firewallOp != "" {
+		os.Exit(runFirewall(*firewallOp, *elevated))
+	}
+	customDir := *dir != ""
 	if *dir == "" {
 		d, err := config.DefaultDir()
 		if err != nil {
@@ -67,7 +74,7 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: level}))
 	log.Info("iniciando", "version", version.App)
-	if err := ui.RunGUI(ui.Options{Dir: *dir, Hidden: *hidden, Log: log}); err != nil {
+	if err := ui.RunGUI(ui.Options{Dir: *dir, CustomDir: customDir, Hidden: *hidden, Log: log}); err != nil {
 		log.Error(err.Error())
 		ui.ShowError("LanChat no pudo iniciar:\n\n" + err.Error())
 		os.Exit(1)

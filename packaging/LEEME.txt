@@ -1,0 +1,48 @@
+LanChat {{VERSION}}
+Mensajería y envío de archivos en la red local, sin servidor.
+==============================================================
+
+INSTALACIÓN (en cada PC)
+------------------------
+1. Copia la carpeta LanChat a un lugar fijo, por ejemplo:
+      %LOCALAPPDATA%\Programs\LanChat
+   (no hace falta ser administrador). No la dejes en Descargas ni en el
+   Escritorio: el inicio automático y el firewall apuntan a esa ruta.
+2. Abre lanchat.exe. Queda un ícono en la bandeja del sistema (junto al
+   reloj) y se activa el inicio automático con Windows.
+3. Firewall: la primera vez Windows puede preguntar si permite el acceso a
+   la red. Marca "Redes privadas" y acepta. Si no preguntó o no tienes
+   permisos, abre Ajustes (⚙) > "Firewall de Windows" > Permitir.
+4. La red de la oficina debe estar como "Privada" en Windows
+   (Configuración > Red e Internet > Propiedades de la red). En redes
+   "Públicas" Windows bloquea a LanChat.
+
+USO
+---
+- Clic en el ícono de la bandeja: abrir. Clic derecho: menú (Salir).
+- Cerrar la ventana no cierra LanChat: sigue recibiendo en la bandeja.
+- Las PCs de la misma red aparecen solas. Para PCs de otra subred:
+  Ajustes > "Equipos de otras subredes" (IP o nombre de equipo).
+- Archivos: botón 📎 o arrastrarlos a la conversación. El otro debe
+  aceptarlos; una vez recibidos no se pueden volver a descargar (hay que
+  reenviarlos). Se guardan en Descargas\LanChat (se cambia en Ajustes).
+
+ACTUALIZAR
+----------
+Cierra LanChat (clic derecho en la bandeja > Salir) y reemplaza
+lanchat.exe por el nuevo. Los mensajes y ajustes se conservan.
+
+DATOS
+-----
+%APPDATA%\LanChat contiene la configuración, el historial (lanchat.db) y el
+registro de errores (lanchat.log).
+
+PARA EL ADMINISTRADOR
+---------------------
+- Puertos: UDP 50000 (descubrimiento) y TCP 50001 (mensajes y archivos).
+- Crear la regla del firewall sin preguntar al usuario (como administrador):
+      lanchat.exe -firewall add
+  Quitarla:
+      lanchat.exe -firewall remove
+- Opciones: -hidden (arrancar en la bandeja), -dir carpeta (otros datos),
+  -version.

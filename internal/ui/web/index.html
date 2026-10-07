@@ -72,6 +72,19 @@
       </div>
       <small class="help">Vacío = la carpeta Descargas\LanChat.</small>
 
+      <div id="system-section" hidden>
+        <label class="check">
+          <input type="checkbox" id="autostart-input">
+          Iniciar LanChat al encender la PC (en la bandeja)
+        </label>
+        <label>Firewall de Windows</label>
+        <div class="input-row">
+          <span id="firewall-status" class="status-text"></span>
+          <button type="button" id="firewall-btn" class="text-btn">Permitir</button>
+        </div>
+        <small class="help">Hace falta para recibir mensajes y archivos en redes privadas. Pide permiso de administrador.</small>
+      </div>
+
       <p id="settings-error" class="error" hidden></p>
       <p class="about" id="about"></p>
       <div class="actions">

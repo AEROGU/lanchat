@@ -455,13 +455,3 @@ func TestSplitMultiSelect(t *testing.T) {
 		}
 	}
 }
-
-func TestEncodeICO(t *testing.T) {
-	ico := iconICO(true)
-	if len(ico) < 6 || ico[2] != 1 || int(ico[4]) != len(trayIconSizes) {
-		t.Fatalf("cabecera ICO inválida: % x", ico[:6])
-	}
-	if png := iconPNG(faviconSize, false); string(png[1:4]) != "PNG" {
-		t.Error("iconPNG no es PNG")
-	}
-}

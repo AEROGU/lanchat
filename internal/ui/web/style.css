@@ -293,7 +293,18 @@ button, input, textarea { font: inherit; color: inherit; }
 
 #attach-btn { font-size: 18px; align-self: center; }
 
-.input-row { display: flex; gap: 6px; }
+.input-row { display: flex; gap: 6px; align-items: center; }
+.status-text { flex: 1; }
+
+dialog label.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+  margin-top: 16px;
+}
+
+dialog label.check input { width: auto; }
 .input-row input { flex: 1; }
 
 #composer {

@@ -32,6 +32,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/transfer"
@@ -95,6 +96,8 @@ type Server struct {
 	OnOpen func()
 	// OnUnreadChanged recibe el total de mensajes sin leer cada vez que cambia.
 	OnUnreadChanged func(total int)
+	// AutostartArgs se agregan al inicio con Windows (p. ej. -dir).
+	AutostartArgs []string
 
 	mu sync.Mutex
 	// focused y viewing los informa la página: si la ventana tiene el foco y
@@ -218,7 +221,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /", http.FileServerFS(static))
 	mux.HandleFunc("GET /icon.png", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
-		w.Write(iconPNG(faviconSize, false))
+		w.Write(icon.PNG(faviconSize, false))
 	})
 	mux.HandleFunc("GET /api/state", s.handleState)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
@@ -236,6 +239,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
 	mux.HandleFunc("POST /api/download-dir", s.handleDownloadDir)
 	mux.HandleFunc("POST /api/download-dir/open", s.handleOpenDownloadDir)
+	mux.HandleFunc("GET /api/system", s.handleSystem)
+	mux.HandleFunc("POST /api/system/autostart", s.handleAutostart)
+	mux.HandleFunc("POST /api/system/firewall", s.handleFirewall)
 	return s.guard(mux)
 }
 

@@ -498,3 +498,15 @@ func (a *App) requireContact(ctx context.Context, peerID string) error {
 	}
 	return err
 }
+
+// FirstRun devuelve true solo la primera vez que se llama en este equipo (y
+// lo deja anotado en config.json).
+func (a *App) FirstRun() (bool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg.SetupDone {
+		return false, nil
+	}
+	a.cfg.SetupDone = true
+	return true, a.cfg.Save(a.dir)
+}

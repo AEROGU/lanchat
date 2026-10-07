@@ -22,11 +22,11 @@ import (
 // pair arranca dos equipos que se ven entre sí; B guarda en su propia carpeta.
 func pair(t *testing.T) (a, b *node, downloads string) {
 	t.Helper()
-	a = startNode(t, t.TempDir(), "PC-A")
-	b = startNode(t, t.TempDir(), "PC-B", a.udpPort())
+	a = startNode(t, tempDir(t), "PC-A")
+	b = startNode(t, tempDir(t), "PC-B", a.udpPort())
 	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, b.app.Self().ID))
 	waitFor(t, b, "B ve a A", peerEvent(discovery.PeerOnline, a.app.Self().ID))
-	downloads = t.TempDir()
+	downloads = tempDir(t)
 	if err := b.app.SetDownloadDir(downloads); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func offer(t *testing.T, a, b *node, paths ...string) store.Message {
 
 func TestFileTransferEndToEnd(t *testing.T) {
 	a, b, downloads := pair(t)
-	src := t.TempDir()
+	src := tempDir(t)
 	big, bigData := writeRandom(t, src, "informe anual.pdf", 3<<20)
 	small, smallData := writeRandom(t, src, "año–ñ.txt", 10)
 
@@ -126,7 +126,7 @@ func getFile(t *testing.T, sender *node, id string, idx int, token string) int {
 
 func TestRejectAndCancel(t *testing.T) {
 	a, b, _ := pair(t)
-	p, _ := writeRandom(t, t.TempDir(), "x.bin", 100)
+	p, _ := writeRandom(t, tempDir(t), "x.bin", 100)
 	ctx := context.Background()
 
 	m1 := offer(t, a, b, p)
@@ -149,7 +149,7 @@ func TestRejectAndCancel(t *testing.T) {
 // el SHA-256 lo detecta, se descarta y el reintento baja todo de nuevo.
 func TestResumeAndIntegrity(t *testing.T) {
 	a, b, downloads := pair(t)
-	p, data := writeRandom(t, t.TempDir(), "video.mp4", 1<<20)
+	p, data := writeRandom(t, tempDir(t), "video.mp4", 1<<20)
 	ctx := context.Background()
 
 	// Mismo formato que transfer.partPath.
@@ -189,7 +189,7 @@ func TestResumeAndIntegrity(t *testing.T) {
 
 func TestSourceChangedAfterOffer(t *testing.T) {
 	a, b, _ := pair(t)
-	p, _ := writeRandom(t, t.TempDir(), "doc.txt", 50)
+	p, _ := writeRandom(t, tempDir(t), "doc.txt", 50)
 	m := offer(t, a, b, p)
 	os.WriteFile(p, []byte("otro contenido"), 0o600)
 	if err := b.app.AcceptTransfer(context.Background(), m.ID); err != nil {

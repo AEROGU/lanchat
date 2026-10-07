@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
+	"os"
 	"testing"
 	"time"
 
@@ -68,6 +69,28 @@ func (n *node) stop() {
 
 func (n *node) udpPort() int { return n.app.disc.LocalPort() }
 
+// tempDir es como t.TempDir pero reintenta el borrado: en Windows, el
+// antivirus puede retener un instante los archivos que SQLite acaba de
+// borrar (-wal, -shm) y la carpeta aparece "no vacía".
+func tempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "lanchat-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for err := os.RemoveAll(dir); err != nil; err = os.RemoveAll(dir) {
+			if time.Now().After(deadline) {
+				t.Errorf("borrando %s: %v", dir, err)
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
+	return dir
+}
+
 func waitFor(t *testing.T, n *node, what string, match func(any) bool) any {
 	t.Helper()
 	timeout := time.After(5 * time.Second)
@@ -101,8 +124,8 @@ func chatEvent(typ chat.EventType, body string) func(any) bool {
 }
 
 func TestChatDeliveryAndOfflineQueue(t *testing.T) {
-	dirB := t.TempDir()
-	a := startNode(t, t.TempDir(), "PC-A")
+	dirB := tempDir(t)
+	a := startNode(t, tempDir(t), "PC-A")
 	b := startNode(t, dirB, "PC-B", a.udpPort())
 	idA, idB := a.app.Self().ID, b.app.Self().ID
 
@@ -144,8 +167,8 @@ func TestChatDeliveryAndOfflineQueue(t *testing.T) {
 }
 
 func TestNamesAndAliases(t *testing.T) {
-	a := startNode(t, t.TempDir(), "PC-A")
-	b := startNode(t, t.TempDir(), "PC-B", a.udpPort())
+	a := startNode(t, tempDir(t), "PC-A")
+	b := startNode(t, tempDir(t), "PC-B", a.udpPort())
 	idB := b.app.Self().ID
 	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idB))
 

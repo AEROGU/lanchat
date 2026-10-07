@@ -24,14 +24,17 @@ const (
 
 var Default = Build
 
-// Build compila dist/lanchat.exe para Windows, sin consola, con la versión de git.
+// Build compila dist/lanchat.exe para Windows, sin consola, con la versión de
+// git y su ícono.
 func Build() error {
+	mg.Deps(Resources)
 	return build(exeName, "-s -w -H=windowsgui")
 }
 
 // Debug compila dist/lanchat-debug.exe: igual pero con consola, para ver el
 // registro (-debug) o usar el modo -console.
 func Debug() error {
+	mg.Deps(Resources)
 	return build(debugExeName, "")
 }
 

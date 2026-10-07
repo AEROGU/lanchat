@@ -68,6 +68,9 @@ const api = {
   openFile: (id, index, reveal) => request("POST", "/api/files/open", { id, index, reveal }),
   downloadDir: (dir) => request("POST", "/api/download-dir", { dir }),
   openDownloadDir: () => request("POST", "/api/download-dir/open", {}),
+  system: () => request("GET", "/api/system"),
+  autostart: (enabled) => request("POST", "/api/system/autostart", { enabled }),
+  firewall: () => request("POST", "/api/system/firewall", {}),
 };
 
 function expire() {
@@ -546,6 +549,41 @@ function openSettings() {
   $("about").textContent = `LanChat ${s.version} · ${s.hostname}`;
   $("settings-error").hidden = true;
   $("settings").showModal();
+  api.system().then(renderSystem).catch(() => {});
+}
+
+function renderSystem(sys) {
+  $("system-section").hidden = !sys.supported;
+  $("autostart-input").checked = sys.autostart;
+  $("firewall-status").textContent = sys.firewall ? "Permitido ✓" : "Sin configurar";
+  $("firewall-btn").hidden = sys.firewall;
+}
+
+function settingsError(e) {
+  $("settings-error").textContent = e.message;
+  $("settings-error").hidden = false;
+}
+
+async function toggleAutostart() {
+  try {
+    renderSystem(await api.autostart($("autostart-input").checked));
+  } catch (e) {
+    settingsError(e);
+  }
+}
+
+async function allowFirewall() {
+  const btn = $("firewall-btn");
+  btn.disabled = true;
+  $("firewall-status").textContent = "Esperando el permiso de administrador…";
+  try {
+    renderSystem(await api.firewall());
+  } catch (e) {
+    settingsError(e);
+    api.system().then(renderSystem).catch(() => {});
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function saveSettings(ev) {
@@ -670,6 +708,8 @@ function bind() {
   });
   $("input").addEventListener("input", autoGrow);
   $("attach-btn").addEventListener("click", pickAndSend);
+  $("autostart-input").addEventListener("change", toggleAutostart);
+  $("firewall-btn").addEventListener("click", allowFirewall);
   $("open-downloads").addEventListener("click", () =>
     api.openDownloadDir().catch((e) => showBanner(e.message, 5000)));
 

@@ -1,4 +1,7 @@
-package ui
+// Package icon dibuja el ícono de LanChat por código (sin archivos de imagen):
+// un globo de diálogo blanco sobre un cuadrado azul redondeado; con aviso,
+// lleva además un punto rojo de "sin leer".
+package icon
 
 import (
 	"bytes"
@@ -10,22 +13,17 @@ import (
 	"sync"
 )
 
-// El icono se dibuja por código: un globo de diálogo blanco sobre un cuadrado
-// azul redondeado; con aviso, lleva además un punto rojo de "sin leer".
-
-const (
-	faviconSize = 64
-	toastSize   = 128
-	// supersample: muestras por eje y píxel para suavizar los bordes.
-	supersample = 4
-)
+// supersample: muestras por eje y píxel para suavizar los bordes.
+const supersample = 4
 
 var (
 	colorBrand = color.NRGBA{37, 99, 235, 255}
 	colorWhite = color.NRGBA{255, 255, 255, 255}
 	colorAlert = color.NRGBA{220, 38, 38, 255}
-	// trayIconSizes son los tamaños que Windows elige según el DPI.
-	trayIconSizes = []int{16, 20, 24, 32, 48}
+	// TraySizes son los tamaños de la bandeja; Windows elige según el DPI.
+	TraySizes = []int{16, 20, 24, 32, 48}
+	// ExeSizes son los tamaños del ícono del ejecutable (Explorador, accesos directos).
+	ExeSizes = []int{16, 20, 24, 32, 40, 48, 64, 128, 256}
 )
 
 type layer struct {
@@ -53,7 +51,8 @@ func iconLayers(badge bool) []layer {
 	return ls
 }
 
-func drawIcon(size int, badge bool) *image.NRGBA {
+// Draw dibuja el ícono de size×size píxeles.
+func Draw(size int, badge bool) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	layers := iconLayers(badge)
 	n := float64(size * supersample)
@@ -121,8 +120,8 @@ var (
 	icoCache    = map[bool][]byte{}
 )
 
-// iconPNG devuelve el icono en PNG (para la página y las notificaciones).
-func iconPNG(size int, badge bool) []byte {
+// PNG devuelve el ícono en PNG (para la página y las notificaciones).
+func PNG(size int, badge bool) []byte {
 	iconCacheMu.Lock()
 	defer iconCacheMu.Unlock()
 	k := iconKey{size, badge}
@@ -130,21 +129,22 @@ func iconPNG(size int, badge bool) []byte {
 		return b
 	}
 	var buf bytes.Buffer
-	png.Encode(&buf, drawIcon(size, badge))
+	png.Encode(&buf, Draw(size, badge))
 	pngCache[k] = buf.Bytes()
 	return pngCache[k]
 }
 
-// iconICO devuelve el icono en formato .ico (el que exige la bandeja de Windows).
-func iconICO(badge bool) []byte {
+// ICO devuelve el ícono en formato .ico con los tamaños de TraySizes (el
+// formato que exige la bandeja de Windows).
+func ICO(badge bool) []byte {
 	iconCacheMu.Lock()
 	defer iconCacheMu.Unlock()
 	if b, ok := icoCache[badge]; ok {
 		return b
 	}
-	imgs := make([]*image.NRGBA, len(trayIconSizes))
-	for i, s := range trayIconSizes {
-		imgs[i] = drawIcon(s, badge)
+	imgs := make([]*image.NRGBA, len(TraySizes))
+	for i, s := range TraySizes {
+		imgs[i] = Draw(s, badge)
 	}
 	icoCache[badge] = encodeICO(imgs)
 	return icoCache[badge]

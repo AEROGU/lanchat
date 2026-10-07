@@ -13,7 +13,12 @@ go tool mage          # compila dist/lanchat.exe, sin consola (target build)
 go tool mage debug    # compila dist/lanchat-debug.exe, con consola
 go tool mage check    # gofmt, go vet, staticcheck y pruebas: correr antes de cada commit
 go tool mage race     # pruebas con detector de carreras (requiere gcc)
+go tool mage dist     # dist/LanChat-<versión>.zip listo para copiar a las PCs
 ```
+
+`build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y
+manifest del .exe, target `resources`); el archivo no se versiona. El texto de
+`LEEME.txt` del zip está en `packaging/LEEME.txt`.
 
 La versión del ejecutable sale de `git describe`: para publicar la 1.0.0 se
 crea la etiqueta `git tag v1.0.0` y se compila.
@@ -25,7 +30,12 @@ izquierdo: abrir; clic derecho: menú con **Salir**). Cerrar la ventana no
 cierra LanChat. Abrirlo de nuevo con LanChat ya abierto solo muestra la ventana.
 
 La primera vez Windows pedirá permiso de red: hay que permitirlo en **redes
-privadas** (UDP 50000 y TCP 50001).
+privadas** (UDP 50000 y TCP 50001). También se puede crear la regla desde
+Ajustes > Firewall de Windows, o con `lanchat.exe -firewall add`.
+
+En la primera ejecución se activa el inicio con Windows (en la bandeja); se
+desactiva en Ajustes. Con `-dir` no se toca, para no reemplazar el de la
+instalación normal.
 
 Opciones:
 
@@ -34,6 +44,7 @@ Opciones:
 | `-hidden` | arrancar solo en la bandeja (para el inicio con Windows) |
 | `-dir carpeta` | otra carpeta de datos (por defecto `%APPDATA%\LanChat`) |
 | `-version` | mostrar la versión |
+| `-firewall add` / `remove` | crear o quitar la regla del Firewall de Windows (pide administrador) |
 
 Para diagnóstico, `go tool mage debug` compila `dist/lanchat-debug.exe`, que
 tiene consola:
