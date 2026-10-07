@@ -22,10 +22,17 @@ USO
 - Clic en el ícono de la bandeja: abrir. Clic derecho: menú (Salir).
 - Cerrar la ventana no cierra LanChat: sigue recibiendo en la bandeja.
 - Las PCs de la misma red aparecen solas. Para PCs de otra subred:
-  Ajustes > "Equipos de otras subredes" (IP o nombre de equipo).
-- Archivos: botón 📎 o arrastrarlos a la conversación. El otro debe
-  aceptarlos; una vez recibidos no se pueden volver a descargar (hay que
-  reenviarlos). Se guardan en Descargas\LanChat (se cambia en Ajustes).
+  Ajustes > "Equipos de otras subredes" (IP o nombre de equipo). Basta
+  hacerlo en una PC: las demás la conocen a través de ella.
+- Estado: clic bajo tu nombre (Disponible, Ausente, Ocupado y un mensaje).
+  Tras 10 minutos sin usar la PC pasas a Ausente. Ocupado = sin avisos.
+- 📢 Mensaje a varios: el mismo mensaje a varios contactos o a un grupo.
+- Grupos: en una conversación, botón "Grupo" (solo los ves tú).
+- ✓ = entregado, ✓✓ = leído (se desactiva en Ajustes).
+- Archivos: botón 📎 (archivos), 📁 (carpeta) o arrastrarlos a la
+  conversación. El otro debe aceptarlos; una vez recibidos no se pueden
+  volver a descargar (hay que reenviarlos). Se guardan en
+  Descargas\LanChat (se cambia en Ajustes).
 
 ACTUALIZAR
 ----------
