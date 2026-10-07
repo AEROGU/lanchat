@@ -4,7 +4,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"math"
+	"slices"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -36,12 +39,17 @@ var migrations = [][]string{
 	},
 }
 
+// busyTimeout: espera máxima de una escritura si la base está ocupada.
+const busyTimeout = 5 * time.Second
+
 type Store struct {
 	db *sql.DB
 }
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	// WAL: las lecturas no bloquean a las escrituras.
+	db, err := sql.Open("sqlite", fmt.Sprintf("%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)",
+		path, busyTimeout.Milliseconds()))
 	if err != nil {
 		return nil, err
 	}
@@ -117,34 +125,42 @@ func (s *Store) SetAlias(ctx context.Context, id, alias string) error {
 	return nil
 }
 
-func (s *Store) Peer(ctx context.Context, id string) (Peer, bool, error) {
+const peerColumns = `id, name, hostname, ip, alias, last_seen`
+
+// scanner lo cumplen *sql.Row y *sql.Rows.
+type scanner interface{ Scan(dest ...any) error }
+
+func scanPeer(sc scanner) (Peer, error) {
 	var p Peer
 	var seen int64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, hostname, ip, alias, last_seen FROM peers WHERE id = ?`, id).
-		Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &seen)
-	if err == sql.ErrNoRows {
-		return p, false, nil
-	}
+	err := sc.Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &seen)
 	p.LastSeen = time.UnixMilli(seen)
-	return p, err == nil, err
+	return p, err
+}
+
+func (s *Store) Peer(ctx context.Context, id string) (Peer, bool, error) {
+	p, err := scanPeer(s.db.QueryRowContext(ctx, `SELECT `+peerColumns+` FROM peers WHERE id = ?`, id))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return Peer{}, false, nil
+	case err != nil:
+		return Peer{}, false, err
+	}
+	return p, true, nil
 }
 
 func (s *Store) Peers(ctx context.Context) ([]Peer, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, hostname, ip, alias, last_seen FROM peers ORDER BY hostname, id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+peerColumns+` FROM peers ORDER BY hostname, id`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []Peer
 	for rows.Next() {
-		var p Peer
-		var seen int64
-		if err := rows.Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &seen); err != nil {
+		p, err := scanPeer(rows)
+		if err != nil {
 			return nil, err
 		}
-		p.LastSeen = time.UnixMilli(seen)
 		out = append(out, p)
 	}
 	return out, rows.Err()
@@ -171,12 +187,13 @@ type Message struct {
 	Status Status
 }
 
+const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status`
+
 // InsertMessage guarda el mensaje; inserted es false si ese ID ya existía
 // (un reenvío del mismo mensaje).
 func (s *Store) InsertMessage(ctx context.Context, m Message) (inserted bool, err error) {
-	res, err := s.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO messages (id, peer_id, outgoing, body, at, sent_at, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	res, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status)
 	if err != nil {
 		return false, err
@@ -192,14 +209,14 @@ func (s *Store) MarkDelivered(ctx context.Context, id string) error {
 
 // Pending devuelve los mensajes salientes sin entregar a peerID, del más antiguo al más nuevo.
 func (s *Store) Pending(ctx context.Context, peerID string) ([]Message, error) {
-	return s.queryMessages(ctx, `
-		SELECT id, peer_id, outgoing, body, at, sent_at, status FROM messages
-		WHERE peer_id = ? AND status = 0 ORDER BY at, rowid`, peerID)
+	return s.queryMessages(ctx, `SELECT `+messageColumns+` FROM messages
+		WHERE peer_id = ? AND status = ? ORDER BY at, rowid`, peerID, StatusPending)
 }
 
 // PeersWithPending devuelve los contactos que tienen mensajes por entregar.
 func (s *Store) PeersWithPending(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT peer_id FROM messages WHERE status = 0`)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT peer_id FROM messages WHERE status = ?`, StatusPending)
 	if err != nil {
 		return nil, err
 	}
@@ -215,22 +232,26 @@ func (s *Store) PeersWithPending(ctx context.Context) ([]string, error) {
 	return out, rows.Err()
 }
 
-// History devuelve hasta limit mensajes con peerID anteriores a before (cero =
-// los más recientes), en orden cronológico.
-func (s *Store) History(ctx context.Context, peerID string, before time.Time, limit int) ([]Message, error) {
-	b := int64(1<<63 - 1)
-	if !before.IsZero() {
-		b = before.UnixMilli()
+// History devuelve hasta limit mensajes con peerID, en orden cronológico,
+// anteriores al mensaje beforeID ("" = los más recientes). Para paginar hacia
+// atrás se pasa el ID del mensaje más antiguo ya mostrado.
+func (s *Store) History(ctx context.Context, peerID, beforeID string, limit int) ([]Message, error) {
+	// Cursor (at, rowid): con solo "at" se perderían mensajes del mismo milisegundo.
+	at, rowid := int64(math.MaxInt64), int64(math.MaxInt64)
+	if beforeID != "" {
+		err := s.db.QueryRowContext(ctx,
+			`SELECT at, rowid FROM messages WHERE id = ? AND peer_id = ?`, beforeID, peerID).Scan(&at, &rowid)
+		if err != nil {
+			return nil, fmt.Errorf("mensaje de referencia %s: %w", beforeID, err)
+		}
 	}
-	msgs, err := s.queryMessages(ctx, `
-		SELECT id, peer_id, outgoing, body, at, sent_at, status FROM messages
-		WHERE peer_id = ? AND at < ? ORDER BY at DESC, rowid DESC LIMIT ?`, peerID, b, limit)
+	msgs, err := s.queryMessages(ctx, `SELECT `+messageColumns+` FROM messages
+		WHERE peer_id = ? AND (at, rowid) < (?, ?)
+		ORDER BY at DESC, rowid DESC LIMIT ?`, peerID, at, rowid, limit)
 	if err != nil {
 		return nil, err
 	}
-	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
-		msgs[i], msgs[j] = msgs[j], msgs[i]
-	}
+	slices.Reverse(msgs)
 	return msgs, nil
 }
 

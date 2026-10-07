@@ -127,7 +127,7 @@ func TestChatDeliveryAndOfflineQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(300 * time.Millisecond)
-	if h, _ := a.app.History(context.Background(), idB, time.Time{}, 1); len(h) != 1 ||
+	if h, _ := a.app.History(context.Background(), idB, "", 1); len(h) != 1 ||
 		h[0].ID != m.ID || h[0].Status != store.StatusPending {
 		t.Fatalf("debía seguir pendiente: %+v", h)
 	}
@@ -137,7 +137,7 @@ func TestChatDeliveryAndOfflineQueue(t *testing.T) {
 	waitFor(t, a, "A confirma el pendiente", chatEvent(chat.MessageDelivered, "mensaje en espera"))
 
 	// El historial de B sobrevivió al reinicio.
-	h, err := b2.app.History(context.Background(), idA, time.Time{}, 10)
+	h, err := b2.app.History(context.Background(), idA, "", 10)
 	if err != nil || len(h) != 2 {
 		t.Fatalf("historial de B = %+v, %v", h, err)
 	}

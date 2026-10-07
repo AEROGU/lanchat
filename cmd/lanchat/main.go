@@ -12,11 +12,11 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/version"
 )
@@ -28,7 +28,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("LanChat %s (protocolo v%d)\n", version.App, version.Protocol)
+		fmt.Printf("LanChat %s (protocolo v%d)\n", version.App, protocol.Version)
 		return
 	}
 
@@ -82,10 +82,13 @@ type console struct {
 	list []app.Contact
 }
 
+// historySize es cuántos mensajes muestra /hist.
+const historySize = 20
+
 const help = `Comandos:
   /lista              muestra los contactos numerados
   @N texto            envía "texto" al contacto N de la lista
-  /hist N             últimos 20 mensajes con el contacto N
+  /hist N             últimos mensajes con el contacto N
   /nombre texto       cambia tu nombre (vacío = usar el hostname)
   /alias N texto      pone un alias local al contacto N (vacío = quitarlo)
   /salir              cierra LanChat`
@@ -122,7 +125,7 @@ func (c *console) command(line string) error {
 		if err != nil {
 			return err
 		}
-		msgs, err := c.app.History(ctx, ct.ID, time.Time{}, 20)
+		msgs, err := c.app.History(ctx, ct.ID, "", historySize)
 		if err != nil {
 			return err
 		}

@@ -9,6 +9,8 @@ import (
 	"net/netip"
 	"testing"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/protocol"
 )
 
 var loopback = netip.MustParseAddr("127.0.0.1")
@@ -83,7 +85,8 @@ func TestRegistryExpire(t *testing.T) {
 	r := newRegistry()
 	now := time.Now()
 	src := netip.AddrPortFrom(netip.MustParseAddr("192.168.1.20"), 50000)
-	p := packet{ID: "x", Hostname: "PC-X", Port: 50001}
+	p := packet{ID: "x", Hostname: "PC-X", HTTPPort: 50001}
+	ttl := protocol.PeerTTL
 
 	if ev, online := r.seen(p, src, now); ev == nil || ev.Type != PeerOnline || !online {
 		t.Fatalf("primer anuncio: %+v %v", ev, online)
@@ -91,14 +94,18 @@ func TestRegistryExpire(t *testing.T) {
 	if ev, _ := r.seen(p, src, now.Add(time.Second)); ev != nil {
 		t.Fatalf("anuncio repetido no debe generar evento: %+v", ev)
 	}
-	if evs := r.expire(now.Add(10*time.Second), 35*time.Second); len(evs) != 0 {
+	p.Name = "Juan"
+	if ev, _ := r.seen(p, src, now.Add(time.Second)); ev == nil || ev.Type != PeerUpdated || ev.Peer.Name != "Juan" {
+		t.Fatalf("cambio de nombre: %+v", ev)
+	}
+	if evs := r.expire(now.Add(ttl-time.Second), ttl); len(evs) != 0 {
 		t.Fatalf("expiró antes de tiempo: %+v", evs)
 	}
-	evs := r.expire(now.Add(40*time.Second), 35*time.Second)
+	evs := r.expire(now.Add(ttl+2*time.Second), ttl)
 	if len(evs) != 1 || evs[0].Type != PeerOffline {
 		t.Fatalf("debía expirar: %+v", evs)
 	}
-	if ev, online := r.seen(p, src, now.Add(50*time.Second)); ev == nil || ev.Type != PeerOnline || !online {
+	if ev, online := r.seen(p, src, now.Add(2*ttl)); ev == nil || ev.Type != PeerOnline || !online {
 		t.Fatalf("al volver debe estar online: %+v", ev)
 	}
 }
@@ -117,6 +124,26 @@ func TestBroadcastAddr(t *testing.T) {
 	}
 	if _, ok := broadcastAddr(netip.MustParsePrefix("10.0.0.1/32")); ok {
 		t.Error("/32 no tiene broadcast")
+	}
+}
+
+func TestParseManual(t *testing.T) {
+	ok := map[string]manualPeer{
+		"10.0.5.20":       {addr: netip.MustParseAddr("10.0.5.20"), port: 50000},
+		"10.0.5.20:51000": {addr: netip.MustParseAddr("10.0.5.20"), port: 51000},
+		"PC-VENTAS":       {host: "PC-VENTAS", port: 50000},
+		"pc-ventas:51000": {host: "pc-ventas", port: 51000},
+	}
+	for in, want := range ok {
+		got, err := parseManual(in, 50000)
+		if err != nil || got != want {
+			t.Errorf("%q: got %+v, %v; want %+v", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "10.0.0.1:0", "10.0.0.1:99999", "pc:abc", "::1", "[fe80::1]:50000"} {
+		if _, err := parseManual(in, 50000); err == nil {
+			t.Errorf("%q debía rechazarse", in)
+		}
 	}
 }
 

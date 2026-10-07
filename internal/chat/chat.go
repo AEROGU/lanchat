@@ -1,9 +1,9 @@
 // Package chat envía y recibe mensajes 1 a 1 entre equipos.
 //
 // Un mensaje saliente se guarda primero como pendiente y luego se entrega con
-// POST /v1/msg al equipo destino. Solo se marca como entregado cuando el otro
-// equipo responde 204 (ya lo guardó). Si el destino está desconectado, el
-// mensaje espera y se reintenta cuando vuelve a aparecer o cada 30 s.
+// POST a msgPath en el equipo destino. Solo se marca como entregado cuando el
+// otro equipo responde 204 (ya lo guardó). Si el destino está desconectado, el
+// mensaje espera y se reintenta cuando vuelve a aparecer o cada retryInterval.
 package chat
 
 import (
@@ -16,29 +16,27 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
-	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
 	"github.com/AEROGU/lanchat/internal/ids"
 	"github.com/AEROGU/lanchat/internal/peer"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
-	"github.com/AEROGU/lanchat/internal/version"
 )
 
 const (
-	// MaxBodyBytes es el tamaño máximo del texto de un mensaje.
-	MaxBodyBytes = 64 << 10
-
+	// retryInterval: cada cuánto se reintentan los pendientes a equipos en línea.
 	retryInterval = 30 * time.Second
-	maxIDLen      = 64
-	maxNameLen    = 64
-	maxHostLen    = 255
+	// maxRequestBytes acota el JSON recibido: el texto más los demás campos.
+	maxRequestBytes = 2 * protocol.MaxMessageBytes
+	// maxResponseDrain: cuánto se lee de una respuesta que no nos interesa.
+	maxResponseDrain = 4 << 10
+	eventBuffer      = 256
 )
 
-var msgPath = version.APIPrefix + "/msg"
+var msgPath = protocol.APIPrefix + "/msg"
 
 // Directory dice dónde está cada equipo; lo implementa discovery.Service.
 type Directory interface {
@@ -79,27 +77,13 @@ type wireMessage struct {
 }
 
 func (m wireMessage) validate() error {
-	switch {
-	case m.ID == "" || len(m.ID) > maxIDLen:
-		return errors.New("id inválido")
-	case m.From == "" || len(m.From) > maxIDLen:
-		return errors.New("remitente inválido")
-	case utf8.RuneCountInString(m.FromName) > maxNameLen || len(m.FromHost) > maxHostLen:
-		return errors.New("nombre demasiado largo")
-	}
-	return validateBody(m.Body)
-}
-
-func validateBody(body string) error {
-	switch {
-	case strings.TrimSpace(body) == "":
-		return errors.New("mensaje vacío")
-	case len(body) > MaxBodyBytes:
-		return fmt.Errorf("mensaje demasiado largo (máximo %d KB)", MaxBodyBytes>>10)
-	case !utf8.ValidString(body):
-		return errors.New("el mensaje no es UTF-8 válido")
-	}
-	return nil
+	return errors.Join(
+		protocol.ValidateID(m.ID),
+		protocol.ValidateID(m.From),
+		protocol.ValidateName(m.FromName),
+		protocol.ValidateHostname(m.FromHost),
+		protocol.ValidateMessage(m.Body),
+	)
 }
 
 type Service struct {
@@ -127,7 +111,7 @@ func New(self Identity, st *store.Store, dir Directory, client *http.Client, log
 		dir:      dir,
 		client:   client,
 		log:      log,
-		events:   make(chan Event, 256),
+		events:   make(chan Event, eventBuffer),
 		ctx:      ctx,
 		cancel:   cancel,
 		flushing: map[string]*sync.Mutex{},
@@ -160,7 +144,7 @@ func (s *Service) Close() {
 
 // Send guarda el mensaje como pendiente e intenta entregarlo de inmediato.
 func (s *Service) Send(ctx context.Context, peerID, body string) (store.Message, error) {
-	if err := validateBody(body); err != nil {
+	if err := protocol.ValidateMessage(body); err != nil {
 		return store.Message{}, err
 	}
 	now := time.Now()
@@ -263,7 +247,7 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 		return err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseDrain)) // permite reutilizar la conexión
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("respuesta %s", resp.Status)
 	}
@@ -271,7 +255,7 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 }
 
 func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 2*MaxBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
 	var wm wireMessage
 	if err := json.NewDecoder(r.Body).Decode(&wm); err != nil {
 		http.Error(w, "json inválido", http.StatusBadRequest)

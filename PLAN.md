@@ -60,6 +60,11 @@ Paquetes JSON: `{"m":"lanchat","v":1,"t":"hello|announce|bye","id":"…","name":
 ## Estructura
 ```
 cmd/lanchat/          main
+magefiles/            targets de compilación (go tool mage)
+internal/protocol/    contrato entre equipos: versión, puertos, tiempos, límites, validación
+internal/version/     versión del programa (la fija mage build)
+internal/ids/         UUID
+internal/app/         une todo; lo único que usa la interfaz
 internal/config/      config.json (ID, nombre, puertos, equipos manuales)
 internal/discovery/   anuncios UDP, registro de equipos
 internal/peer/        servidor/cliente HTTP entre equipos

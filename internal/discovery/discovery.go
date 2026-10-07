@@ -13,13 +13,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/version"
 )
 
 const (
-	DefaultInterval = 10 * time.Second
-	DefaultTTL      = 35 * time.Second
+	// readBufferSize cabe cualquier datagrama UDP.
+	readBufferSize = 64 << 10
+	// eventBuffer da margen a quien lee Events antes de bloquear la recepción.
+	eventBuffer = 64
+	// dnsTimeout limita la resolución de cada equipo manual por hostname.
+	dnsTimeout = 2 * time.Second
 )
+
+// limitedBroadcast (255.255.255.255) llega a toda la subred, pero Windows lo
+// envía por una sola interfaz; por eso también se usa el broadcast dirigido.
+var limitedBroadcast = netip.AddrFrom4([4]byte{255, 255, 255, 255})
 
 type Config struct {
 	ID       string
@@ -33,7 +42,7 @@ type Config struct {
 	HTTPPort int
 	// ManualPeers: "ip", "ip:puerto" o "hostname[:puerto]" de otras subredes.
 	ManualPeers []string
-	// Interval entre anuncios y TTL para considerar desconectado a un equipo.
+	// Interval y TTL: por defecto protocol.AnnounceInterval y protocol.PeerTTL.
 	Interval time.Duration
 	TTL      time.Duration
 	// NoBroadcast desactiva el broadcast y deja solo unicast (pruebas).
@@ -46,21 +55,33 @@ type Service struct {
 	reg    *registry
 	log    *slog.Logger
 	events chan Event
+	manual []manualPeer
 
-	mu        sync.Mutex
-	name      string
-	dupWarned bool
+	mu         sync.Mutex
+	name       string
+	manualAddr []netip.AddrPort // última resolución de manual
+	dupWarned  bool
 }
 
 // New abre el socket UDP. Falla si el puerto ya está en uso, lo que normalmente
 // significa que LanChat ya está abierto en este equipo.
 func New(cfg Config, log *slog.Logger) (*Service, error) {
 	if cfg.Interval <= 0 {
-		cfg.Interval = DefaultInterval
+		cfg.Interval = protocol.AnnounceInterval
 	}
 	if cfg.TTL <= 0 {
-		cfg.TTL = DefaultTTL
+		cfg.TTL = protocol.PeerTTL
 	}
+	var manual []manualPeer
+	for _, s := range cfg.ManualPeers {
+		m, err := parseManual(s, cfg.UDPPort)
+		if err != nil {
+			log.Warn("equipo manual ignorado", "err", err)
+			continue
+		}
+		manual = append(manual, m)
+	}
+
 	laddr := &net.UDPAddr{Port: cfg.UDPPort}
 	if cfg.BindIP.IsValid() {
 		laddr.IP = cfg.BindIP.AsSlice()
@@ -75,7 +96,8 @@ func New(cfg Config, log *slog.Logger) (*Service, error) {
 		conn:   conn,
 		reg:    newRegistry(),
 		log:    log,
-		events: make(chan Event, 64),
+		events: make(chan Event, eventBuffer),
+		manual: manual,
 		name:   cfg.Name,
 	}, nil
 }
@@ -116,6 +138,7 @@ func (s *Service) Run(ctx context.Context) error {
 		s.recvLoop()
 	}()
 
+	s.resolveManual(ctx)
 	s.sendAll(typeHello)
 	t := time.NewTicker(s.cfg.Interval)
 	defer t.Stop()
@@ -128,6 +151,8 @@ func (s *Service) Run(ctx context.Context) error {
 			close(s.events)
 			return nil
 		case now := <-t.C:
+			// Se resuelve en cada ciclo porque las IPs por DHCP cambian.
+			s.resolveManual(ctx)
 			s.sendAll(typeAnnounce)
 			for _, ev := range s.reg.expire(now, s.cfg.TTL) {
 				s.events <- ev
@@ -136,8 +161,27 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
+// resolveManual actualiza las direcciones de los equipos manuales. Se hace
+// aquí y no al enviar para que SetName nunca espere al DNS.
+func (s *Service) resolveManual(ctx context.Context) {
+	var addrs []netip.AddrPort
+	for _, m := range s.manual {
+		rctx, cancel := context.WithTimeout(ctx, dnsTimeout)
+		aps, err := m.resolve(rctx)
+		cancel()
+		if err != nil {
+			s.log.Debug("equipo manual no resuelto", "host", m.host, "err", err)
+			continue
+		}
+		addrs = append(addrs, aps...)
+	}
+	s.mu.Lock()
+	s.manualAddr = addrs
+	s.mu.Unlock()
+}
+
 func (s *Service) recvLoop() {
-	buf := make([]byte, 64*1024)
+	buf := make([]byte, readBufferSize)
 	incompatWarned := map[netip.Addr]bool{}
 	for {
 		n, src, err := s.conn.ReadFromUDPAddrPort(buf)
@@ -149,19 +193,20 @@ func (s *Service) recvLoop() {
 			s.log.Debug("lectura UDP", "err", err)
 			continue
 		}
+		src = netip.AddrPortFrom(src.Addr().Unmap(), src.Port())
 		p, err := decodePacket(buf[:n])
 		if err != nil {
 			var inc incompatibleError
 			if errors.As(err, &inc) && !incompatWarned[src.Addr()] {
 				incompatWarned[src.Addr()] = true
 				s.log.Warn("equipo con otra versión de LanChat; hay que actualizar uno de los dos",
-					"ip", src.Addr().Unmap(), "app", p.App, "err", err)
+					"ip", src.Addr(), "app", p.App, "err", err)
 				continue
 			}
 			s.log.Debug("paquete descartado", "src", src, "err", err)
 			continue
 		}
-		s.handle(p, netip.AddrPortFrom(src.Addr().Unmap(), src.Port()))
+		s.handle(p, src)
 	}
 }
 
@@ -201,14 +246,14 @@ func (s *Service) packet(t packetType) packet {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return packet{
-		Magic:    protoMagic,
-		Version:  version.Protocol,
+		Magic:    protocol.Magic,
+		Version:  protocol.Version,
 		App:      version.App,
 		Type:     t,
 		ID:       s.cfg.ID,
 		Name:     s.name,
 		Hostname: s.cfg.Hostname,
-		Port:     s.cfg.HTTPPort,
+		HTTPPort: s.cfg.HTTPPort,
 	}
 }
 
@@ -244,7 +289,7 @@ func (s *Service) targets() []netip.AddrPort {
 	nets := localNets()
 	port := uint16(s.cfg.UDPPort)
 	if !s.cfg.NoBroadcast {
-		add(netip.AddrPortFrom(netip.AddrFrom4([4]byte{255, 255, 255, 255}), port))
+		add(netip.AddrPortFrom(limitedBroadcast, port))
 		for _, n := range nets {
 			if b, ok := broadcastAddr(n); ok {
 				add(netip.AddrPortFrom(b, port))
@@ -252,15 +297,11 @@ func (s *Service) targets() []netip.AddrPort {
 		}
 	}
 
-	for _, m := range s.cfg.ManualPeers {
-		aps, err := resolveManual(context.Background(), m, s.cfg.UDPPort)
-		if err != nil {
-			s.log.Debug("equipo manual no resuelto", "peer", m, "err", err)
-			continue
-		}
-		for _, ap := range aps {
-			add(ap)
-		}
+	s.mu.Lock()
+	manual := s.manualAddr
+	s.mu.Unlock()
+	for _, ap := range manual {
+		add(ap)
 	}
 
 	for _, p := range s.reg.snapshot() {

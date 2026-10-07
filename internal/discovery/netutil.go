@@ -3,10 +3,10 @@ package discovery
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/netip"
 	"strconv"
-	"time"
 )
 
 // localNets devuelve las redes IPv4 de las interfaces activas (sin loopback).
@@ -85,29 +85,47 @@ func isLocalIP(ip netip.Addr) bool {
 	return false
 }
 
-// resolveManual convierte "ip", "ip:puerto" o "hostname[:puerto]" en direcciones UDP.
-func resolveManual(ctx context.Context, s string, defPort int) ([]netip.AddrPort, error) {
+// manualPeer es una entrada de Config.ManualPeers ya interpretada.
+type manualPeer struct {
+	host string     // hostname a resolver por DNS (vacío si es una IP)
+	addr netip.Addr // válida si la entrada es una IP
+	port uint16
+}
+
+// parseManual interpreta "ip", "ip:puerto", "hostname" o "hostname:puerto".
+func parseManual(s string, defPort int) (manualPeer, error) {
 	host, port := s, defPort
 	if h, p, err := net.SplitHostPort(s); err == nil {
 		n, err := strconv.Atoi(p)
 		if err != nil || n < 1 || n > 65535 {
-			return nil, &net.AddrError{Err: "puerto inválido", Addr: s}
+			return manualPeer{}, fmt.Errorf("puerto inválido en %q", s)
 		}
 		host, port = h, n
 	}
-	if a, err := netip.ParseAddr(host); err == nil {
-		return []netip.AddrPort{netip.AddrPortFrom(a.Unmap(), uint16(port))}, nil
+	if host == "" {
+		return manualPeer{}, fmt.Errorf("equipo manual vacío: %q", s)
 	}
+	if a, err := netip.ParseAddr(host); err == nil {
+		if a = a.Unmap(); !a.Is4() {
+			return manualPeer{}, fmt.Errorf("solo se admite IPv4: %q", s)
+		}
+		return manualPeer{addr: a, port: uint16(port)}, nil
+	}
+	return manualPeer{host: host, port: uint16(port)}, nil
+}
 
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", host)
+// resolve devuelve las direcciones UDP del equipo (consulta DNS si es un hostname).
+func (m manualPeer) resolve(ctx context.Context) ([]netip.AddrPort, error) {
+	if m.addr.IsValid() {
+		return []netip.AddrPort{netip.AddrPortFrom(m.addr, m.port)}, nil
+	}
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", m.host)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]netip.AddrPort, 0, len(ips))
 	for _, ip := range ips {
-		out = append(out, netip.AddrPortFrom(ip.Unmap(), uint16(port)))
+		out = append(out, netip.AddrPortFrom(ip.Unmap(), m.port))
 	}
 	return out, nil
 }

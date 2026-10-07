@@ -1,8 +1,9 @@
 package discovery
 
 import (
+	"cmp"
 	"net/netip"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 )
@@ -14,8 +15,8 @@ type Peer struct {
 	Name     string
 	Hostname string
 	IP       netip.Addr
-	// Port es el puerto HTTP del equipo.
-	Port int
+	// HTTPPort es donde el equipo atiende mensajes y archivos.
+	HTTPPort int
 	// AppVersion es la versión del programa que usa (puede estar vacía).
 	AppVersion string
 	LastSeen   time.Time
@@ -27,7 +28,7 @@ type Peer struct {
 
 // HTTPAddr es la dirección donde el equipo atiende mensajes y archivos.
 func (p Peer) HTTPAddr() netip.AddrPort {
-	return netip.AddrPortFrom(p.IP, uint16(p.Port))
+	return netip.AddrPortFrom(p.IP, uint16(p.HTTPPort))
 }
 
 type EventType int
@@ -78,25 +79,27 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 		cur = &Peer{ID: p.ID}
 		r.peers[p.ID] = cur
 	}
-	ip := src.Addr()
-	changed := cur.Name != p.Name || cur.Hostname != p.Hostname || cur.IP != ip ||
-		cur.Port != p.Port || cur.AppVersion != p.App
+	updated := Peer{
+		ID:         p.ID,
+		Name:       p.Name,
+		Hostname:   p.Hostname,
+		IP:         src.Addr(),
+		HTTPPort:   p.HTTPPort,
+		AppVersion: p.App,
+		LastSeen:   now,
+		Online:     true,
+		udp:        src,
+	}
+	changed := cur.Name != updated.Name || cur.Hostname != updated.Hostname || cur.IP != updated.IP ||
+		cur.HTTPPort != updated.HTTPPort || cur.AppVersion != updated.AppVersion
 	cameOnline = !cur.Online
-
-	cur.Name = p.Name
-	cur.Hostname = p.Hostname
-	cur.IP = ip
-	cur.udp = src
-	cur.Port = p.Port
-	cur.AppVersion = p.App
-	cur.LastSeen = now
-	cur.Online = true
+	*cur = updated
 
 	switch {
 	case cameOnline:
-		return &Event{PeerOnline, *cur}, true
+		return &Event{PeerOnline, updated}, true
 	case changed:
-		return &Event{PeerUpdated, *cur}, false
+		return &Event{PeerUpdated, updated}, false
 	}
 	return nil, false
 }
@@ -147,11 +150,8 @@ func (r *registry) snapshot() []Peer {
 	for _, p := range r.peers {
 		out = append(out, *p)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Hostname != out[j].Hostname {
-			return out[i].Hostname < out[j].Hostname
-		}
-		return out[i].ID < out[j].ID
+	slices.SortFunc(out, func(a, b Peer) int {
+		return cmp.Or(cmp.Compare(a.Hostname, b.Hostname), cmp.Compare(a.ID, b.ID))
 	})
 	return out
 }

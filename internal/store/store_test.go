@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -77,12 +78,42 @@ func TestMessagesPendingAndHistory(t *testing.T) {
 		t.Errorf("PeersWithPending = %v", peers)
 	}
 
-	h, err := s.History(ctx, "a", time.Time{}, 2)
+	h, err := s.History(ctx, "a", "", 2)
 	if err != nil || len(h) != 2 || h[0].ID != "m2" || h[1].ID != "m3" {
 		t.Fatalf("últimos 2 = %+v, %v", h, err)
 	}
-	h, _ = s.History(ctx, "a", h[0].At, 10)
+	h, _ = s.History(ctx, "a", h[0].ID, 10)
 	if len(h) != 1 || h[0].ID != "m1" || h[0].Status != StatusDelivered {
 		t.Fatalf("página anterior = %+v", h)
+	}
+}
+
+// Mensajes en el mismo milisegundo no deben perderse al paginar.
+func TestHistorySameMillisecond(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	at := time.UnixMilli(1_700_000_000_000)
+	for _, id := range []string{"a1", "a2", "a3", "a4"} {
+		if _, err := s.InsertMessage(ctx, Message{ID: id, PeerID: "p", Body: id, At: at, SentAt: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got []string
+	before := ""
+	for {
+		page, err := s.History(ctx, "p", before, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		for i := len(page) - 1; i >= 0; i-- {
+			got = append(got, page[i].ID)
+		}
+		before = page[0].ID
+	}
+	if strings.Join(got, ",") != "a4,a3,a2,a1" {
+		t.Errorf("paginado = %v", got)
 	}
 }

@@ -4,25 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"unicode/utf8"
 
-	"github.com/AEROGU/lanchat/internal/version"
-)
-
-const (
-	protoMagic = "lanchat"
-
-	maxIDLen   = 64
-	maxNameLen = 64
-	maxHostLen = 255
-	maxAppLen  = 32
+	"github.com/AEROGU/lanchat/internal/protocol"
 )
 
 // incompatibleError: el paquete es de LanChat pero de otra versión del protocolo.
 type incompatibleError struct{ version int }
 
 func (e incompatibleError) Error() string {
-	return fmt.Sprintf("protocolo v%d incompatible con v%d", e.version, version.Protocol)
+	return fmt.Sprintf("protocolo v%d incompatible con v%d", e.version, protocol.Version)
 }
 
 type packetType string
@@ -38,16 +28,16 @@ const (
 
 type packet struct {
 	Magic string `json:"m"`
-	// Version es la versión del protocolo (version.Protocol).
+	// Version es la versión del protocolo (protocol.Version).
 	Version int `json:"v"`
-	// App es la versión del programa del otro equipo (version.App).
+	// App es la versión del programa del remitente (version.App).
 	App      string     `json:"app,omitempty"`
 	Type     packetType `json:"t"`
 	ID       string     `json:"id"`
 	Name     string     `json:"name,omitempty"`
 	Hostname string     `json:"host"`
-	// Port es el puerto HTTP del equipo (mensajes y archivos).
-	Port int `json:"port"`
+	// HTTPPort es el puerto donde el remitente atiende mensajes y archivos.
+	HTTPPort int `json:"port"`
 }
 
 func decodePacket(b []byte) (packet, error) {
@@ -55,10 +45,10 @@ func decodePacket(b []byte) (packet, error) {
 	if err := json.Unmarshal(b, &p); err != nil {
 		return p, err
 	}
-	if p.Magic != protoMagic {
+	if p.Magic != protocol.Magic {
 		return p, errors.New("paquete ajeno a lanchat")
 	}
-	if p.Version != version.Protocol {
+	if p.Version != protocol.Version {
 		return p, incompatibleError{p.Version}
 	}
 	switch p.Type {
@@ -66,14 +56,13 @@ func decodePacket(b []byte) (packet, error) {
 	default:
 		return p, errors.New("tipo de paquete desconocido")
 	}
-	if p.ID == "" || len(p.ID) > maxIDLen {
-		return p, errors.New("id inválido")
-	}
-	if utf8.RuneCountInString(p.Name) > maxNameLen || len(p.Hostname) > maxHostLen || len(p.App) > maxAppLen {
-		return p, errors.New("nombre demasiado largo")
-	}
-	if p.Port < 1 || p.Port > 65535 {
+	if p.HTTPPort < 1 || p.HTTPPort > 65535 {
 		return p, errors.New("puerto inválido")
 	}
-	return p, nil
+	return p, errors.Join(
+		protocol.ValidateID(p.ID),
+		protocol.ValidateName(p.Name),
+		protocol.ValidateHostname(p.Hostname),
+		protocol.ValidateAppVersion(p.App),
+	)
 }

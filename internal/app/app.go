@@ -3,26 +3,32 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/config"
 	"github.com/AEROGU/lanchat/internal/discovery"
 	"github.com/AEROGU/lanchat/internal/peer"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
-const maxNameLen = 64
+const (
+	dbFileName = "lanchat.db"
+	// shutdownTimeout: espera máxima a que terminen las peticiones en curso al cerrar.
+	shutdownTimeout = 5 * time.Second
+	eventBuffer     = 256
+)
 
 type Options struct {
 	// Dir es la carpeta de datos; vacío = %APPDATA%\LanChat.
@@ -79,7 +85,7 @@ func New(o Options) (a *App, err error) {
 		}
 	}()
 
-	st, err := store.Open(filepath.Join(o.Dir, "lanchat.db"))
+	st, err := store.Open(filepath.Join(o.Dir, dbFileName))
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +129,7 @@ func New(o Options) (a *App, err error) {
 		srv:    srv,
 		disc:   disc,
 		chat:   ch,
-		events: make(chan any, 256),
+		events: make(chan any, eventBuffer),
 		cfg:    cfg,
 	}, nil
 }
@@ -152,17 +158,16 @@ func (a *App) Run(ctx context.Context) error {
 		a.onPeer(ev)
 		a.events <- ev
 	}
-	err := <-discErr
+	discRunErr := <-discErr
 
-	sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	sctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	a.srv.Shutdown(sctx)
+	shutdownErr := a.srv.Shutdown(sctx)
 	a.chat.Close()
 	fwd.Wait()
 	close(a.events)
-	a.store.Close()
 
-	return errors.Join(err, <-serveErr)
+	return errors.Join(discRunErr, shutdownErr, <-serveErr, a.store.Close())
 }
 
 func (a *App) onPeer(ev discovery.Event) {
@@ -204,14 +209,20 @@ type Contact struct {
 	LastSeen   time.Time
 }
 
+func contactFromStore(r store.Peer) Contact {
+	return Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, LastSeen: r.LastSeen}
+}
+
+// overlay reemplaza los datos guardados con los que el equipo anuncia ahora;
+// el alias es local y se conserva.
+func (c *Contact) overlay(p discovery.Peer) {
+	c.ID, c.Name, c.Hostname, c.IP = p.ID, p.Name, p.Hostname, p.IP.String()
+	c.AppVersion, c.Online, c.LastSeen = p.AppVersion, p.Online, p.LastSeen
+}
+
 // DisplayName: alias local > nombre elegido por el otro > hostname > IP.
 func (c Contact) DisplayName() string {
-	for _, s := range []string{c.Alias, c.Name, c.Hostname, c.IP} {
-		if s != "" {
-			return s
-		}
-	}
-	return c.ID
+	return cmp.Or(c.Alias, c.Name, c.Hostname, c.IP, c.ID)
 }
 
 // Detail es "HOSTNAME · IP", siempre visible bajo el nombre.
@@ -228,34 +239,31 @@ func (a *App) Contacts(ctx context.Context) ([]Contact, error) {
 	if err != nil {
 		return nil, err
 	}
-	byID := map[string]*Contact{}
-	var out []*Contact
+	byID := make(map[string]int, len(recs))
+	out := make([]Contact, 0, len(recs))
 	for _, r := range recs {
-		c := &Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, LastSeen: r.LastSeen}
-		byID[r.ID] = c
-		out = append(out, c)
+		byID[r.ID] = len(out)
+		out = append(out, contactFromStore(r))
 	}
 	for _, p := range a.disc.Peers() {
-		c, ok := byID[p.ID]
+		i, ok := byID[p.ID]
 		if !ok {
-			c = &Contact{ID: p.ID}
-			out = append(out, c)
+			i = len(out)
+			out = append(out, Contact{})
 		}
-		c.Name, c.Hostname, c.IP = p.Name, p.Hostname, p.IP.String()
-		c.Online, c.LastSeen, c.AppVersion = p.Online, p.LastSeen, p.AppVersion
+		out[i].overlay(p)
 	}
 
-	res := make([]Contact, len(out))
-	for i, c := range out {
-		res[i] = *c
-	}
-	sort.SliceStable(res, func(i, j int) bool {
-		if res[i].Online != res[j].Online {
-			return res[i].Online
+	slices.SortStableFunc(out, func(x, y Contact) int {
+		if x.Online != y.Online {
+			if x.Online {
+				return -1
+			}
+			return 1
 		}
-		return strings.ToLower(res[i].DisplayName()) < strings.ToLower(res[j].DisplayName())
+		return cmp.Compare(strings.ToLower(x.DisplayName()), strings.ToLower(y.DisplayName()))
 	})
-	return res, nil
+	return out, nil
 }
 
 // Contact busca un contacto por ID.
@@ -264,10 +272,9 @@ func (a *App) Contact(ctx context.Context, id string) (Contact, bool, error) {
 	if err != nil {
 		return Contact{}, false, err
 	}
-	c := Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, LastSeen: r.LastSeen}
+	c := contactFromStore(r)
 	if p, live := a.disc.Peer(id); live {
-		c.ID, c.Name, c.Hostname, c.IP = p.ID, p.Name, p.Hostname, p.IP.String()
-		c.Online, c.LastSeen, c.AppVersion = p.Online, p.LastSeen, p.AppVersion
+		c.overlay(p)
 		ok = true
 	}
 	return c, ok, nil
@@ -283,9 +290,10 @@ func (a *App) Send(ctx context.Context, peerID, body string) (store.Message, err
 	return a.chat.Send(ctx, peerID, body)
 }
 
-// History devuelve hasta limit mensajes anteriores a before (cero = los últimos).
-func (a *App) History(ctx context.Context, peerID string, before time.Time, limit int) ([]store.Message, error) {
-	return a.store.History(ctx, peerID, before, limit)
+// History devuelve hasta limit mensajes anteriores al mensaje beforeID
+// ("" = los últimos), en orden cronológico.
+func (a *App) History(ctx context.Context, peerID, beforeID string, limit int) ([]store.Message, error) {
+	return a.store.History(ctx, peerID, beforeID, limit)
 }
 
 // SetName cambia el nombre con el que los demás ven a este equipo.
@@ -316,8 +324,5 @@ func (a *App) SetAlias(ctx context.Context, peerID, alias string) error {
 
 func cleanName(s string) (string, error) {
 	s = strings.TrimSpace(s)
-	if utf8.RuneCountInString(s) > maxNameLen {
-		return "", fmt.Errorf("máximo %d caracteres", maxNameLen)
-	}
-	return s, nil
+	return s, protocol.ValidateName(s)
 }
