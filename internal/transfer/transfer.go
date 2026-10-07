@@ -194,34 +194,35 @@ func (s *Service) Close() {
 
 // ---------- Remitente ----------
 
-// Offer ofrece archivos a peerID. paths deben ser archivos (no carpetas).
-func (s *Service) Offer(ctx context.Context, peerID string, paths []string) (store.Message, error) {
-	if len(paths) == 0 || len(paths) > protocol.MaxOfferFiles {
-		return store.Message{}, fmt.Errorf("se pueden enviar de 1 a %d archivos a la vez", protocol.MaxOfferFiles)
+// Offer ofrece archivos a peerID (ver ExpandPaths para carpetas).
+func (s *Service) Offer(ctx context.Context, peerID string, items []Item) (store.Message, error) {
+	if len(items) == 0 {
+		return store.Message{}, errors.New("no hay archivos para enviar")
+	}
+	if len(items) > protocol.MaxOfferFiles {
+		return store.Message{}, errTooManyFiles
 	}
 	t := store.Transfer{
 		State:     store.TransferOffered,
 		Token:     newToken(),
 		ExpiresAt: time.Now().Add(offerTTL),
 	}
-	names := make([]string, len(paths))
-	for i, p := range paths {
-		fi, err := os.Stat(p)
+	for i, it := range items {
+		fi, err := os.Stat(it.Path)
 		if err != nil {
 			return store.Message{}, err
 		}
 		if !fi.Mode().IsRegular() {
-			return store.Message{}, fmt.Errorf("%s no es un archivo (las carpetas todavía no se pueden enviar)", fi.Name())
+			return store.Message{}, fmt.Errorf("%s no es un archivo", fi.Name())
 		}
-		if err := protocol.ValidateFileName(fi.Name()); err != nil {
+		if err := errors.Join(protocol.ValidateFileName(fi.Name()), protocol.ValidateRelDir(it.Dir)); err != nil {
 			return store.Message{}, fmt.Errorf("%s: %w", fi.Name(), err)
 		}
-		names[i] = fi.Name()
 		t.Files = append(t.Files, store.TransferFile{
-			Index: i, Name: fi.Name(), Size: fi.Size(), ModTime: fi.ModTime(), Path: p,
+			Index: i, Name: fi.Name(), Size: fi.Size(), ModTime: fi.ModTime(), Path: it.Path, Dir: it.Dir,
 		})
 	}
-	return s.sender.SendOffer(ctx, peerID, offerSummary(names, t.TotalSize()), t)
+	return s.sender.SendOffer(ctx, peerID, offerSummary(t.Files, t.TotalSize()), t)
 }
 
 // NewStaging crea una carpeta temporal para los archivos arrastrados a la ventana.
@@ -230,12 +231,17 @@ func (s *Service) NewStaging() (string, error) {
 	return dir, os.MkdirAll(dir, 0o700)
 }
 
-// SaveStaged copia un archivo arrastrado a la carpeta temporal dir.
-func (s *Service) SaveStaged(dir, name string, r io.Reader) (string, error) {
-	if err := protocol.ValidateFileName(name); err != nil {
+// SaveStaged copia un archivo arrastrado a la carpeta temporal dir, dentro de
+// su subcarpeta relDir ("" o "Proyecto/planos").
+func (s *Service) SaveStaged(dir, relDir, name string, r io.Reader) (string, error) {
+	if err := errors.Join(protocol.ValidateFileName(name), protocol.ValidateRelDir(relDir)); err != nil {
 		return "", err
 	}
-	path, err := uniquePath(dir, safeFileName(name))
+	target := filepath.Join(dir, filepath.FromSlash(relDir))
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		return "", err
+	}
+	path, err := uniquePath(target, safeFileName(name))
 	if err != nil {
 		return "", err
 	}
@@ -252,21 +258,16 @@ func (s *Service) SaveStaged(dir, name string, r io.Reader) (string, error) {
 
 // DiscardStaging borra una carpeta temporal que no llegó a ofrecerse.
 func (s *Service) DiscardStaging(dir string) {
-	if s.inStaging(dir) {
+	if s.stagingRoot(dir) == filepath.Clean(dir) {
 		os.RemoveAll(dir)
 	}
-}
-
-func (s *Service) inStaging(path string) bool {
-	rel, err := filepath.Rel(s.cfg.StagingDir, path)
-	return err == nil && rel != "." && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
 }
 
 // cleanStaging borra las copias temporales de una oferta que ya terminó.
 func (s *Service) cleanStaging(t store.Transfer) {
 	for _, f := range t.Files {
-		if s.inStaging(f.Path) {
-			os.RemoveAll(filepath.Dir(f.Path))
+		if root := s.stagingRoot(f.Path); root != "" {
+			os.RemoveAll(root)
 		}
 	}
 }
@@ -491,12 +492,11 @@ func (s *Service) Accept(ctx context.Context, id string) error {
 		cancel()
 		return errors.New("ya se está descargando")
 	}
-	if err := s.store.SetTransferDir(ctx, id, dir); err != nil {
+	if err := s.prepareDirs(ctx, &t, dir); err != nil {
 		s.endActive(id, op)
 		cancel()
 		return err
 	}
-	t.Dir = dir
 	s.setState(ctx, id, store.TransferDownloading, "")
 	s.goSafe(func() {
 		defer s.endActive(id, op)
@@ -639,12 +639,15 @@ func partPath(t store.Transfer, f store.TransferFile) string {
 		idPrefix = idPrefix[:8]
 	}
 	name := truncateName(safeFileName(f.Name), maxSavedNameBytes-len(partSuffix)-12)
-	return filepath.Join(t.Dir, fmt.Sprintf("%s.%s-%d%s", name, idPrefix, f.Index, partSuffix))
+	return filepath.Join(fileDir(t, f), fmt.Sprintf("%s.%s-%d%s", name, idPrefix, f.Index, partSuffix))
 }
 
 // downloadFile descarga un archivo a su .part (reanudando si existe), verifica
 // tamaño y SHA-256, y lo renombra a su nombre final sin pisar otros archivos.
 func (s *Service) downloadFile(ctx context.Context, p discovery.Peer, t store.Transfer, f store.TransferFile, prog *progress) (string, error) {
+	if err := os.MkdirAll(fileDir(t, f), 0o700); err != nil {
+		return "", err
+	}
 	part := partPath(t, f)
 	out, err := os.OpenFile(part, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
@@ -733,7 +736,7 @@ func (s *Service) downloadFile(ctx context.Context, p discovery.Peer, t store.Tr
 	if err := out.Close(); err != nil {
 		return "", err
 	}
-	final, err := uniquePath(t.Dir, safeFileName(f.Name))
+	final, err := uniquePath(fileDir(t, f), safeFileName(f.Name))
 	if err != nil {
 		return "", err
 	}
@@ -854,8 +857,8 @@ func (s *Service) cleanOrphanStaging() {
 	used := map[string]bool{}
 	for _, t := range ts {
 		for _, f := range t.Files {
-			if s.inStaging(f.Path) {
-				used[filepath.Dir(f.Path)] = true
+			if root := s.stagingRoot(f.Path); root != "" {
+				used[root] = true
 			}
 		}
 	}

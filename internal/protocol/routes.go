@@ -77,3 +77,31 @@ func ValidateToken(s string) error {
 	}
 	return nil
 }
+
+const (
+	// MaxRelDirLen y MaxDirDepth limitan la subcarpeta de un archivo ofrecido.
+	MaxRelDirLen = 1024 // en bytes
+	MaxDirDepth  = 32
+)
+
+// ValidateRelDir valida la subcarpeta relativa de un archivo ofrecido
+// ("Proyecto/planos"; vacío = sin carpeta): segmentos separados por "/",
+// cada uno un nombre de archivo válido, sin "." ni "..".
+func ValidateRelDir(s string) error {
+	if s == "" {
+		return nil
+	}
+	if len(s) > MaxRelDirLen {
+		return fmt.Errorf("ruta de carpeta de más de %d bytes", MaxRelDirLen)
+	}
+	parts := strings.Split(s, "/")
+	if len(parts) > MaxDirDepth {
+		return fmt.Errorf("más de %d niveles de carpetas", MaxDirDepth)
+	}
+	for _, p := range parts {
+		if err := ValidateFileName(p); err != nil {
+			return fmt.Errorf("carpeta %q: %w", s, err)
+		}
+	}
+	return nil
+}

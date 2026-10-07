@@ -78,7 +78,7 @@ func TestFileTransferEndToEnd(t *testing.T) {
 	if !ok || tr.State != store.TransferOffered || tr.Outgoing || len(tr.Files) != 2 || tr.TotalSize() != 3<<20+10 {
 		t.Fatalf("oferta recibida: %+v", tr)
 	}
-	if !strings.HasPrefix(m.Body, "📎 2 archivos") {
+	if !strings.HasPrefix(m.Body, "📎 2 elementos") {
 		t.Errorf("resumen: %q", m.Body)
 	}
 
@@ -205,15 +205,17 @@ func TestSourceChangedAfterOffer(t *testing.T) {
 func TestUploadStagesAndCleansUp(t *testing.T) {
 	a, b, downloads := pair(t)
 	ctx := context.Background()
-	files := []struct{ name, body string }{{"nota.txt", "hola"}, {"nota.txt", "otra"}}
+	files := []struct{ name, dir, body string }{
+		{"nota.txt", "", "hola"}, {"nota.txt", "", "otra"}, {"plano.txt", "Obra/planos", "p"},
+	}
 	i := 0
-	m, err := a.app.Upload(ctx, b.app.Self().ID, func() (string, io.Reader, error) {
+	m, err := a.app.Upload(ctx, b.app.Self().ID, func() (string, string, io.Reader, error) {
 		if i == len(files) {
-			return "", nil, io.EOF
+			return "", "", nil, io.EOF
 		}
 		f := files[i]
 		i++
-		return f.name, strings.NewReader(f.body), nil
+		return f.name, f.dir, strings.NewReader(f.body), nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -226,7 +228,7 @@ func TestUploadStagesAndCleansUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, a, "A completa", transferState(m.ID, store.TransferCompleted))
-	for name, want := range map[string]string{"nota.txt": "hola", "nota (1).txt": "otra"} {
+	for name, want := range map[string]string{"nota.txt": "hola", "nota (1).txt": "otra", filepath.Join("Obra", "planos", "plano.txt"): "p"} {
 		if got, _ := os.ReadFile(filepath.Join(downloads, name)); string(got) != want {
 			t.Errorf("%s = %q", name, got)
 		}
@@ -234,5 +236,33 @@ func TestUploadStagesAndCleansUp(t *testing.T) {
 	staging := filepath.Join(a.app.dir, stagingDirName)
 	if entries, _ := os.ReadDir(staging); len(entries) != 0 {
 		t.Errorf("quedaron copias temporales: %v", entries)
+	}
+}
+
+func TestFolderTransfer(t *testing.T) {
+	a, b, downloads := pair(t)
+	src := filepath.Join(testutil.TempDir(t), "Proyecto")
+	os.MkdirAll(filepath.Join(src, "planos", "detalle"), 0o700)
+	os.WriteFile(filepath.Join(src, "leeme.txt"), []byte("léeme"), 0o600)
+	os.WriteFile(filepath.Join(src, "planos", "detalle", "p1.dwg"), []byte("plano"), 0o600)
+	ctx := context.Background()
+
+	for _, root := range []string{"Proyecto", "Proyecto (1)"} { // el segundo no pisa al primero
+		m := offer(t, a, b, src)
+		if !strings.HasPrefix(m.Body, "📁 Proyecto (2 archivos") {
+			t.Errorf("resumen: %q", m.Body)
+		}
+		if err := b.app.AcceptTransfer(ctx, m.ID); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, b, "B completa", transferState(m.ID, store.TransferCompleted))
+		for rel, want := range map[string]string{
+			`leeme.txt`:             "léeme",
+			`planos\detalle\p1.dwg`: "plano",
+		} {
+			if got, err := os.ReadFile(filepath.Join(downloads, root, rel)); string(got) != want {
+				t.Errorf("%s / %s = %q, %v", root, rel, got, err)
+			}
+		}
 	}
 }

@@ -326,7 +326,7 @@ button, input, textarea { font: inherit; color: inherit; }
   z-index: 5;
 }
 
-#attach-btn { font-size: 18px; align-self: center; }
+#attach-btn, #folder-btn { font-size: 18px; align-self: center; }
 
 .input-row { display: flex; gap: 6px; align-items: center; }
 .status-text { flex: 1; }

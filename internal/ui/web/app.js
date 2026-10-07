@@ -67,6 +67,8 @@ const api = {
   manualPeers: (peers) => request("POST", "/api/manual-peers", { peers }),
   presence: (focused, viewing) => request("POST", "/api/presence", { focused, viewing }),
   pickFiles: (peer) => request("POST", "/api/files/pick", { peer }),
+  pickFolder: (peer) => request("POST", "/api/files/pick-folder", { peer }),
+  openDir: (id, dir) => request("POST", "/api/files/open-dir", { id, dir }),
   upload: (peer, form) => request("POST", `/api/files/upload?${new URLSearchParams({ peer })}`, form),
   transfer: (action, id) => request("POST", `/api/transfers/${action}`, { id }),
   openFile: (id, index, reveal) => request("POST", "/api/files/open", { id, index, reveal }),
@@ -398,25 +400,7 @@ function transferCard(m) {
   title.textContent = `📎 ${t.files.length === 1 ? "1 archivo" : `${t.files.length} archivos`} · ${fmtSize(t.total)}`;
   div.append(title);
 
-  const ul = document.createElement("ul");
-  ul.className = "file-list";
-  for (const f of t.files) {
-    const li = document.createElement("li");
-    const name = document.createElement("span");
-    name.className = "file-name";
-    name.textContent = f.savedName || f.name;
-    name.title = f.savedName && f.savedName !== f.name ? `Original: ${f.name}` : f.name;
-    const size = document.createElement("span");
-    size.className = "file-size";
-    size.textContent = fmtSize(f.size) + (f.done && t.state !== "completed" ? " ✓" : "");
-    li.append(name, size);
-    if (!t.outgoing && f.done) {
-      li.append(textButton("Abrir", () => openReceived(t, f, false)),
-        textButton("Mostrar en carpeta", () => openReceived(t, f, true)));
-    }
-    ul.append(li);
-  }
-  div.append(ul);
+  div.append(fileList(t));
 
   if (t.state === "downloading") {
     const bar = document.createElement("div");
@@ -450,6 +434,68 @@ function transferCard(m) {
 
   div.append(metaElement(m));
   return div;
+}
+
+// MAX_FILE_ROWS: filas que muestra una tarjeta antes de resumir "y N más".
+const MAX_FILE_ROWS = 10;
+
+// fileList muestra los archivos sueltos y, de cada carpeta, una sola fila.
+function fileList(t) {
+  const ul = document.createElement("ul");
+  ul.className = "file-list";
+  const rows = [];
+  const folders = new Map(); // carpeta raíz -> { count, size, done }
+  for (const f of t.files) {
+    if (!f.dir) {
+      rows.push({ file: f });
+      continue;
+    }
+    const root = f.dir.split("/")[0];
+    if (!folders.has(root)) {
+      folders.set(root, { count: 0, size: 0, done: 0 });
+      rows.push({ folder: root });
+    }
+    const info = folders.get(root);
+    info.count++;
+    info.size += f.size;
+    if (f.done) info.done++;
+  }
+
+  for (const row of rows.slice(0, MAX_FILE_ROWS)) {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "file-name";
+    const size = document.createElement("span");
+    size.className = "file-size";
+    if (row.folder) {
+      const info = folders.get(row.folder);
+      name.textContent = `📁 ${row.folder}`;
+      size.textContent = `${info.count} archivos · ${fmtSize(info.size)}`;
+      li.append(name, size);
+      if (!t.outgoing && info.done > 0) {
+        li.append(textButton("Abrir carpeta", () =>
+          api.openDir(t.id, row.folder).catch((e) => showBanner(e.message, 5000))));
+      }
+    } else {
+      const f = row.file;
+      name.textContent = f.savedName || f.name;
+      name.title = f.savedName && f.savedName !== f.name ? `Original: ${f.name}` : f.name;
+      size.textContent = fmtSize(f.size) + (f.done && t.state !== "completed" ? " ✓" : "");
+      li.append(name, size);
+      if (!t.outgoing && f.done) {
+        li.append(textButton("Abrir", () => openReceived(t, f, false)),
+          textButton("Mostrar en carpeta", () => openReceived(t, f, true)));
+      }
+    }
+    ul.append(li);
+  }
+  if (rows.length > MAX_FILE_ROWS) {
+    const li = document.createElement("li");
+    li.className = "file-size";
+    li.textContent = `y ${rows.length - MAX_FILE_ROWS} más…`;
+    ul.append(li);
+  }
+  return ul;
 }
 
 function paintProgress(card, p) {
@@ -499,11 +545,11 @@ function updateTransfer(t) {
   if (old) old.replaceWith(messageElement(m));
 }
 
-async function pickAndSend() {
-  const btn = $("attach-btn");
+// pickAndSend abre el selector de Windows (archivos o carpeta) y los ofrece.
+async function pickAndSend(btn, pick) {
   btn.disabled = true;
   try {
-    const m = await api.pickFiles(state.current);
+    const m = await pick(state.current);
     if (m) addMessage(m);
   } catch (e) {
     showBanner(e.message, 5000);
@@ -512,17 +558,50 @@ async function pickAndSend() {
   }
 }
 
+// MAX_OFFER_FILES coincide con protocol.MaxOfferFiles.
+const MAX_OFFER_FILES = 1000;
+
+// droppedFiles recorre lo que se soltó (archivos y carpetas, en cualquier
+// nivel) y devuelve [{file, dir}] con la subcarpeta de cada archivo.
+async function droppedFiles(entries) {
+  const out = [];
+  const walk = async (entry, dir) => {
+    if (out.length > MAX_OFFER_FILES) return;
+    if (entry.isFile) {
+      out.push({ file: await new Promise((ok, fail) => entry.file(ok, fail)), dir });
+    } else if (entry.isDirectory) {
+      const sub = dir ? `${dir}/${entry.name}` : entry.name;
+      const reader = entry.createReader();
+      for (;;) { // readEntries entrega por tandas hasta devolver una vacía
+        const batch = await new Promise((ok, fail) => reader.readEntries(ok, fail));
+        if (batch.length === 0) break;
+        for (const e of batch) await walk(e, sub);
+      }
+    }
+  };
+  for (const e of entries) await walk(e, "");
+  return out;
+}
+
 async function uploadDropped(dt) {
   if (!state.current) return showBanner("Elige primero a quién enviarle los archivos.", 4000);
+  // Las entradas se toman ya: el DataTransfer deja de servir tras el evento.
   const entries = [...dt.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
-  if (entries.some((e) => e.isDirectory)) {
-    return showBanner("Las carpetas todavía no se pueden enviar; arrastra los archivos.", 5000);
+  const loose = [...dt.files];
+  showBanner("Preparando archivos…");
+  let items;
+  try {
+    items = entries.length ? await droppedFiles(entries) : loose.map((file) => ({ file, dir: "" }));
+  } catch (e) {
+    return showBanner(`No se pudieron leer los archivos: ${e.message}`, 5000);
   }
-  const files = [...dt.files];
-  if (files.length === 0) return;
+  if (items.length === 0) return showBanner("No hay archivos para enviar (¿carpetas vacías?).", 5000);
+  if (items.length > MAX_OFFER_FILES) {
+    return showBanner(`Son más de ${MAX_OFFER_FILES} archivos; comprímelos en un .zip o envíalos en partes.`, 6000);
+  }
   const form = new FormData();
-  for (const f of files) form.append("files", f, f.name);
-  showBanner(`Preparando ${files.length === 1 ? files[0].name : `${files.length} archivos`}…`);
+  for (const { file, dir } of items) form.append(dir ? `dir:${dir}` : "files", file, file.name);
+  showBanner(`Preparando ${items.length === 1 ? items[0].file.name : `${items.length} archivos`}…`);
   try {
     const m = await api.upload(state.current, form);
     hideBanner();
@@ -950,7 +1029,8 @@ function bind() {
     }
   });
   $("input").addEventListener("input", autoGrow);
-  $("attach-btn").addEventListener("click", pickAndSend);
+  $("attach-btn").addEventListener("click", (e) => pickAndSend(e.currentTarget, api.pickFiles));
+  $("folder-btn").addEventListener("click", (e) => pickAndSend(e.currentTarget, api.pickFolder));
   $("autostart-input").addEventListener("change", toggleAutostart);
   $("receipts-input").addEventListener("change", toggleReceipts);
   $("firewall-btn").addEventListener("click", allowFirewall);

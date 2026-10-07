@@ -478,18 +478,23 @@ func cleanName(s string) (string, error) {
 
 // ---------- Archivos ----------
 
-// OfferFiles ofrece archivos (rutas locales) al contacto.
+// OfferFiles ofrece archivos y carpetas (rutas locales) al contacto.
 func (a *App) OfferFiles(ctx context.Context, peerID string, paths []string) (store.Message, error) {
 	if err := a.requireContact(ctx, peerID); err != nil {
 		return store.Message{}, err
 	}
-	return a.transfer.Offer(ctx, peerID, paths)
+	items, err := transfer.ExpandPaths(paths)
+	if err != nil {
+		return store.Message{}, err
+	}
+	return a.transfer.Offer(ctx, peerID, items)
 }
 
 // Upload recibe archivos que no tienen ruta local (los arrastrados a la
-// ventana): next devuelve el siguiente nombre y contenido, o io.EOF al
-// terminar. Se copian a una carpeta temporal y se ofrecen al contacto.
-func (a *App) Upload(ctx context.Context, peerID string, next func() (string, io.Reader, error)) (store.Message, error) {
+// ventana): next devuelve el siguiente nombre, su subcarpeta ("" o
+// "Proyecto/planos") y su contenido, o io.EOF al terminar. Se copian a una
+// carpeta temporal y se ofrecen al contacto.
+func (a *App) Upload(ctx context.Context, peerID string, next func() (name, dir string, r io.Reader, err error)) (store.Message, error) {
 	if err := a.requireContact(ctx, peerID); err != nil {
 		return store.Message{}, err
 	}
@@ -497,23 +502,26 @@ func (a *App) Upload(ctx context.Context, peerID string, next func() (string, io
 	if err != nil {
 		return store.Message{}, err
 	}
-	var paths []string
+	var items []transfer.Item
 	for {
-		name, r, err := next()
+		name, relDir, r, err := next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
+		if err == nil && len(items) >= protocol.MaxOfferFiles {
+			err = fmt.Errorf("se pueden enviar hasta %d archivos a la vez", protocol.MaxOfferFiles)
+		}
 		if err == nil {
 			var p string
-			p, err = a.transfer.SaveStaged(dir, name, r)
-			paths = append(paths, p)
+			p, err = a.transfer.SaveStaged(dir, relDir, name, r)
+			items = append(items, transfer.Item{Path: p, Dir: relDir})
 		}
 		if err != nil {
 			a.transfer.DiscardStaging(dir)
 			return store.Message{}, err
 		}
 	}
-	m, err := a.transfer.Offer(ctx, peerID, paths)
+	m, err := a.transfer.Offer(ctx, peerID, items)
 	if err != nil {
 		a.transfer.DiscardStaging(dir)
 	}

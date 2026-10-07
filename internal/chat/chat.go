@@ -32,7 +32,8 @@ const (
 	retryInterval = 30 * time.Second
 	// maxRequestBytes acota el JSON recibido: el texto (con margen por el
 	// escapado JSON) más una oferta con el máximo de archivos.
-	maxRequestBytes = 2*protocol.MaxMessageBytes + protocol.MaxOfferFiles*(2*protocol.MaxFileNameLen+64)
+	maxRequestBytes = 2*protocol.MaxMessageBytes +
+		protocol.MaxOfferFiles*(2*protocol.MaxFileNameLen+2*protocol.MaxRelDirLen+64)
 	// maxResponseDrain: cuánto se lee de una respuesta que no nos interesa.
 	maxResponseDrain = 4 << 10
 	eventBuffer      = 256
@@ -93,6 +94,9 @@ type wireOffer struct {
 type wireFile struct {
 	Name string `json:"name"`
 	Size int64  `json:"size"`
+	// Dir es la subcarpeta relativa ("Proyecto/planos"). Las versiones que no
+	// lo conocen reciben los archivos sueltos.
+	Dir string `json:"dir,omitempty"`
 }
 
 func (m wireMessage) validate() error {
@@ -112,7 +116,7 @@ func (m wireMessage) validate() error {
 	}
 	errs := []error{protocol.ValidateToken(o.Token)}
 	for _, f := range o.Files {
-		errs = append(errs, protocol.ValidateFileName(f.Name))
+		errs = append(errs, protocol.ValidateFileName(f.Name), protocol.ValidateRelDir(f.Dir))
 		if f.Size < 0 {
 			errs = append(errs, errors.New("tamaño de archivo negativo"))
 		}
@@ -123,7 +127,7 @@ func (m wireMessage) validate() error {
 func toWireOffer(t store.Transfer) *wireOffer {
 	o := &wireOffer{Token: t.Token, ExpiresAt: t.ExpiresAt.UnixMilli(), Files: make([]wireFile, len(t.Files))}
 	for i, f := range t.Files {
-		o.Files[i] = wireFile{Name: f.Name, Size: f.Size}
+		o.Files[i] = wireFile{Name: f.Name, Size: f.Size, Dir: f.Dir}
 	}
 	return o
 }
@@ -142,7 +146,7 @@ func (m wireMessage) incomingTransfer(now time.Time) store.Transfer {
 		t.State = store.TransferExpired
 	}
 	for i, f := range m.Offer.Files {
-		t.Files[i] = store.TransferFile{Index: i, Name: f.Name, Size: f.Size}
+		t.Files[i] = store.TransferFile{Index: i, Name: f.Name, Size: f.Size, Dir: f.Dir}
 	}
 	return t
 }

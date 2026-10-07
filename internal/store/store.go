@@ -83,6 +83,10 @@ var migrations = [][]string{
 		// group_name: grupo local del contacto ("" = sin grupo).
 		`ALTER TABLE peers ADD COLUMN group_name TEXT NOT NULL DEFAULT ''`,
 	},
+	{
+		// dir: subcarpeta relativa del archivo ("Proyecto/planos"; "" = suelto).
+		`ALTER TABLE transfer_files ADD COLUMN dir TEXT NOT NULL DEFAULT ''`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.

@@ -101,10 +101,10 @@ var testTransfers = map[string]store.Transfer{
 func (f *fakeBackend) OfferFiles(context.Context, string, []string) (store.Message, error) {
 	return store.Message{}, errors.New("no usado")
 }
-func (f *fakeBackend) Upload(_ context.Context, peer string, next func() (string, io.Reader, error)) (store.Message, error) {
+func (f *fakeBackend) Upload(_ context.Context, peer string, next func() (string, string, io.Reader, error)) (store.Message, error) {
 	var names []string
 	for {
-		name, r, err := next()
+		name, dir, r, err := next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -112,6 +112,9 @@ func (f *fakeBackend) Upload(_ context.Context, peer string, next func() (string
 			return store.Message{}, err
 		}
 		b, _ := io.ReadAll(r)
+		if dir != "" {
+			name = dir + "/" + name
+		}
 		names = append(names, name+"="+string(b))
 	}
 	f.mu.Lock()
@@ -412,6 +415,8 @@ func TestFileRoutes(t *testing.T) {
 	mw := multipart.NewWriter(&buf)
 	fw, _ := mw.CreateFormFile("files", "nota.txt")
 	fw.Write([]byte("hola"))
+	fw, _ = mw.CreateFormFile("dir:Obra/planos", "p.txt")
+	fw.Write([]byte("plano"))
 	mw.Close()
 	resp, _ = c.Post(base(s)+uploadPath+"?peer=c1", mw.FormDataContentType(), bytes.NewReader(buf.Bytes()))
 	var m messageJSON
@@ -426,7 +431,7 @@ func TestFileRoutes(t *testing.T) {
 		t.Errorf("multipart fuera de la subida: %d", resp.StatusCode)
 	}
 
-	want := []string{"accept:t1", "reject:t1", "cancel:t1", "nota.txt=hola"}
+	want := []string{"accept:t1", "reject:t1", "cancel:t1", "nota.txt=hola", "Obra/planos/p.txt=plano"}
 	if strings.Join(b.sent, ",") != strings.Join(want, ",") {
 		t.Errorf("acciones = %v", b.sent)
 	}

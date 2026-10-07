@@ -15,3 +15,7 @@ func pickFiles() ([]string, error) {
 func openPath(path string) error { return exec.Command("xdg-open", path).Start() }
 
 func revealPath(path string) error { return openPath(filepath.Dir(path)) }
+
+func pickFolder() (string, error) {
+	return "", errors.New("el selector de carpetas solo existe en Windows; arrastra la carpeta a la ventana")
+}

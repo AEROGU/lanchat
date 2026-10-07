@@ -150,6 +150,8 @@ type fileJSON struct {
 	Name  string `json:"name"`
 	Size  int64  `json:"size"`
 	Done  bool   `json:"done"`
+	// Dir es la subcarpeta ("Proyecto/planos"; "" = suelto).
+	Dir string `json:"dir"`
 	// SavedName es el nombre con el que quedó guardado (puede ser "x (1).pdf").
 	SavedName string `json:"savedName,omitempty"`
 }
@@ -167,7 +169,7 @@ func toTransferJSON(t store.Transfer) transferJSON {
 		Files:     make([]fileJSON, len(t.Files)),
 	}
 	for i, f := range t.Files {
-		out.Files[i] = fileJSON{Index: f.Index, Name: f.Name, Size: f.Size, Done: f.Done}
+		out.Files[i] = fileJSON{Index: f.Index, Name: f.Name, Size: f.Size, Done: f.Done, Dir: f.Dir}
 		if !t.Outgoing && f.Done {
 			out.Files[i].SavedName = filepath.Base(f.Path)
 		}

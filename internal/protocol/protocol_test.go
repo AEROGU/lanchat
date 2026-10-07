@@ -52,3 +52,16 @@ func TestStatus(t *testing.T) {
 		t.Error("ValidateStatusText")
 	}
 }
+
+func TestValidateRelDir(t *testing.T) {
+	for _, ok := range []string{"", "Proyecto", "Proyecto/planos/año 2026"} {
+		if err := ValidateRelDir(ok); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"/abs", "a//b", "a/../b", "..", "a\b", "a/", strings.Repeat("a/", MaxDirDepth) + "a"} {
+		if ValidateRelDir(bad) == nil {
+			t.Errorf("%q debía rechazarse", bad)
+		}
+	}
+}

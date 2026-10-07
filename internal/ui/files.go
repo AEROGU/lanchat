@@ -6,14 +6,19 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
 // uploadPath recibe archivos arrastrados a la ventana (multipart/form-data):
-// el navegador no da su ruta, así que hay que copiarlos.
+// el navegador no da su ruta, así que hay que copiarlos. Cada archivo va en un
+// campo "files", o "dir:Proyecto/planos" si venía dentro de una carpeta.
 const uploadPath = "/api/files/upload"
+
+const uploadDirPrefix = "dir:"
 
 // errPickerBusy: ya hay un selector de archivos abierto.
 var errPickerBusy = errors.New("ya hay una ventana para elegir archivos abierta")
@@ -49,14 +54,18 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
-	next := func() (string, io.Reader, error) {
+	next := func() (string, string, io.Reader, error) {
 		for {
 			part, err := mr.NextPart()
 			if err != nil {
-				return "", nil, err // io.EOF al terminar
+				return "", "", nil, err // io.EOF al terminar
 			}
 			if part.FileName() != "" {
-				return part.FileName(), part, nil
+				dir, _ := strings.CutPrefix(part.FormName(), uploadDirPrefix)
+				if dir == part.FormName() {
+					dir = ""
+				}
+				return part.FileName(), dir, part, nil
 			}
 		}
 	}
@@ -203,4 +212,56 @@ func splitMultiSelect(buf string) []string {
 		out = append(out, dir+`\`+name)
 	}
 	return out
+}
+
+// handlePickFolder abre el selector de carpetas de Windows y ofrece la elegida.
+func (s *Server) handlePickFolder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Peer string `json:"peer"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	dir, err := pickFolder()
+	if err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if dir == "" { // el usuario canceló
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	m, err := s.b.OfferFiles(r.Context(), req.Peer, []string{dir})
+	if err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, s.messageJSON(r.Context(), m))
+}
+
+// handleOpenDir abre una carpeta recibida. Solo acepta carpetas raíz de una
+// transferencia recibida, nunca rutas arbitrarias.
+func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID  string `json:"id"`
+		Dir string `json:"dir"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	t, ok, err := s.b.Transfer(r.Context(), req.ID)
+	valid := err == nil && ok && !t.Outgoing && t.Dir != "" && req.Dir != "" &&
+		slices.ContainsFunc(t.Files, func(f store.TransferFile) bool {
+			root, _, _ := strings.Cut(f.Dir, "/")
+			return root == req.Dir
+		})
+	if !valid {
+		s.fail(w, http.StatusBadRequest, errors.New("la carpeta no está disponible"))
+		return
+	}
+	if err := openPath(filepath.Join(t.Dir, req.Dir)); err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

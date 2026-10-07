@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/AEROGU/lanchat/internal/store"
 )
 
 func TestSafeFileName(t *testing.T) {
@@ -52,12 +54,58 @@ func TestOfferSummaryAndSize(t *testing.T) {
 	if got := humanSize(2_400_000); got != "2.3 MB" {
 		t.Errorf("humanSize = %q", got)
 	}
-	if got := offerSummary([]string{"a.pdf"}, 1500); got != "📎 a.pdf (1.5 KB)" {
-		t.Errorf("uno: %q", got)
+	files := func(specs ...string) []store.TransferFile { // "dir|nombre"
+		var out []store.TransferFile
+		for _, s := range specs {
+			dir, name, _ := strings.Cut(s, "|")
+			out = append(out, store.TransferFile{Name: name, Dir: dir})
+		}
+		return out
 	}
-	got := offerSummary([]string{"a", "b", "c", "d"}, 100)
-	if got != "📎 4 archivos (100 B): a, b, c…" {
-		t.Errorf("varios: %q", got)
+	cases := []struct {
+		files []store.TransferFile
+		want  string
+	}{
+		{files("|a.pdf"), "📎 a.pdf (1.5 KB)"},
+		{files("|a", "|b", "|c", "|d"), "📎 4 elementos (1.5 KB): a, b, c…"},
+		{files("Proyecto|a", "Proyecto/planos|b"), "📁 Proyecto (2 archivos, 1.5 KB)"},
+		{files("Proyecto|a", "|nota.txt"), "📎 2 elementos (1.5 KB): Proyecto/, nota.txt"},
+	}
+	for _, c := range cases {
+		if got := offerSummary(c.files, 1500); got != c.want {
+			t.Errorf("offerSummary = %q, quería %q", got, c.want)
+		}
+	}
+}
+
+func TestExpandPathsAndLocalDirs(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Proyecto")
+	os.MkdirAll(filepath.Join(root, "planos", "vacía"), 0o700)
+	os.WriteFile(filepath.Join(root, "leeme.txt"), []byte("x"), 0o600)
+	os.WriteFile(filepath.Join(root, "planos", "p1.dwg"), []byte("x"), 0o600)
+	loose := filepath.Join(t.TempDir(), "suelto.txt")
+	os.WriteFile(loose, []byte("x"), 0o600)
+
+	items, err := ExpandPaths([]string{root, loose})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, it := range items {
+		got = append(got, it.Dir+"|"+filepath.Base(it.Path))
+	}
+	if strings.Join(got, ",") != "Proyecto|leeme.txt,Proyecto/planos|p1.dwg,|suelto.txt" {
+		t.Errorf("ExpandPaths = %v", got)
+	}
+
+	// Si "Proyecto" ya existe en descargas, la nueva carpeta es "Proyecto (1)".
+	dest := t.TempDir()
+	os.Mkdir(filepath.Join(dest, "Proyecto"), 0o700)
+	dirs, err := localDirs([]store.TransferFile{
+		{Index: 0, Dir: "Proyecto"}, {Index: 1, Dir: "Proyecto/planos"}, {Index: 2}, {Index: 3, Dir: "Otra:carpeta/x"},
+	}, dest)
+	if err != nil || dirs[0] != "Proyecto (1)" || dirs[1] != "Proyecto (1)/planos" || dirs[2] != "" || dirs[3] != "Otra_carpeta/x" {
+		t.Errorf("localDirs = %v, %v", dirs, err)
 	}
 }
 

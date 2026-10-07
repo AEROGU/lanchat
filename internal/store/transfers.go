@@ -47,6 +47,9 @@ type TransferFile struct {
 	Name    string
 	Size    int64
 	ModTime time.Time // saliente: para detectar si el archivo cambió
+	// Dir es la subcarpeta relativa con "/" ("Proyecto/planos"; "" = suelto).
+	// En una entrante, tras aceptar, es la carpeta local (puede ser "Proyecto (1)").
+	Dir string
 	// Path: saliente, el archivo a enviar; entrante, dónde quedó guardado.
 	Path string
 	Done bool
@@ -87,9 +90,9 @@ func insertTransfer(ctx context.Context, tx *sql.Tx, t Transfer) error {
 	}
 	for _, f := range t.Files {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO transfer_files (transfer_id, idx, name, size, mod_time, path, done)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			t.ID, f.Index, f.Name, f.Size, f.ModTime.UnixNano(), f.Path, f.Done); err != nil {
+			INSERT INTO transfer_files (transfer_id, idx, name, size, mod_time, path, done, dir)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			t.ID, f.Index, f.Name, f.Size, f.ModTime.UnixNano(), f.Path, f.Done, f.Dir); err != nil {
 			return err
 		}
 	}
@@ -199,7 +202,7 @@ func (s *Store) queryTransfers(ctx context.Context, q string, args ...any) ([]Tr
 }
 
 func (s *Store) transferFiles(ctx context.Context, id string) ([]TransferFile, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT idx, name, size, mod_time, path, done
+	rows, err := s.db.QueryContext(ctx, `SELECT idx, name, size, mod_time, path, done, dir
 		FROM transfer_files WHERE transfer_id = ? ORDER BY idx`, id)
 	if err != nil {
 		return nil, err
@@ -209,11 +212,28 @@ func (s *Store) transferFiles(ctx context.Context, id string) ([]TransferFile, e
 	for rows.Next() {
 		var f TransferFile
 		var mod int64
-		if err := rows.Scan(&f.Index, &f.Name, &f.Size, &mod, &f.Path, &f.Done); err != nil {
+		if err := rows.Scan(&f.Index, &f.Name, &f.Size, &mod, &f.Path, &f.Done, &f.Dir); err != nil {
 			return nil, err
 		}
 		f.ModTime = time.Unix(0, mod)
 		out = append(out, f)
 	}
 	return out, rows.Err()
+}
+
+// SetFileDirs cambia las subcarpetas locales de los archivos de una
+// transferencia (índice → carpeta), en una transacción.
+func (s *Store) SetFileDirs(ctx context.Context, id string, dirs map[int]string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for idx, dir := range dirs {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE transfer_files SET dir = ? WHERE transfer_id = ? AND idx = ?`, dir, id, idx); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

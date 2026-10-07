@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/AEROGU/lanchat/internal/store"
 )
 
 const (
@@ -91,18 +93,32 @@ func humanSize(n int64) string {
 }
 
 // offerSummary es el texto del mensaje que lleva la oferta; lo ven también
-// las versiones que solo muestran texto (y la consola).
-func offerSummary(names []string, total int64) string {
+// las versiones que solo muestran texto (y la consola). Cada carpeta cuenta
+// como un elemento: "📁 Proyecto (12 archivos, 30.0 MB)".
+func offerSummary(files []store.TransferFile, total int64) string {
 	const maxListed = 3
-	if len(names) == 1 {
-		return fmt.Sprintf("📎 %s (%s)", names[0], humanSize(total))
+	var entries []string
+	seen := map[string]bool{}
+	for _, f := range files {
+		if f.Dir == "" {
+			entries = append(entries, f.Name)
+		} else if root := rootOf(f.Dir); !seen[root] {
+			seen[root] = true
+			entries = append(entries, root+"/")
+		}
 	}
-	listed := names
+	switch {
+	case len(entries) == 1 && len(seen) == 1:
+		return fmt.Sprintf("📁 %s (%d archivos, %s)", strings.TrimSuffix(entries[0], "/"), len(files), humanSize(total))
+	case len(entries) == 1:
+		return fmt.Sprintf("📎 %s (%s)", entries[0], humanSize(total))
+	}
+	listed := entries
 	if len(listed) > maxListed {
 		listed = listed[:maxListed]
 	}
-	s := fmt.Sprintf("📎 %d archivos (%s): %s", len(names), humanSize(total), strings.Join(listed, ", "))
-	if len(names) > maxListed {
+	s := fmt.Sprintf("📎 %d elementos (%s): %s", len(entries), humanSize(total), strings.Join(listed, ", "))
+	if len(entries) > maxListed {
 		s += "…"
 	}
 	return s

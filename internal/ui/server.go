@@ -78,7 +78,7 @@ type Backend interface {
 	SetManualPeers(peers []string) error
 
 	OfferFiles(ctx context.Context, peerID string, paths []string) (store.Message, error)
-	Upload(ctx context.Context, peerID string, next func() (string, io.Reader, error)) (store.Message, error)
+	Upload(ctx context.Context, peerID string, next func() (name, dir string, r io.Reader, err error)) (store.Message, error)
 	AcceptTransfer(ctx context.Context, id string) error
 	RejectTransfer(ctx context.Context, id string) error
 	CancelTransfer(ctx context.Context, id string) error
@@ -245,6 +245,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/presence", s.handlePresence)
 	mux.HandleFunc("POST /api/open", s.handleOpen)
 	mux.HandleFunc("POST /api/files/pick", s.handlePickFiles)
+	mux.HandleFunc("POST /api/files/pick-folder", s.handlePickFolder)
+	mux.HandleFunc("POST /api/files/open-dir", s.handleOpenDir)
 	mux.HandleFunc("POST "+uploadPath, s.handleUpload)
 	mux.HandleFunc("POST /api/transfers/{action}", s.handleTransferAction)
 	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
