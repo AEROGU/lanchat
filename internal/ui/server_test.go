@@ -463,3 +463,30 @@ func (f *fakeBackend) SetStatus(status, text string) error {
 	return nil
 }
 func (f *fakeBackend) SetAutoAway(bool) error { return nil }
+
+func (f *fakeBackend) SendMany(ctx context.Context, peers []string, body string) ([]store.Message, error) {
+	var out []store.Message
+	for _, p := range peers {
+		m, err := f.Send(ctx, p, body)
+		if err != nil {
+			return out, err
+		}
+		m.Broadcast = true
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+func TestSendManyRoute(t *testing.T) {
+	s, b := startServer(t)
+	c := loggedClient(t, s)
+	resp, _ := postJSON(c, base(s)+"/api/messages/many", `{"peers":["c1","c2"],"body":"aviso"}`)
+	var out struct {
+		Messages []messageJSON `json:"messages"`
+	}
+	json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated || len(out.Messages) != 2 || !out.Messages[0].Broadcast || len(b.sent) != 2 {
+		t.Errorf("mensaje a varios: %d %+v %v", resp.StatusCode, out, b.sent)
+	}
+}

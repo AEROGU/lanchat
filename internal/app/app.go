@@ -628,3 +628,39 @@ func (a *App) watchIdle(ctx context.Context) {
 		}
 	}
 }
+
+// SendMany envía el mismo mensaje a varios contactos ("Mensaje a varios"):
+// llega a cada uno como un mensaje propio, marcado como enviado a varios.
+// Devuelve los mensajes que sí se pudieron guardar y un error por cada
+// contacto que falló.
+func (a *App) SendMany(ctx context.Context, peerIDs []string, body string) ([]store.Message, error) {
+	if err := protocol.ValidateMessage(body); err != nil {
+		return nil, err
+	}
+	var out []store.Message
+	var errs []error
+	seen := map[string]bool{}
+	for _, id := range peerIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		m, err := a.sendBroadcast(ctx, id, body)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		out = append(out, m)
+	}
+	if len(seen) == 0 {
+		return nil, errors.New("elige al menos un contacto")
+	}
+	return out, errors.Join(errs...)
+}
+
+func (a *App) sendBroadcast(ctx context.Context, peerID, body string) (store.Message, error) {
+	if err := a.requireContact(ctx, peerID); err != nil {
+		return store.Message{}, err
+	}
+	return a.chat.SendBroadcast(ctx, peerID, body)
+}

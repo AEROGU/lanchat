@@ -68,6 +68,10 @@ var migrations = [][]string{
 			PRIMARY KEY (transfer_id, idx)
 		)`,
 	},
+	{
+		// broadcast = 1: se envió a varios contactos a la vez.
+		`ALTER TABLE messages ADD COLUMN broadcast INTEGER NOT NULL DEFAULT 0`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -219,6 +223,8 @@ type Message struct {
 	// Unread: entrante que el usuario aún no ha visto.
 	Unread bool
 	Kind   Kind
+	// Broadcast: se envió a varios contactos a la vez ("Mensaje a varios").
+	Broadcast bool
 }
 
 type Kind int
@@ -229,7 +235,7 @@ const (
 	KindFiles Kind = 1
 )
 
-const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind`
+const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast`
 
 // InsertMessage guarda el mensaje; inserted es false si ese ID ya existía
 // (un reenvío del mismo mensaje).
@@ -247,8 +253,8 @@ func (s *Store) InsertMessageWithTransfer(ctx context.Context, m Message, t *Tra
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind)
+		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind, m.Broadcast)
 	if err != nil {
 		return false, err
 	}
@@ -358,7 +364,7 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 	for rows.Next() {
 		var m Message
 		var at, sent int64
-		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread, &m.Kind); err != nil {
+		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread, &m.Kind, &m.Broadcast); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)

@@ -252,3 +252,27 @@ func TestStatusAndAutoAway(t *testing.T) {
 		t.Errorf("contacto: %+v", c)
 	}
 }
+
+func TestSendMany(t *testing.T) {
+	a := startNode(t, tempDir(t), "PC-A")
+	b := startNode(t, tempDir(t), "PC-B", a.udpPort())
+	c := startNode(t, tempDir(t), "PC-C", a.udpPort())
+	idB, idC := b.app.Self().ID, c.app.Self().ID
+	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idB))
+	waitFor(t, a, "A ve a C", peerEvent(discovery.PeerOnline, idC))
+
+	ctx := context.Background()
+	msgs, err := a.app.SendMany(ctx, []string{idB, idC, idB, "desconocido"}, "Se va la luz a las 3")
+	if err == nil || len(msgs) != 2 {
+		t.Fatalf("debía enviar a 2 y fallar con el desconocido: %d, %v", len(msgs), err)
+	}
+	for _, n := range []*node{b, c} {
+		ev := waitFor(t, n, "recibe el aviso", chatEvent(chat.MessageReceived, "Se va la luz a las 3")).(chat.Event)
+		if !ev.Message.Broadcast {
+			t.Error("debía llegar marcado como mensaje a varios")
+		}
+	}
+	if _, err := a.app.SendMany(ctx, nil, "hola"); err == nil {
+		t.Error("sin contactos debía fallar")
+	}
+}

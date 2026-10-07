@@ -66,6 +66,7 @@ type Backend interface {
 	TotalUnread(ctx context.Context) (int, error)
 	MarkRead(ctx context.Context, peerID string) (bool, error)
 	Send(ctx context.Context, peerID, body string) (store.Message, error)
+	SendMany(ctx context.Context, peerIDs []string, body string) ([]store.Message, error)
 	History(ctx context.Context, peerID, beforeID string, limit int) ([]store.Message, error)
 	SetName(name string) error
 	SetStatus(status, text string) error
@@ -231,6 +232,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("GET /api/messages", s.handleHistory)
 	mux.HandleFunc("POST /api/messages", s.handleSend)
+	mux.HandleFunc("POST /api/messages/many", s.handleSendMany)
 	mux.HandleFunc("POST /api/read", s.handleRead)
 	mux.HandleFunc("POST /api/name", s.handleName)
 	mux.HandleFunc("POST /api/status", s.handleStatus)
@@ -542,4 +544,32 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
+}
+
+// handleSendMany envía un "Mensaje a varios". Si falla con algunos contactos,
+// responde igual los que sí se enviaron junto con el error.
+func (s *Server) handleSendMany(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Peers []string `json:"peers"`
+		Body  string   `json:"body"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	msgs, err := s.b.SendMany(r.Context(), req.Peers, req.Body)
+	if len(msgs) == 0 && err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	out := struct {
+		Messages []messageJSON `json:"messages"`
+		Error    string        `json:"error,omitempty"`
+	}{Messages: make([]messageJSON, len(msgs))}
+	for i, m := range msgs {
+		out.Messages[i] = toMessageJSON(m)
+	}
+	if err != nil {
+		out.Error = err.Error()
+	}
+	writeJSON(w, http.StatusCreated, out)
 }

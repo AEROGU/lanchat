@@ -16,6 +16,9 @@
           <strong id="me-name"></strong>
           <small id="me-detail"></small>
         </div>
+        <button id="many-btn" class="icon-btn" title="Mensaje a varios" aria-label="Mensaje a varios">
+          <span aria-hidden="true">📢</span>
+        </button>
         <button id="settings-btn" class="icon-btn" title="Ajustes" aria-label="Ajustes">
           <span aria-hidden="true">⚙</span>
         </button>
@@ -94,6 +97,27 @@
       <div class="actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button id="settings-save" value="save" class="primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="many-dialog">
+    <form method="dialog" id="many-form">
+      <h2>Mensaje a varios</h2>
+      <div class="select-row">
+        Elegir:
+        <button type="button" class="text-btn" data-select="all">Todos</button>
+        <button type="button" class="text-btn" data-select="online">En línea</button>
+        <button type="button" class="text-btn" data-select="none">Ninguno</button>
+      </div>
+      <ul id="many-list" class="pick-list"></ul>
+      <label for="many-text">Mensaje</label>
+      <textarea id="many-text" rows="4"></textarea>
+      <small class="help">Cada uno lo recibe en su conversación, marcado como mensaje a varios. Los desconectados lo reciben al conectarse.</small>
+      <p id="many-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary" id="many-send">Enviar</button>
       </div>
     </form>
   </dialog>

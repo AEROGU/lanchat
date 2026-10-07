@@ -60,6 +60,7 @@ const api = {
   read: (peer) => request("POST", "/api/read", { peer }),
   name: (name) => request("POST", "/api/name", { name }),
   status: (status, text, autoAway) => request("POST", "/api/status", { status, text, autoAway }),
+  sendMany: (peers, body) => request("POST", "/api/messages/many", { peers, body }),
   alias: (peer, alias) => request("POST", "/api/alias", { peer, alias }),
   manualPeers: (peers) => request("POST", "/api/manual-peers", { peers }),
   presence: (focused, viewing) => request("POST", "/api/presence", { focused, viewing }),
@@ -253,8 +254,13 @@ function messageElement(m) {
   const div = document.createElement("div");
   div.className = `msg ${m.outgoing ? "out" : "in"} ${m.status}`;
   div.dataset.id = m.id;
-  div.textContent = m.body;
-  div.append(metaElement(m));
+  if (m.broadcast) {
+    const tag = document.createElement("span");
+    tag.className = "broadcast-tag";
+    tag.textContent = "📢 Mensaje a varios";
+    div.append(tag);
+  }
+  div.append(document.createTextNode(m.body), metaElement(m));
   return div;
 }
 
@@ -656,6 +662,70 @@ async function saveSettings(ev) {
   }
 }
 
+// ---------- Mensaje a varios ----------
+
+function openMany() {
+  const ul = $("many-list");
+  ul.replaceChildren();
+  for (const c of sortedContacts()) {
+    const li = document.createElement("li");
+    const label = document.createElement("label");
+    label.className = "check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = c.id;
+    box.dataset.online = c.online;
+    const dot = document.createElement("span");
+    dot.className = dotClass(c.online, c.status);
+    const name = document.createElement("span");
+    name.textContent = c.displayName;
+    const detail = document.createElement("small");
+    detail.className = "help-inline";
+    detail.textContent = c.detail;
+    label.append(box, dot, name, detail);
+    li.append(label);
+    ul.append(li);
+  }
+  $("many-error").hidden = true;
+  $("many-dialog").showModal();
+  $("many-text").focus();
+}
+
+function selectMany(which) {
+  for (const box of $("many-list").querySelectorAll("input")) {
+    box.checked = which === "all" || (which === "online" && box.dataset.online === "true");
+  }
+}
+
+async function sendMany(ev) {
+  if (ev.submitter?.value !== "save") return;
+  ev.preventDefault();
+  const peers = [...$("many-list").querySelectorAll("input:checked")].map((b) => b.value);
+  const body = $("many-text").value;
+  const err = $("many-error");
+  err.hidden = true;
+  if (peers.length === 0) {
+    err.textContent = "Elige al menos un contacto.";
+    err.hidden = false;
+    return;
+  }
+  try {
+    const res = await api.sendMany(peers, body);
+    for (const m of res.messages) addMessage(m);
+    if (res.error) {
+      err.textContent = `Se envió a ${res.messages.length}, pero falló con otros: ${res.error}`;
+      err.hidden = false;
+      return;
+    }
+    $("many-text").value = "";
+    $("many-dialog").close();
+    showBanner(`Mensaje enviado a ${res.messages.length} ${res.messages.length === 1 ? "contacto" : "contactos"}.`, 3000);
+  } catch (e) {
+    err.textContent = e.message;
+    err.hidden = false;
+  }
+}
+
 function openAlias() {
   const c = state.contacts.get(state.current);
   if (!c) return;
@@ -748,6 +818,11 @@ function bind() {
   $("search").addEventListener("input", renderContacts);
   $("settings-btn").addEventListener("click", openSettings);
   $("status-btn").addEventListener("click", openStatus);
+  $("many-btn").addEventListener("click", openMany);
+  $("many-form").addEventListener("submit", sendMany);
+  for (const b of document.querySelectorAll("[data-select]")) {
+    b.addEventListener("click", () => selectMany(b.dataset.select));
+  }
   $("status-form").addEventListener("submit", saveStatus);
   $("settings-form").addEventListener("submit", saveSettings);
   $("alias-btn").addEventListener("click", openAlias);

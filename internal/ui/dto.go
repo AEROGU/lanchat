@@ -90,6 +90,8 @@ type messageJSON struct {
 	// Kind: "text" o "files"; en "files", Transfer trae la oferta.
 	Kind     string        `json:"kind"`
 	Transfer *transferJSON `json:"transfer,omitempty"`
+	// Broadcast: enviado a varios contactos a la vez.
+	Broadcast bool `json:"broadcast"`
 }
 
 func toMessageJSON(m store.Message) messageJSON {
@@ -102,13 +104,14 @@ func toMessageJSON(m store.Message) messageJSON {
 		kind = "files"
 	}
 	return messageJSON{
-		Kind:     kind,
-		ID:       m.ID,
-		PeerID:   m.PeerID,
-		Outgoing: m.Outgoing,
-		Body:     m.Body,
-		At:       m.At.UnixMilli(),
-		Status:   status,
+		Kind:      kind,
+		ID:        m.ID,
+		PeerID:    m.PeerID,
+		Outgoing:  m.Outgoing,
+		Body:      m.Body,
+		At:        m.At.UnixMilli(),
+		Status:    status,
+		Broadcast: m.Broadcast,
 	}
 }
 

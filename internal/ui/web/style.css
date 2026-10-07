@@ -453,3 +453,29 @@ dialog input, dialog textarea {
   #app:not(.chatting) #chat { display: none; }
   #back-btn { display: block; }
 }
+
+/* ---------- Mensaje a varios ---------- */
+
+.broadcast-tag {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.select-row { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; }
+.select-row .text-btn { color: var(--brand); }
+
+.pick-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.pick-list label.check { margin: 4px 0; }
+.pick-list .help-inline { margin-left: auto; }

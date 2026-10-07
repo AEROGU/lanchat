@@ -69,6 +69,7 @@ const help = `Comandos:
   /nombre texto       cambia tu nombre (vacío = usar el hostname)
   /alias N texto      pone un alias local al contacto N (vacío = quitarlo)
   /estado E [texto]   E = disponible, ausente u ocupado; texto opcional
+  /todos texto         envía "texto" a todos los contactos en línea
   /salir              cierra LanChat`
 
 func (c *console) readLoop() {
@@ -129,6 +130,20 @@ func (c *console) command(line string) error {
 			return err
 		}
 		return c.app.SetAlias(ctx, ct.ID, alias)
+	case cmd == "/todos":
+		list, err := c.app.Contacts(ctx)
+		if err != nil {
+			return err
+		}
+		var ids []string
+		for _, ct := range list {
+			if ct.Online {
+				ids = append(ids, ct.ID)
+			}
+		}
+		msgs, err := c.app.SendMany(ctx, ids, rest)
+		fmt.Printf("  enviado a %d\n", len(msgs))
+		return err
 	case strings.HasPrefix(cmd, "@"):
 		ct, err := c.pick(cmd[1:])
 		if err != nil {

@@ -75,6 +75,8 @@ type wireMessage struct {
 	Body   string     `json:"body"`
 	SentAt int64      `json:"sent_at"` // Unix en milisegundos
 	Offer  *wireOffer `json:"offer,omitempty"`
+	// Broadcast: el remitente lo envió a varios contactos a la vez.
+	Broadcast bool `json:"broadcast,omitempty"`
 }
 
 // wireOffer acompaña a un mensaje que ofrece archivos.
@@ -203,6 +205,12 @@ func (s *Service) Send(ctx context.Context, peerID, body string) (store.Message,
 	return s.send(ctx, store.Message{ID: ids.New(), PeerID: peerID, Body: body}, nil)
 }
 
+// SendBroadcast es como Send pero marca el mensaje como enviado a varios
+// contactos (el destinatario lo ve como "Mensaje a varios").
+func (s *Service) SendBroadcast(ctx context.Context, peerID, body string) (store.Message, error) {
+	return s.send(ctx, store.Message{ID: ids.New(), PeerID: peerID, Body: body, Broadcast: true}, nil)
+}
+
 // SendOffer envía una oferta de archivos como un mensaje con resumen body. El
 // ID de la transferencia es el del mensaje; t.ID y t.PeerID se completan aquí.
 func (s *Service) SendOffer(ctx context.Context, peerID, body string, t store.Transfer) (store.Message, error) {
@@ -285,12 +293,13 @@ func (s *Service) flush(peerID string) {
 
 func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 	wm := wireMessage{
-		ID:       m.ID,
-		From:     s.self.ID,
-		FromName: s.self.Name(),
-		FromHost: s.self.Hostname,
-		Body:     m.Body,
-		SentAt:   m.SentAt.UnixMilli(),
+		ID:        m.ID,
+		From:      s.self.ID,
+		FromName:  s.self.Name(),
+		FromHost:  s.self.Hostname,
+		Body:      m.Body,
+		SentAt:    m.SentAt.UnixMilli(),
+		Broadcast: m.Broadcast,
 	}
 	if m.Kind == store.KindFiles {
 		t, ok, err := s.store.Transfer(s.ctx, m.ID)
@@ -355,13 +364,14 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m := store.Message{
-		ID:     wm.ID,
-		PeerID: wm.From,
-		Body:   wm.Body,
-		At:     now,
-		SentAt: time.UnixMilli(wm.SentAt),
-		Status: store.StatusDelivered,
-		Unread: true,
+		ID:        wm.ID,
+		PeerID:    wm.From,
+		Body:      wm.Body,
+		At:        now,
+		SentAt:    time.UnixMilli(wm.SentAt),
+		Status:    store.StatusDelivered,
+		Unread:    true,
+		Broadcast: wm.Broadcast,
 	}
 	var t *store.Transfer
 	if wm.Offer != nil {
