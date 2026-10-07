@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/identity"
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -80,6 +81,8 @@ type Config struct {
 	StagingDir string
 	// DownloadDir devuelve la carpeta elegida por el usuario ("" = Descargas\LanChat).
 	DownloadDir func() string
+	// Identity es la identidad TLS de este equipo para hablar con los demás.
+	Identity *identity.Identity
 }
 
 type EventType int
@@ -131,7 +134,7 @@ func New(cfg Config, st *store.Store, dir Directory, sender OfferSender, log *sl
 		store:  st,
 		dir:    dir,
 		sender: sender,
-		client: peer.NewStreamClient(),
+		client: peer.NewStreamClient(cfg.Identity),
 		log:    log,
 		events: make(chan Event, eventBuffer),
 		ctx:    ctx,
@@ -412,6 +415,11 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request, outgoingOnly
 		http.Error(w, "token inválido", http.StatusForbidden)
 		return t, false
 	}
+	// Además del token, quien pide debe ser el otro equipo de la transferencia.
+	if pinned, err := s.store.PinnedFingerprint(r.Context(), t.PeerID); err != nil || pinned != peer.ClientFingerprint(r) {
+		http.Error(w, "la identidad no corresponde a esta transferencia", http.StatusForbidden)
+		return t, false
+	}
 	return t, true
 }
 
@@ -677,8 +685,12 @@ func (s *Service) downloadFile(ctx context.Context, p discovery.Peer, t store.Tr
 
 	fctx, fcancel := context.WithCancelCause(ctx)
 	defer fcancel(nil)
-	req, err := http.NewRequestWithContext(fctx, http.MethodGet,
-		"http://"+p.HTTPAddr().String()+protocol.PathFile(t.ID, f.Index), nil)
+	pctx, err := peer.ContextFor(fctx, s.store, t.PeerID)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(pctx, http.MethodGet,
+		"https://"+p.HTTPAddr().String()+protocol.PathFile(t.ID, f.Index), nil)
 	if err != nil {
 		return "", err
 	}
@@ -801,7 +813,11 @@ func (s *Service) notify(t store.Transfer, path string, body []byte) {
 	}
 	ctx, cancel := context.WithTimeout(s.ctx, notifyTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+p.HTTPAddr().String()+path, bytes.NewReader(body))
+	pctx, err := peer.ContextFor(ctx, s.store, t.PeerID)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(pctx, http.MethodPost, "https://"+p.HTTPAddr().String()+path, bytes.NewReader(body))
 	if err != nil {
 		return
 	}

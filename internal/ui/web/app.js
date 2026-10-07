@@ -256,6 +256,10 @@ function contactItem(c) {
   const name = document.createElement("span");
   name.className = "name";
   name.textContent = c.displayName;
+  if (c.identityChanged) {
+    name.textContent = `⚠ ${c.displayName}`;
+    li.title = "Su identidad cambió: revisa antes de enviarle algo";
+  }
   const detail = document.createElement("span");
   detail.className = "detail";
   detail.textContent = c.detail;
@@ -294,6 +298,8 @@ function renderHeader() {
   const note = $("offline-note");
   note.hidden = c.online;
   note.textContent = `${c.displayName} está desconectado. Los mensajes que envíes se entregarán cuando se conecte.`;
+  $("identity-note").hidden = !c.identityChanged;
+  $("identity-note-text").textContent = `La identidad de ${c.displayName} cambió. Si reinstaló LanChat es normal; si no, alguien podría estar haciéndose pasar por esa PC. Hasta que confíes en la nueva identidad no se le envía nada.`;
 }
 
 function dayLabel(ts) {
@@ -901,6 +907,28 @@ async function sendMany(ev) {
   }
 }
 
+function openIdentity() {
+  const c = state.contacts.get(state.current);
+  if (!c) return;
+  $("identity-who").textContent = c.displayName;
+  $("identity-theirs").textContent = c.fingerprint || "(todavía no se conoce)";
+  $("identity-new-box").hidden = !c.identityChanged;
+  $("identity-new").textContent = c.newFingerprint;
+  $("identity-mine").textContent = state.self.fingerprint;
+  $("identity-dialog").showModal();
+}
+
+async function trustIdentity() {
+  const c = state.contacts.get(state.current);
+  if (!c) return;
+  if (!confirm(`¿Confiar en la nueva identidad de ${c.displayName}? Hazlo solo si confirmaste con esa persona que reinstaló LanChat (puedes comparar las huellas en "Identidad").`)) return;
+  try {
+    await request("POST", "/api/trust", { peer: c.id });
+  } catch (e) {
+    showBanner(e.message, 5000);
+  }
+}
+
 function openGroup() {
   const c = state.contacts.get(state.current);
   if (!c) return;
@@ -1033,6 +1061,8 @@ function bind() {
   $("settings-form").addEventListener("submit", saveSettings);
   $("alias-btn").addEventListener("click", openAlias);
   $("group-btn").addEventListener("click", openGroup);
+  $("identity-btn").addEventListener("click", openIdentity);
+  $("trust-btn").addEventListener("click", trustIdentity);
   $("group-form").addEventListener("submit", saveGroup);
   $("alias-form").addEventListener("submit", saveAlias);
   $("back-btn").addEventListener("click", closeChat);

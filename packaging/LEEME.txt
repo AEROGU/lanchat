@@ -32,6 +32,9 @@ USO
 - 📢 Mensaje a varios: el mismo mensaje a varios contactos o a un grupo.
 - Grupos: en una conversación, botón "Grupo" (solo los ves tú).
 - ✓ = entregado, ✓✓ = leído (se desactiva en Ajustes).
+- Todo va cifrado. Si una conversación avisa que la identidad de alguien
+  cambió, confirma con esa persona (botón "Identidad", comparen las huellas)
+  antes de pulsar "Confiar en la nueva identidad".
 - Archivos: botón 📎 (archivos), 📁 (carpeta) o arrastrarlos a la
   conversación. El otro debe aceptarlos; una vez recibidos no se pueden
   volver a descargar (hay que reenviarlos). Se guardan en
@@ -39,6 +42,8 @@ USO
 
 ACTUALIZAR
 ----------
+Desde la versión 0.10 la comunicación va cifrada y no es compatible con
+las versiones anteriores: actualiza todas las PCs a la vez.
 Cierra LanChat (clic derecho en la bandeja > Salir) y reemplaza
 lanchat.exe por el nuevo. Los mensajes y ajustes se conservan.
 

@@ -527,3 +527,27 @@ dialog input, dialog textarea {
   cursor: pointer;
   font: inherit;
 }
+
+/* ---------- Identidad ---------- */
+
+.note.danger {
+  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.note.danger .text-btn { color: var(--danger); font-weight: 600; flex: none; }
+
+.fingerprint {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-family: Consolas, ui-monospace, monospace;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  word-spacing: 0.2em;
+  line-height: 1.7;
+}

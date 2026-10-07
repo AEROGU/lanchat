@@ -45,10 +45,15 @@
           <strong id="peer-name"></strong>
           <small id="peer-detail"></small>
         </div>
+        <button id="identity-btn" class="text-btn" title="Ver la huella de seguridad de este contacto">Identidad</button>
         <button id="group-btn" class="text-btn" title="Poner a este contacto en un grupo">Grupo</button>
         <button id="alias-btn" class="text-btn" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
       </header>
 
+      <div id="identity-note" class="note danger" hidden>
+        <span id="identity-note-text"></span>
+        <button type="button" id="trust-btn" class="text-btn">Confiar en la nueva identidad</button>
+      </div>
       <div id="offline-note" class="note" hidden></div>
       <div id="messages" aria-live="polite"></div>
 
@@ -108,6 +113,24 @@
       <div class="actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button id="settings-save" value="save" class="primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="identity-dialog">
+    <form method="dialog">
+      <h2>Identidad de <span id="identity-who"></span></h2>
+      <p class="help">La comunicación con cada equipo va cifrada. Para asegurarte de que hablas con la PC correcta, compara estas huellas con la otra persona (por teléfono o en persona): deben coincidir con lo que ve ella en su LanChat.</p>
+      <label>Huella de este contacto</label>
+      <code id="identity-theirs" class="fingerprint"></code>
+      <div id="identity-new-box" hidden>
+        <label>Huella nueva que anuncia ahora</label>
+        <code id="identity-new" class="fingerprint"></code>
+      </div>
+      <label>Tu huella</label>
+      <code id="identity-mine" class="fingerprint"></code>
+      <div class="actions">
+        <button value="close" class="primary">Cerrar</button>
       </div>
     </form>
   </dialog>

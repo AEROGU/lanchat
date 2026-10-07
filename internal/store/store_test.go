@@ -258,3 +258,19 @@ func TestGroups(t *testing.T) {
 		t.Error("grupo a un contacto inexistente debía fallar")
 	}
 }
+
+func TestFingerprintPinning(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	s.UpsertPeer(ctx, Peer{ID: "a", Fingerprint: "huella-1"})
+	s.UpsertPeer(ctx, Peer{ID: "a", Fingerprint: "huella-2"}) // un anuncio no la cambia
+	if p, _, _ := s.Peer(ctx, "a"); p.Fingerprint != "huella-1" {
+		t.Fatalf("huella fijada = %q", p.Fingerprint)
+	}
+	if err := s.SetFingerprint(ctx, "a", "huella-2"); err != nil {
+		t.Fatal(err)
+	}
+	if p, _, _ := s.Peer(ctx, "a"); p.Fingerprint != "huella-2" {
+		t.Errorf("tras confiar = %q", p.Fingerprint)
+	}
+}

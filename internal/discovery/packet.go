@@ -41,6 +41,9 @@ type packet struct {
 	// Status y StatusText: presencia (desde 0.10; las versiones viejas los ignoran).
 	Status     string `json:"st,omitempty"`
 	StatusText string `json:"stx,omitempty"`
+	// Fingerprint es la huella de su identidad TLS. Solo sirve para guardarla la
+	// primera vez y detectar si cambió: la conexión TLS es la que la comprueba.
+	Fingerprint string `json:"fp"`
 }
 
 func decodePacket(b []byte) (packet, error) {
@@ -69,5 +72,6 @@ func decodePacket(b []byte) (packet, error) {
 		protocol.ValidateHostname(p.Hostname),
 		protocol.ValidateAppVersion(p.App),
 		protocol.ValidateStatusText(p.StatusText),
+		protocol.ValidateFingerprint(p.Fingerprint),
 	)
 }

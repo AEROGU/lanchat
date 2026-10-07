@@ -497,3 +497,4 @@ func TestSendManyRoute(t *testing.T) {
 }
 func (f *fakeBackend) SetReadReceipts(bool) error                     { return nil }
 func (f *fakeBackend) SetGroup(context.Context, string, string) error { return nil }
+func (f *fakeBackend) TrustIdentity(context.Context, string) error    { return nil }

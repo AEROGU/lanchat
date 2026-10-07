@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ func newTestService(t *testing.T, id string, manual ...string) *Service {
 	t.Helper()
 	s, err := New(Config{
 		ID:          id,
+		Fingerprint: strings.Repeat("ab", 32),
 		Name:        "Usuario " + id,
 		Hostname:    "PC-" + id,
 		BindIP:      loopback,
@@ -177,10 +179,10 @@ func TestParseManual(t *testing.T) {
 
 func TestDecodePacketRejectsForeign(t *testing.T) {
 	bad := []string{
-		`{"m":"otro","v":1,"t":"hello","id":"x","host":"h","port":1}`,
-		`{"m":"lanchat","v":1,"t":"raro","id":"x","host":"h","port":1}`,
-		`{"m":"lanchat","v":1,"t":"hello","id":"","host":"h","port":1}`,
-		`{"m":"lanchat","v":1,"t":"hello","id":"x","host":"h","port":0}`,
+		`{"m":"otro","v":2,"fp":"abababababababababababababababababababababababababababababababab","t":"hello","id":"x","host":"h","port":1}`,
+		`{"m":"lanchat","v":2,"fp":"abababababababababababababababababababababababababababababababab","t":"raro","id":"x","host":"h","port":1}`,
+		`{"m":"lanchat","v":2,"fp":"abababababababababababababababababababababababababababababababab","t":"hello","id":"","host":"h","port":1}`,
+		`{"m":"lanchat","v":2,"fp":"abababababababababababababababababababababababababababababababab","t":"hello","id":"x","host":"h","port":0}`,
 		`no es json`,
 	}
 	for _, b := range bad {
@@ -188,14 +190,14 @@ func TestDecodePacketRejectsForeign(t *testing.T) {
 			t.Errorf("debía rechazar %s", b)
 		}
 	}
-	p, err := decodePacket([]byte(`{"m":"lanchat","v":1,"app":"1.0.0","t":"hello","id":"x","host":"h","port":50001,"campo_futuro":true}`))
+	p, err := decodePacket([]byte(`{"m":"lanchat","v":2,"app":"1.0.0","t":"hello","id":"x","host":"h","port":50001,"fp":"abababababababababababababababababababababababababababababababab","campo_futuro":true}`))
 	if err != nil || p.App != "1.0.0" {
 		t.Errorf("paquete válido rechazado: %+v, %v", p, err)
 	}
 
-	_, err = decodePacket([]byte(`{"m":"lanchat","v":2,"t":"hello","id":"x","host":"h","port":50001}`))
+	_, err = decodePacket([]byte(`{"m":"lanchat","v":99,"t":"hello","id":"x","host":"h","port":50001}`))
 	var inc incompatibleError
-	if !errors.As(err, &inc) || inc.version != 2 {
-		t.Errorf("protocolo v2 debía ser incompatible, err = %v", err)
+	if !errors.As(err, &inc) || inc.version != 99 {
+		t.Errorf("protocolo v99 debía ser incompatible, err = %v", err)
 	}
 }

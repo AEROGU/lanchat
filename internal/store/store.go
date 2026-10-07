@@ -87,6 +87,10 @@ var migrations = [][]string{
 		// dir: subcarpeta relativa del archivo ("Proyecto/planos"; "" = suelto).
 		`ALTER TABLE transfer_files ADD COLUMN dir TEXT NOT NULL DEFAULT ''`,
 	},
+	{
+		// fingerprint: huella TLS del contacto, fijada la primera vez que se lo vio.
+		`ALTER TABLE peers ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -151,23 +155,34 @@ type Peer struct {
 	// Alias es el nombre que le puso el usuario local.
 	Alias string
 	// Group es el grupo local donde lo puso el usuario ("" = sin grupo).
-	Group    string
-	LastSeen time.Time
+	Group string
+	// Fingerprint es la huella TLS fijada (confianza en el primer uso): la
+	// primera que se vio, o la que el usuario aceptó después.
+	Fingerprint string
+	LastSeen    time.Time
 }
 
-// UpsertPeer guarda los datos anunciados por un equipo sin tocar su alias.
+// UpsertPeer guarda los datos anunciados por un equipo sin tocar su alias ni
+// su grupo. La huella solo se guarda si todavía no tenía una (para cambiarla
+// está SetFingerprint).
 func (s *Store) UpsertPeer(ctx context.Context, p Peer) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO peers (id, name, hostname, ip, last_seen) VALUES (?, ?, ?, ?, ?)
+		INSERT INTO peers (id, name, hostname, ip, last_seen, fingerprint) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name, hostname = excluded.hostname,
-			ip = excluded.ip, last_seen = excluded.last_seen`,
-		p.ID, p.Name, p.Hostname, p.IP, p.LastSeen.UnixMilli())
+			ip = excluded.ip, last_seen = excluded.last_seen,
+			fingerprint = CASE WHEN peers.fingerprint = '' THEN excluded.fingerprint ELSE peers.fingerprint END`,
+		p.ID, p.Name, p.Hostname, p.IP, p.LastSeen.UnixMilli(), p.Fingerprint)
 	return err
 }
 
 func (s *Store) SetAlias(ctx context.Context, id, alias string) error {
 	return peerNotFound(id, s.execOne(ctx, `UPDATE peers SET alias = ? WHERE id = ?`, alias, id))
+}
+
+// SetFingerprint reemplaza la huella fijada (el usuario confió en la nueva).
+func (s *Store) SetFingerprint(ctx context.Context, id, fp string) error {
+	return peerNotFound(id, s.execOne(ctx, `UPDATE peers SET fingerprint = ? WHERE id = ?`, fp, id))
 }
 
 // SetGroup pone al contacto en un grupo local ("" = sin grupo).
@@ -182,7 +197,7 @@ func peerNotFound(id string, err error) error {
 	return err
 }
 
-const peerColumns = `id, name, hostname, ip, alias, group_name, last_seen`
+const peerColumns = `id, name, hostname, ip, alias, group_name, fingerprint, last_seen`
 
 // scanner lo cumplen *sql.Row y *sql.Rows.
 type scanner interface{ Scan(dest ...any) error }
@@ -190,7 +205,7 @@ type scanner interface{ Scan(dest ...any) error }
 func scanPeer(sc scanner) (Peer, error) {
 	var p Peer
 	var seen int64
-	err := sc.Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &p.Group, &seen)
+	err := sc.Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &p.Group, &p.Fingerprint, &seen)
 	p.LastSeen = time.UnixMilli(seen)
 	return p, err
 }
@@ -404,4 +419,19 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// ErrUnknownIdentity: no hay huella fijada para el equipo (aún no se lo vio).
+var ErrUnknownIdentity = errors.New("todavía no se conoce la identidad del equipo")
+
+// PinnedFingerprint devuelve la huella fijada de peerID.
+func (s *Store) PinnedFingerprint(ctx context.Context, peerID string) (string, error) {
+	p, ok, err := s.Peer(ctx, peerID)
+	if err != nil {
+		return "", err
+	}
+	if !ok || p.Fingerprint == "" {
+		return "", ErrUnknownIdentity
+	}
+	return p.Fingerprint, nil
 }

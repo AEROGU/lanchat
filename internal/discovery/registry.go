@@ -22,8 +22,10 @@ type Peer struct {
 	// Status es protocol.StatusAvailable, StatusAway o StatusBusy.
 	Status     string
 	StatusText string
-	LastSeen   time.Time
-	Online     bool
+	// Fingerprint es la huella que anuncia (sin verificar; ver packet).
+	Fingerprint string
+	LastSeen    time.Time
+	Online      bool
 
 	// udp es la dirección UDP de origen de sus anuncios.
 	udp netip.AddrPort
@@ -83,21 +85,23 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 		r.peers[p.ID] = cur
 	}
 	updated := Peer{
-		ID:         p.ID,
-		Name:       p.Name,
-		Hostname:   p.Hostname,
-		IP:         src.Addr(),
-		HTTPPort:   p.HTTPPort,
-		AppVersion: p.App,
-		Status:     p.Status,
-		StatusText: p.StatusText,
-		LastSeen:   now,
-		Online:     true,
-		udp:        src,
+		ID:          p.ID,
+		Name:        p.Name,
+		Hostname:    p.Hostname,
+		IP:          src.Addr(),
+		HTTPPort:    p.HTTPPort,
+		AppVersion:  p.App,
+		Status:      p.Status,
+		StatusText:  p.StatusText,
+		Fingerprint: p.Fingerprint,
+		LastSeen:    now,
+		Online:      true,
+		udp:         src,
 	}
 	changed := cur.Name != updated.Name || cur.Hostname != updated.Hostname || cur.IP != updated.IP ||
 		cur.HTTPPort != updated.HTTPPort || cur.AppVersion != updated.AppVersion ||
-		cur.Status != updated.Status || cur.StatusText != updated.StatusText
+		cur.Status != updated.Status || cur.StatusText != updated.StatusText ||
+		cur.Fingerprint != updated.Fingerprint
 	cameOnline = !cur.Online
 	*cur = updated
 

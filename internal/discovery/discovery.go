@@ -35,6 +35,8 @@ type Config struct {
 	ID       string
 	Name     string
 	Hostname string
+	// Fingerprint es la huella de la identidad TLS de este equipo.
+	Fingerprint string
 	// Status y StatusText iniciales (ver SetStatus).
 	Status     string
 	StatusText string
@@ -275,16 +277,17 @@ func (s *Service) packet(t packetType) packet {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return packet{
-		Magic:      protocol.Magic,
-		Version:    protocol.Version,
-		App:        version.App,
-		Type:       t,
-		ID:         s.cfg.ID,
-		Name:       s.name,
-		Hostname:   s.cfg.Hostname,
-		HTTPPort:   s.cfg.HTTPPort,
-		Status:     s.status,
-		StatusText: s.statusText,
+		Magic:       protocol.Magic,
+		Version:     protocol.Version,
+		App:         version.App,
+		Type:        t,
+		ID:          s.cfg.ID,
+		Name:        s.name,
+		Hostname:    s.cfg.Hostname,
+		HTTPPort:    s.cfg.HTTPPort,
+		Status:      s.status,
+		StatusText:  s.statusText,
+		Fingerprint: s.cfg.Fingerprint,
 	}
 }
 

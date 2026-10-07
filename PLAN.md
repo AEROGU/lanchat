@@ -102,4 +102,6 @@ packaging/            LEEME.txt del zip
 Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue chateando con las nuevas (no ve estados ni ✓✓ y recibe las carpetas como archivos sueltos).
 
 ### Fase 3
-TLS entre equipos (certificado propio por PC, confianza en el primer uso) · salas de chat grupales · UI alternativa en tview.
+- [x] TLS 1.3 mutuo entre equipos: identidad propia por PC, confianza en el primer uso, aviso y "Confiar en la nueva identidad" si cambia; protocolo v2.
+- [ ] Salas de chat grupales.
+- [ ] Interfaz alternativa en consola (tview).

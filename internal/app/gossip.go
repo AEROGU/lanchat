@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
 )
 
@@ -76,8 +77,12 @@ func (a *App) askPeers(ctx context.Context, p discovery.Peer) {
 }
 
 func (a *App) fetchPeers(ctx context.Context, p discovery.Peer) ([]wirePeer, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"http://"+p.HTTPAddr().String()+protocol.RoutePeers, nil)
+	pctx, err := peer.ContextFor(ctx, a.store, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(pctx, http.MethodGet,
+		"https://"+p.HTTPAddr().String()+protocol.RoutePeers, nil)
 	if err != nil {
 		return nil, err
 	}

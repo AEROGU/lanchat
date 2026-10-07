@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/app"
+	"github.com/AEROGU/lanchat/internal/identity"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/transfer"
 	"github.com/AEROGU/lanchat/internal/version"
@@ -42,7 +43,8 @@ type selfJSON struct {
 	Idle     bool `json:"idle"`
 	AutoAway bool `json:"autoAway"`
 	// ReadReceipts: se avisa a los demás cuando se leen sus mensajes.
-	ReadReceipts bool `json:"readReceipts"`
+	ReadReceipts bool   `json:"readReceipts"`
+	Fingerprint  string `json:"fingerprint"`
 }
 
 func toSelfJSON(s app.Self) selfJSON {
@@ -52,6 +54,7 @@ func toSelfJSON(s app.Self) selfJSON {
 		LicenseName: version.LicenseName, Repository: version.Repository,
 		Status: s.Status, StatusText: s.StatusText, Idle: s.Idle, AutoAway: s.AutoAwayEnabled,
 		ReadReceipts: s.ReadReceipts,
+		Fingerprint:  identity.Format(s.Fingerprint),
 	}
 }
 
@@ -68,28 +71,38 @@ type contactJSON struct {
 	Online      bool   `json:"online"`
 	LastSeen    int64  `json:"lastSeen"`
 	Unread      int    `json:"unread"`
+	// Fingerprint es la huella fijada; NewFingerprint, la que anuncia si cambió.
+	Fingerprint     string `json:"fingerprint"`
+	IdentityChanged bool   `json:"identityChanged"`
+	NewFingerprint  string `json:"newFingerprint"`
 	// Status: available, away o busy; vacío si está desconectado.
 	Status     string `json:"status"`
 	StatusText string `json:"statusText"`
 }
 
 func toContactJSON(c app.Contact) contactJSON {
-	return contactJSON{
-		ID:          c.ID,
-		DisplayName: c.DisplayName(),
-		Detail:      c.Detail(),
-		Name:        c.Name,
-		Alias:       c.Alias,
-		Group:       c.Group,
-		Hostname:    c.Hostname,
-		IP:          c.IP,
-		AppVersion:  c.AppVersion,
-		Online:      c.Online,
-		LastSeen:    c.LastSeen.UnixMilli(),
-		Unread:      c.Unread,
-		Status:      c.Status,
-		StatusText:  c.StatusText,
+	out := contactJSON{
+		ID:              c.ID,
+		DisplayName:     c.DisplayName(),
+		Detail:          c.Detail(),
+		Name:            c.Name,
+		Alias:           c.Alias,
+		Group:           c.Group,
+		Hostname:        c.Hostname,
+		IP:              c.IP,
+		AppVersion:      c.AppVersion,
+		Online:          c.Online,
+		LastSeen:        c.LastSeen.UnixMilli(),
+		Unread:          c.Unread,
+		Status:          c.Status,
+		StatusText:      c.StatusText,
+		Fingerprint:     identity.Format(c.Fingerprint),
+		IdentityChanged: c.IdentityChanged(),
 	}
+	if out.IdentityChanged {
+		out.NewFingerprint = identity.Format(c.AnnouncedFingerprint)
+	}
+	return out
 }
 
 type messageJSON struct {

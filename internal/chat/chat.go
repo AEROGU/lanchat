@@ -329,12 +329,16 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 
 // post envía v como JSON al equipo p y devuelve el código de respuesta.
 func (s *Service) post(p discovery.Peer, path string, v any) (int, error) {
+	ctx, err := peer.ContextFor(s.ctx, s.store, p.ID)
+	if err != nil {
+		return 0, err
+	}
 	b, err := json.Marshal(v)
 	if err != nil {
 		return 0, err
 	}
-	req, err := http.NewRequestWithContext(s.ctx, http.MethodPost,
-		"http://"+p.HTTPAddr().String()+path, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://"+p.HTTPAddr().String()+path, bytes.NewReader(b))
 	if err != nil {
 		return 0, err
 	}
@@ -363,6 +367,10 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "remitente inválido", http.StatusBadRequest)
 		return
 	}
+	fp, ok := s.checkSender(w, r, wm.From)
+	if !ok {
+		return
+	}
 
 	now := time.Now()
 	ip := ""
@@ -371,7 +379,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 	}
 	// Registrar al remitente por si aún no lo vio el descubrimiento.
 	if err := s.store.UpsertPeer(r.Context(), store.Peer{
-		ID: wm.From, Name: wm.FromName, Hostname: wm.FromHost, IP: ip, LastSeen: now,
+		ID: wm.From, Name: wm.FromName, Hostname: wm.FromHost, IP: ip, LastSeen: now, Fingerprint: fp,
 	}); err != nil {
 		s.log.Error("guardando remitente", "err", err)
 		http.Error(w, "error interno", http.StatusInternalServerError)

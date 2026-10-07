@@ -69,6 +69,7 @@ const help = `Comandos:
   /nombre texto       cambia tu nombre (vacío = usar el hostname)
   /alias N texto      pone un alias local al contacto N (vacío = quitarlo)
   /grupo N nombre     pone al contacto N en un grupo (vacío = sin grupo)
+  /confiar N          acepta la nueva identidad del contacto N (si cambió)
   /estado E [texto]   E = disponible, ausente u ocupado; texto opcional
   /todos texto         envía "texto" a todos los contactos en línea
   /salir              cierra LanChat`
@@ -124,6 +125,12 @@ func (c *console) command(line string) error {
 			}
 			fmt.Printf("  [%s] %s: %s%s\n", m.At.Format("02/01 15:04"), who, m.Body, statusMark(m))
 		}
+	case cmd == "/confiar":
+		ct, err := c.pick(rest)
+		if err != nil {
+			return err
+		}
+		return c.app.TrustIdentity(ctx, ct.ID)
 	case cmd == "/grupo":
 		n, group, _ := strings.Cut(rest, " ")
 		ct, err := c.pick(n)
@@ -186,6 +193,9 @@ func (c *console) printList(ctx context.Context) error {
 				status += ": " + ct.StatusText
 			}
 			status = "  [" + status + "]"
+		}
+		if ct.IdentityChanged() {
+			status += "  ⚠ su identidad cambió (/confiar " + strconv.Itoa(i+1) + ")"
 		}
 		fmt.Printf("  %2d %s %s  (%s)%s\n", i+1, state, ct.DisplayName(), ct.Detail(), status)
 	}

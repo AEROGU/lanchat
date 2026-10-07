@@ -75,6 +75,7 @@ type Backend interface {
 	SetReadReceipts(enabled bool) error
 	SetAlias(ctx context.Context, peerID, alias string) error
 	SetGroup(ctx context.Context, peerID, group string) error
+	TrustIdentity(ctx context.Context, peerID string) error
 	ManualPeers() []string
 	SetManualPeers(peers []string) error
 
@@ -242,6 +243,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/read-receipts", s.handleReadReceipts)
 	mux.HandleFunc("POST /api/alias", s.handleAlias)
 	mux.HandleFunc("POST /api/group", s.handleGroup)
+	mux.HandleFunc("POST /api/trust", s.handleTrust)
 	mux.HandleFunc("POST /api/manual-peers", s.handleManualPeers)
 	mux.HandleFunc("POST /api/presence", s.handlePresence)
 	mux.HandleFunc("POST /api/open", s.handleOpen)
@@ -619,5 +621,21 @@ func (s *Server) handleOpenRepository(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleTrust acepta la nueva identidad de un contacto.
+func (s *Server) handleTrust(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Peer string `json:"peer"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	if err := s.b.TrustIdentity(r.Context(), req.Peer); err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	s.publishContact(r.Context(), req.Peer)
 	w.WriteHeader(http.StatusNoContent)
 }

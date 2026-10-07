@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -313,5 +315,46 @@ func TestShareableAddr(t *testing.T) {
 		if got := shareableAddr(netip.MustParseAddr(ip)); got != want {
 			t.Errorf("%s: %v", ip, got)
 		}
+	}
+}
+
+// Si B cambia de identidad (reinstaló LanChat, o alguien se hace pasar por
+// él), A no le envía nada hasta que el usuario confía en la nueva.
+func TestIdentityChangeBlocksUntilTrusted(t *testing.T) {
+	dirB := testutil.TempDir(t)
+	a := startNode(t, testutil.TempDir(t), "PC-A")
+	b := startNode(t, dirB, "PC-B", a.udpPort())
+	idB := b.app.Self().ID
+	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idB))
+	ctx := context.Background()
+	oldFP := b.app.Self().Fingerprint
+
+	// B "reinstala": misma configuración (mismo ID), identidad nueva.
+	b.stop()
+	waitFor(t, a, "A ve salir a B", peerEvent(discovery.PeerOffline, idB))
+	os.Remove(filepath.Join(dirB, "identity.key"))
+	os.Remove(filepath.Join(dirB, "identity.crt"))
+	b2 := startNode(t, dirB, "PC-B", a.udpPort())
+	waitFor(t, a, "B vuelve", peerEvent(discovery.PeerOnline, idB))
+	if b2.app.Self().Fingerprint == oldFP {
+		t.Fatal("B debía tener una identidad nueva")
+	}
+
+	c, _, _ := a.app.Contact(ctx, idB)
+	if !c.IdentityChanged() || c.Fingerprint != oldFP {
+		t.Fatalf("A debía detectar el cambio: %+v", c)
+	}
+	m, _ := a.app.Send(ctx, idB, "¿eres tú?")
+	time.Sleep(500 * time.Millisecond)
+	if h, _ := a.app.History(ctx, idB, "", 1); h[0].ID != m.ID || h[0].Status != store.StatusPending {
+		t.Fatalf("no debía entregarse a una identidad no confirmada: %+v", h)
+	}
+
+	if err := a.app.TrustIdentity(ctx, idB); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, a, "A entrega tras confiar", chatEvent(chat.MessageDelivered, "¿eres tú?"))
+	if c, _, _ := a.app.Contact(ctx, idB); c.IdentityChanged() {
+		t.Error("tras confiar no debía seguir marcado")
 	}
 }

@@ -2,17 +2,21 @@ package chat
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/identity"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/testutil"
@@ -37,11 +41,33 @@ func newTestService(t *testing.T) *Service {
 	return s
 }
 
+// senderID es la identidad TLS con la que llegan los mensajes de prueba.
+var senderID = mustIdentity("otro")
+
+func mustIdentity(name string) *identity.Identity {
+	dir, err := os.MkdirTemp("", "lanchat-id-")
+	if err != nil {
+		panic(err)
+	}
+	id, err := identity.Load(dir, name)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 func post(t *testing.T, s *Service, m wireMessage) int {
+	t.Helper()
+	return postAs(t, s, m, senderID)
+}
+
+// postAs entrega m como si llegara por TLS con la identidad id.
+func postAs(t *testing.T, s *Service, m wireMessage, id *identity.Identity) int {
 	t.Helper()
 	b, _ := json.Marshal(m)
 	req := httptest.NewRequest(http.MethodPost, protocol.RouteMessage, strings.NewReader(string(b)))
 	req.RemoteAddr = "192.168.1.30:51234"
+	req.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{id.Cert.Leaf}}
 	rec := httptest.NewRecorder()
 	s.handleMsg(rec, req)
 	return rec.Code
@@ -94,5 +120,23 @@ func TestHandleMsgRejectsInvalid(t *testing.T) {
 				t.Errorf("código %d, quería 400", code)
 			}
 		})
+	}
+}
+
+// Otro equipo no puede hacerse pasar por un remitente ya conocido.
+func TestHandleMsgRejectsImpersonation(t *testing.T) {
+	s := newTestService(t)
+	m := wireMessage{ID: "m1", From: "otro", Body: "hola"}
+	if code := post(t, s, m); code != http.StatusNoContent {
+		t.Fatalf("primer mensaje: %d", code)
+	}
+	p, _, _ := s.store.Peer(context.Background(), "otro")
+	if p.Fingerprint != senderID.Fingerprint {
+		t.Fatalf("debía fijar la huella del primer contacto: %q", p.Fingerprint)
+	}
+	impostor := mustIdentity("impostor")
+	m.ID = "m2"
+	if code := postAs(t, s, m, impostor); code != http.StatusForbidden {
+		t.Errorf("suplantación: %d, quería 403", code)
 	}
 }

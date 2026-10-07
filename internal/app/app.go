@@ -21,6 +21,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/config"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/identity"
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -75,6 +76,7 @@ type App struct {
 	idleCheck   time.Duration
 	gossipEvery time.Duration
 	http        *http.Client
+	identity    *identity.Identity
 
 	mu  sync.Mutex
 	cfg *config.Config
@@ -116,11 +118,16 @@ func New(o Options) (a *App, err error) {
 	}
 	closers = append(closers, func() { st.Close() })
 
+	id, err := identity.Load(o.Dir, cfg.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	addr := o.HTTPAddr
 	if addr == "" {
 		addr = fmt.Sprintf(":%d", cfg.HTTPPort)
 	}
-	srv, err := peer.Listen(addr)
+	srv, err := peer.Listen(addr, id)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +140,7 @@ func New(o Options) (a *App, err error) {
 		UDPPort:     cfg.UDPPort,
 		HTTPPort:    srv.Port(),
 		ManualPeers: cfg.ManualPeers,
+		Fingerprint: id.Fingerprint,
 		Status:      cfg.Status,
 		StatusText:  cfg.StatusText,
 	}
@@ -145,7 +153,7 @@ func New(o Options) (a *App, err error) {
 	}
 
 	ch := chat.New(chat.Identity{ID: cfg.ID, Hostname: o.Hostname, Name: disc.Name},
-		st, disc, peer.NewClient(), o.Log)
+		st, disc, peer.NewClient(id), o.Log)
 	ch.Register(srv)
 
 	a = &App{
@@ -161,12 +169,14 @@ func New(o Options) (a *App, err error) {
 		idleTime:    o.IdleTime,
 		idleCheck:   cmp.Or(o.IdleCheckInterval, idleCheckInterval),
 		gossipEvery: cmp.Or(o.GossipInterval, gossipInterval),
-		http:        peer.NewClient(),
+		http:        peer.NewClient(id),
+		identity:    id,
 	}
 	srv.Handle("GET "+protocol.RoutePeers, http.HandlerFunc(a.handlePeers))
 	a.transfer = transfer.New(transfer.Config{
 		StagingDir:  filepath.Join(o.Dir, stagingDirName),
 		DownloadDir: a.configuredDownloadDir,
+		Identity:    id,
 	}, st, disc, ch, o.Log)
 	a.transfer.Register(srv)
 	return a, nil
@@ -239,6 +249,7 @@ func (a *App) onPeer(ev discovery.Event) {
 	p := ev.Peer
 	if err := a.store.UpsertPeer(context.Background(), store.Peer{
 		ID: p.ID, Name: p.Name, Hostname: p.Hostname, IP: p.IP.String(), LastSeen: p.LastSeen,
+		Fingerprint: p.Fingerprint, // solo se fija si aún no tenía (confianza en el primer uso)
 	}); err != nil {
 		a.log.Error("guardando contacto", "peer", p.ID, "err", err)
 	}
@@ -261,6 +272,8 @@ type Self struct {
 	AutoAwayEnabled bool
 	// ReadReceipts: se avisa a los demás cuando se leen sus mensajes.
 	ReadReceipts bool
+	// Fingerprint es la huella de la identidad TLS de este equipo.
+	Fingerprint string
 }
 
 func (a *App) Self() Self {
@@ -271,6 +284,7 @@ func (a *App) Self() Self {
 		Status: a.cfg.Status, StatusText: a.cfg.StatusText,
 		Idle: a.idle, AutoAwayEnabled: !a.cfg.DisableAutoAway,
 		ReadReceipts: !a.cfg.NoReadReceipts,
+		Fingerprint:  a.identity.Fingerprint,
 	}
 }
 
@@ -289,13 +303,18 @@ type Contact struct {
 	LastSeen   time.Time
 	// Unread es la cantidad de mensajes suyos sin leer.
 	Unread int
+	// Fingerprint es la huella fijada (la que se verifica al conectar).
+	Fingerprint string
+	// AnnouncedFingerprint es la que anuncia ahora (vacía si no está en línea).
+	AnnouncedFingerprint string
 	// Status y StatusText: presencia anunciada (solo si está en línea).
 	Status     string
 	StatusText string
 }
 
 func contactFromStore(r store.Peer) Contact {
-	return Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, Group: r.Group, LastSeen: r.LastSeen}
+	return Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, Group: r.Group,
+		Fingerprint: r.Fingerprint, LastSeen: r.LastSeen}
 }
 
 // overlay reemplaza los datos guardados con los que el equipo anuncia ahora;
@@ -303,10 +322,17 @@ func contactFromStore(r store.Peer) Contact {
 func (c *Contact) overlay(p discovery.Peer) {
 	c.ID, c.Name, c.Hostname, c.IP = p.ID, p.Name, p.Hostname, p.IP.String()
 	c.AppVersion, c.Online, c.LastSeen = p.AppVersion, p.Online, p.LastSeen
-	c.Status, c.StatusText = "", ""
+	c.Status, c.StatusText, c.AnnouncedFingerprint = "", "", ""
 	if p.Online {
-		c.Status, c.StatusText = p.Status, p.StatusText
+		c.Status, c.StatusText, c.AnnouncedFingerprint = p.Status, p.StatusText, p.Fingerprint
 	}
+}
+
+// IdentityChanged indica que el contacto anuncia una identidad distinta de
+// la fijada: reinstaló LanChat o alguien intenta hacerse pasar por él. Hasta
+// que el usuario confíe en la nueva (TrustIdentity) no se le envía nada.
+func (c Contact) IdentityChanged() bool {
+	return c.Fingerprint != "" && c.AnnouncedFingerprint != "" && c.Fingerprint != c.AnnouncedFingerprint
 }
 
 // DisplayName: alias local > nombre elegido por el otro > hostname > IP.
@@ -718,4 +744,19 @@ func (a *App) sendBroadcast(ctx context.Context, peerID, body string) (store.Mes
 		return store.Message{}, err
 	}
 	return a.chat.SendBroadcast(ctx, peerID, body)
+}
+
+// TrustIdentity acepta la identidad que anuncia ahora el contacto (p. ej.
+// porque reinstaló LanChat) y reintenta los mensajes pendientes.
+func (a *App) TrustIdentity(ctx context.Context, peerID string) error {
+	p, ok := a.disc.Peer(peerID)
+	if !ok || !p.Online || p.Fingerprint == "" {
+		return errors.New("el contacto tiene que estar en línea para confiar en su identidad")
+	}
+	if err := a.store.SetFingerprint(ctx, peerID, p.Fingerprint); err != nil {
+		return err
+	}
+	a.log.Info("identidad aceptada por el usuario", "peer", peerID, "huella", p.Fingerprint)
+	a.chat.Flush(peerID)
+	return nil
 }

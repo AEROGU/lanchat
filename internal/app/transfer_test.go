@@ -14,6 +14,8 @@ import (
 
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/identity"
+	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/testutil"
@@ -100,10 +102,10 @@ func TestFileTransferEndToEnd(t *testing.T) {
 	}
 
 	// Descarga única: con el mismo token ya no se puede volver a bajar.
-	if code := getFile(t, a, m.ID, 0, tr.Token); code != http.StatusGone {
+	if code := getFile(t, b.app.identity, a, m.ID, 0, tr.Token); code != http.StatusGone {
 		t.Errorf("segunda descarga: %d, quería 410", code)
 	}
-	if code := getFile(t, a, m.ID, 0, "token-falso"); code != http.StatusForbidden {
+	if code := getFile(t, b.app.identity, a, m.ID, 0, "token-falso"); code != http.StatusForbidden {
 		t.Errorf("token falso: %d, quería 403", code)
 	}
 	if err := b.app.AcceptTransfer(ctx, m.ID); err == nil {
@@ -111,12 +113,14 @@ func TestFileTransferEndToEnd(t *testing.T) {
 	}
 }
 
-func getFile(t *testing.T, sender *node, id string, idx int, token string) int {
+// getFile pide un archivo a sender usando la identidad TLS who.
+func getFile(t *testing.T, who *identity.Identity, sender *node, id string, idx int, token string) int {
 	t.Helper()
-	req, _ := http.NewRequest(http.MethodGet,
-		fmt.Sprintf("http://127.0.0.1:%d%s", sender.app.srv.Port(), protocol.PathFile(id, idx)), nil)
+	ctx := peer.WithFingerprint(context.Background(), sender.app.identity.Fingerprint)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("https://127.0.0.1:%d%s", sender.app.srv.Port(), protocol.PathFile(id, idx)), nil)
 	req.Header.Set(protocol.TokenHeader, token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := peer.NewClient(who).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,5 +268,24 @@ func TestFolderTransfer(t *testing.T) {
 				t.Errorf("%s / %s = %q, %v", root, rel, got, err)
 			}
 		}
+	}
+}
+
+// Con el token correcto pero otra identidad TLS, el remitente no entrega nada.
+func TestTransferRequiresRecipientIdentity(t *testing.T) {
+	a, b, _ := pair(t)
+	p, _ := writeRandom(t, testutil.TempDir(t), "secreto.txt", 100)
+	m := offer(t, a, b, p)
+	tr, _, _ := b.app.Transfer(context.Background(), m.ID)
+
+	intruder, err := identity.Load(testutil.TempDir(t), "intruso")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := getFile(t, intruder, a, m.ID, 0, tr.Token); code != http.StatusForbidden {
+		t.Errorf("intruso con token: %d, quería 403", code)
+	}
+	if code := getFile(t, b.app.identity, a, m.ID, 0, tr.Token); code != http.StatusOK {
+		t.Errorf("destinatario legítimo: %d, quería 200", code)
 	}
 }

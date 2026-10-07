@@ -61,6 +61,9 @@ func (s *Service) handleRead(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if _, ok := s.checkSender(w, r, req.From); !ok {
+		return
+	}
 	msgs, err := s.store.MarkReadByPeer(r.Context(), req.From, req.IDs, time.Now())
 	if err != nil {
 		s.log.Error("guardando lectura", "err", err)

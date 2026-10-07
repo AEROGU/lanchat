@@ -19,7 +19,7 @@ import (
 // Version es la versión del protocolo (paquetes UDP y API HTTP). Solo se
 // incrementa con cambios incompatibles: agregar un campo nuevo al JSON no lo
 // es, porque los equipos viejos ignoran los campos que no conocen.
-const Version = 1
+const Version = 2 // 2: comunicación cifrada con TLS (ver internal/identity)
 
 // APIPrefix es el prefijo de las rutas HTTP entre equipos, p. ej. "/v1".
 var APIPrefix = "/v" + strconv.Itoa(Version)
@@ -137,6 +137,17 @@ func ValidateStatusText(s string) error {
 	}
 	if !utf8.ValidString(s) || hasControl(s, false) {
 		return errors.New("el estado contiene caracteres no permitidos")
+	}
+	return nil
+}
+
+// FingerprintLen es el largo de una huella (SHA-256 en hex).
+const FingerprintLen = 64
+
+// ValidateFingerprint valida una huella: 64 caracteres hex en minúsculas.
+func ValidateFingerprint(s string) error {
+	if len(s) != FingerprintLen || strings.Trim(s, "0123456789abcdef") != "" {
+		return errors.New("huella inválida")
 	}
 	return nil
 }

@@ -68,11 +68,32 @@ tiene consola:
 | `-debug` | registro detallado en la consola en vez de `lanchat.log` |
 | `-console` | usar LanChat desde la consola, sin ventana (`/ayuda` lista los comandos) |
 
+## Seguridad
+
+Toda la comunicación entre PCs (mensajes, archivos, avisos) va cifrada con
+**TLS 1.3 mutuo**. Cada instalación crea su propia identidad (clave ECDSA
+P-256 en `identity.key`) y los demás la reconocen por su **huella**:
+
+- La primera vez que una PC ve a otra, guarda su huella (confianza en el
+  primer uso, como SSH). Desde entonces solo se comunica con esa identidad.
+- Si la huella cambia (reinstalaron LanChat, o alguien intenta hacerse pasar
+  por esa PC), los envíos se detienen y la conversación muestra un aviso con
+  **Confiar en la nueva identidad**.
+- Las huellas se ven en el botón **Identidad** de cada conversación; para
+  verificar, compáralas con la otra persona.
+- El descubrimiento por UDP no va cifrado (nombre, hostname, estado y huella
+  anunciados son visibles en la red), pero no permite suplantar a nadie: la
+  conexión TLS comprueba la huella.
+
+Desde la 0.10 se usa el protocolo v2 (cifrado), que no se comunica con
+versiones anteriores: hay que actualizar todas las PCs.
+
 ## Archivos en `%APPDATA%\LanChat`
 
 | Archivo | Contenido |
 |---|---|
 | `config.json` | ID del equipo, nombre, puertos, equipos de otras subredes |
+| `identity.key`, `identity.crt` | identidad de esta PC; no copiarlos a otra PC (si se borran, los demás verán "identidad cambió") |
 | `lanchat.db` | contactos, alias e historial (SQLite) |
 | `lanchat.log` | registro (se rota al pasar de 1 MB) |
 | `ui.json` | puerto y token de la ventana; existe mientras LanChat está abierto |
