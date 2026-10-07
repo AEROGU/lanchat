@@ -182,6 +182,12 @@ func TestNamesAndAliases(t *testing.T) {
 	if c.DisplayName() != "Juan de Ventas" {
 		t.Errorf("alias = %q", c.DisplayName())
 	}
+	if err := a.app.SetGroup(ctx, idB, " Ventas "); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := a.app.Contacts(ctx); len(list) != 1 || list[0].Group != "Ventas" {
+		t.Errorf("grupo: %+v", list)
+	}
 	if _, err := a.app.Send(ctx, "desconocido", "hola"); err == nil {
 		t.Error("enviar a un contacto desconocido debía fallar")
 	}

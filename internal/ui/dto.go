@@ -54,6 +54,7 @@ type contactJSON struct {
 	Detail      string `json:"detail"`
 	Name        string `json:"name"`
 	Alias       string `json:"alias"`
+	Group       string `json:"group"`
 	Hostname    string `json:"hostname"`
 	IP          string `json:"ip"`
 	AppVersion  string `json:"appVersion"`
@@ -72,6 +73,7 @@ func toContactJSON(c app.Contact) contactJSON {
 		Detail:      c.Detail(),
 		Name:        c.Name,
 		Alias:       c.Alias,
+		Group:       c.Group,
 		Hostname:    c.Hostname,
 		IP:          c.IP,
 		AppVersion:  c.AppVersion,

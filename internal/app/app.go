@@ -263,6 +263,8 @@ type Contact struct {
 	Hostname string
 	IP       string
 	Alias    string
+	// Group es el grupo local ("" = sin grupo).
+	Group string
 	// AppVersion solo se conoce si el equipo se vio desde que arrancó LanChat.
 	AppVersion string
 	Online     bool
@@ -275,7 +277,7 @@ type Contact struct {
 }
 
 func contactFromStore(r store.Peer) Contact {
-	return Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, LastSeen: r.LastSeen}
+	return Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, Group: r.Group, LastSeen: r.LastSeen}
 }
 
 // overlay reemplaza los datos guardados con los que el equipo anuncia ahora;
@@ -421,6 +423,15 @@ func (a *App) SetName(name string) error {
 	}
 	a.disc.SetName(name)
 	return nil
+}
+
+// SetGroup pone al contacto en un grupo local ("" lo saca de su grupo).
+func (a *App) SetGroup(ctx context.Context, peerID, group string) error {
+	group, err := cleanName(group)
+	if err != nil {
+		return err
+	}
+	return a.store.SetGroup(ctx, peerID, group)
 }
 
 // SetAlias pone (o quita, con "") el nombre local de un contacto.

@@ -480,3 +480,20 @@ dialog input, dialog textarea {
 
 .pick-list label.check { margin: 4px 0; }
 .pick-list .help-inline { margin-left: auto; }
+
+/* ---------- Grupos ---------- */
+
+.group-header {
+  padding: 10px 10px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.group-header:hover { color: var(--text); }
+.select-row { flex-wrap: wrap; }
+.group-buttons { display: contents; }

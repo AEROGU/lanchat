@@ -79,6 +79,10 @@ var migrations = [][]string{
 		`ALTER TABLE messages ADD COLUMN receipt INTEGER NOT NULL DEFAULT 0`,
 		`CREATE INDEX messages_receipt ON messages(peer_id) WHERE receipt = 1`,
 	},
+	{
+		// group_name: grupo local del contacto ("" = sin grupo).
+		`ALTER TABLE peers ADD COLUMN group_name TEXT NOT NULL DEFAULT ''`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -141,7 +145,9 @@ type Peer struct {
 	Hostname string
 	IP       string
 	// Alias es el nombre que le puso el usuario local.
-	Alias    string
+	Alias string
+	// Group es el grupo local donde lo puso el usuario ("" = sin grupo).
+	Group    string
 	LastSeen time.Time
 }
 
@@ -157,17 +163,22 @@ func (s *Store) UpsertPeer(ctx context.Context, p Peer) error {
 }
 
 func (s *Store) SetAlias(ctx context.Context, id, alias string) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE peers SET alias = ? WHERE id = ?`, alias, id)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("contacto %s desconocido", id)
-	}
-	return nil
+	return peerNotFound(id, s.execOne(ctx, `UPDATE peers SET alias = ? WHERE id = ?`, alias, id))
 }
 
-const peerColumns = `id, name, hostname, ip, alias, last_seen`
+// SetGroup pone al contacto en un grupo local ("" = sin grupo).
+func (s *Store) SetGroup(ctx context.Context, id, group string) error {
+	return peerNotFound(id, s.execOne(ctx, `UPDATE peers SET group_name = ? WHERE id = ?`, group, id))
+}
+
+func peerNotFound(id string, err error) error {
+	if errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("contacto %s desconocido", id)
+	}
+	return err
+}
+
+const peerColumns = `id, name, hostname, ip, alias, group_name, last_seen`
 
 // scanner lo cumplen *sql.Row y *sql.Rows.
 type scanner interface{ Scan(dest ...any) error }
@@ -175,7 +186,7 @@ type scanner interface{ Scan(dest ...any) error }
 func scanPeer(sc scanner) (Peer, error) {
 	var p Peer
 	var seen int64
-	err := sc.Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &seen)
+	err := sc.Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &p.Group, &seen)
 	p.LastSeen = time.UnixMilli(seen)
 	return p, err
 }

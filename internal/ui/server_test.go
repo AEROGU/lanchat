@@ -490,4 +490,5 @@ func TestSendManyRoute(t *testing.T) {
 		t.Errorf("mensaje a varios: %d %+v %v", resp.StatusCode, out, b.sent)
 	}
 }
-func (f *fakeBackend) SetReadReceipts(bool) error { return nil }
+func (f *fakeBackend) SetReadReceipts(bool) error                     { return nil }
+func (f *fakeBackend) SetGroup(context.Context, string, string) error { return nil }

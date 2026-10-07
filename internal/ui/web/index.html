@@ -42,6 +42,7 @@
           <strong id="peer-name"></strong>
           <small id="peer-detail"></small>
         </div>
+        <button id="group-btn" class="text-btn" title="Poner a este contacto en un grupo">Grupo</button>
         <button id="alias-btn" class="text-btn" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
       </header>
 
@@ -114,6 +115,7 @@
         <button type="button" class="text-btn" data-select="all">Todos</button>
         <button type="button" class="text-btn" data-select="online">En línea</button>
         <button type="button" class="text-btn" data-select="none">Ninguno</button>
+        <span id="many-groups" class="group-buttons"></span>
       </div>
       <ul id="many-list" class="pick-list"></ul>
       <label for="many-text">Mensaje</label>
@@ -142,6 +144,21 @@
         Ponerme Ausente tras 10 minutos sin usar la PC
       </label>
       <p id="status-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="group-dialog">
+    <form method="dialog" id="group-form">
+      <h2>Grupo</h2>
+      <label for="group-input">Grupo de <span id="group-who"></span></label>
+      <input id="group-input" list="group-names" autocomplete="off" placeholder="p. ej. Contabilidad">
+      <datalist id="group-names"></datalist>
+      <small class="help">Solo lo ves tú. Escribe uno nuevo o elige uno existente; vacío = sin grupo.</small>
+      <p id="group-error" class="error" hidden></p>
       <div class="actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button value="save" class="primary">Guardar</button>

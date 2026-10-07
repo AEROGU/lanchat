@@ -73,6 +73,7 @@ type Backend interface {
 	SetAutoAway(enabled bool) error
 	SetReadReceipts(enabled bool) error
 	SetAlias(ctx context.Context, peerID, alias string) error
+	SetGroup(ctx context.Context, peerID, group string) error
 	ManualPeers() []string
 	SetManualPeers(peers []string) error
 
@@ -239,6 +240,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/status", s.handleStatus)
 	mux.HandleFunc("POST /api/read-receipts", s.handleReadReceipts)
 	mux.HandleFunc("POST /api/alias", s.handleAlias)
+	mux.HandleFunc("POST /api/group", s.handleGroup)
 	mux.HandleFunc("POST /api/manual-peers", s.handleManualPeers)
 	mux.HandleFunc("POST /api/presence", s.handlePresence)
 	mux.HandleFunc("POST /api/open", s.handleOpen)
@@ -588,4 +590,20 @@ func (s *Server) handleReadReceipts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
+}
+
+func (s *Server) handleGroup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Peer  string `json:"peer"`
+		Group string `json:"group"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	if err := s.b.SetGroup(r.Context(), req.Peer, req.Group); err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	s.publishContact(r.Context(), req.Peer)
+	w.WriteHeader(http.StatusNoContent)
 }

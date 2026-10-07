@@ -242,3 +242,19 @@ func TestReadReceipts(t *testing.T) {
 		t.Error("no debía marcar mensajes de otro contacto")
 	}
 }
+
+func TestGroups(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	s.UpsertPeer(ctx, Peer{ID: "a", Hostname: "PC-A"})
+	if err := s.SetGroup(ctx, "a", "Ventas"); err != nil {
+		t.Fatal(err)
+	}
+	s.UpsertPeer(ctx, Peer{ID: "a", Hostname: "PC-A2"}) // un anuncio no borra el grupo
+	if p, _, _ := s.Peer(ctx, "a"); p.Group != "Ventas" || p.Hostname != "PC-A2" {
+		t.Errorf("peer = %+v", p)
+	}
+	if err := s.SetGroup(ctx, "nadie", "x"); err == nil {
+		t.Error("grupo a un contacto inexistente debía fallar")
+	}
+}

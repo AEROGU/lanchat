@@ -62,6 +62,7 @@ const api = {
   status: (status, text, autoAway) => request("POST", "/api/status", { status, text, autoAway }),
   sendMany: (peers, body) => request("POST", "/api/messages/many", { peers, body }),
   readReceipts: (enabled) => request("POST", "/api/read-receipts", { enabled }),
+  group: (peer, group) => request("POST", "/api/group", { peer, group }),
   alias: (peer, alias) => request("POST", "/api/alias", { peer, alias }),
   manualPeers: (peers) => request("POST", "/api/manual-peers", { peers }),
   presence: (focused, viewing) => request("POST", "/api/presence", { focused, viewing }),
@@ -175,51 +176,104 @@ async function saveStatus(ev) {
   }
 }
 
+// ---------- Grupos ----------
+
+const COLLAPSED_KEY = "lanchat.collapsedGroups";
+const NO_GROUP = "Sin grupo";
+
+// Los grupos plegados se recuerdan solo en esta ventana (localStorage).
+function collapsedGroups() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function toggleGroup(name) {
+  const set = collapsedGroups();
+  if (!set.delete(name)) set.add(name);
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...set]));
+  } catch {
+    // sin almacenamiento: el grupo solo cambia hasta que se redibuje
+  }
+  renderContacts();
+}
+
+function groupNames() {
+  const names = new Set([...state.contacts.values()].map((c) => c.group).filter(Boolean));
+  return [...names].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+}
+
+function groupHeader(name, members, collapsed) {
+  const li = document.createElement("li");
+  li.className = "group-header";
+  const online = members.filter((c) => c.online).length;
+  li.textContent = `${collapsed ? "▸" : "▾"} ${name} (${online}/${members.length})`;
+  li.title = collapsed ? "Mostrar" : "Ocultar";
+  li.addEventListener("click", () => toggleGroup(name));
+  return li;
+}
+
 function renderContacts() {
   const filter = $("search").value.trim().toLocaleLowerCase("es");
   const ul = $("contacts");
   ul.replaceChildren();
   const list = sortedContacts().filter(
-    (c) => !filter || `${c.displayName} ${c.detail}`.toLocaleLowerCase("es").includes(filter),
+    (c) => !filter || `${c.displayName} ${c.detail} ${c.group}`.toLocaleLowerCase("es").includes(filter),
   );
-  for (const c of list) {
-    const li = document.createElement("li");
-    li.className = "contact" + (c.online ? "" : " offline") + (c.id === state.current ? " selected" : "");
-    li.title = c.online ? statusLabel(c.status, c.statusText) : "Desconectado";
-
-    const dot = document.createElement("span");
-    dot.className = dotClass(c.online, c.status);
-
-    const text = document.createElement("div");
-    text.className = "text";
-    const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = c.displayName;
-    const detail = document.createElement("span");
-    detail.className = "detail";
-    detail.textContent = c.detail;
-    text.append(name, detail);
-    if (c.online && c.statusText) {
-      const st = document.createElement("span");
-      st.className = "status-line";
-      st.textContent = c.statusText;
-      text.append(st);
+  const names = groupNames();
+  if (names.length === 0) {
+    for (const c of list) ul.append(contactItem(c));
+  } else {
+    const collapsed = filter ? new Set() : collapsedGroups(); // al buscar se muestra todo
+    for (const name of [...names, NO_GROUP]) {
+      const members = list.filter((c) => (c.group || NO_GROUP) === name);
+      if (members.length === 0) continue;
+      ul.append(groupHeader(name, members, collapsed.has(name)));
+      if (!collapsed.has(name)) for (const c of members) ul.append(contactItem(c));
     }
-
-    li.append(dot, text);
-    if (c.unread > 0) {
-      const badge = document.createElement("span");
-      badge.className = "badge";
-      badge.textContent = c.unread > 99 ? "99+" : c.unread;
-      li.append(badge);
-    }
-    li.addEventListener("click", () => openChat(c.id));
-    ul.append(li);
   }
   $("no-contacts").hidden = state.contacts.size > 0;
 
   const total = totalUnread();
   document.title = total > 0 ? `(${total}) LanChat` : "LanChat";
+}
+
+function contactItem(c) {
+  const li = document.createElement("li");
+  li.className = "contact" + (c.online ? "" : " offline") + (c.id === state.current ? " selected" : "");
+  li.title = c.online ? statusLabel(c.status, c.statusText) : "Desconectado";
+
+  const dot = document.createElement("span");
+  dot.className = dotClass(c.online, c.status);
+
+  const text = document.createElement("div");
+  text.className = "text";
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = c.displayName;
+  const detail = document.createElement("span");
+  detail.className = "detail";
+  detail.textContent = c.detail;
+  text.append(name, detail);
+  if (c.online && c.statusText) {
+    const st = document.createElement("span");
+    st.className = "status-line";
+    st.textContent = c.statusText;
+    text.append(st);
+  }
+
+  li.append(dot, text);
+  if (c.unread > 0) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = c.unread > 99 ? "99+" : c.unread;
+    li.append(badge);
+  }
+  li.addEventListener("click", () => openChat(c.id));
+  return li;
 }
 
 // ---------- Render: conversación ----------
@@ -692,6 +746,7 @@ function openMany() {
     box.type = "checkbox";
     box.value = c.id;
     box.dataset.online = c.online;
+    box.dataset.group = c.group;
     const dot = document.createElement("span");
     dot.className = dotClass(c.online, c.status);
     const name = document.createElement("span");
@@ -703,14 +758,26 @@ function openMany() {
     li.append(label);
     ul.append(li);
   }
+  const groups = $("many-groups");
+  groups.replaceChildren();
+  for (const name of groupNames()) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "text-btn";
+    b.textContent = name;
+    b.addEventListener("click", () => selectMany("group", name));
+    groups.append(b);
+  }
   $("many-error").hidden = true;
   $("many-dialog").showModal();
   $("many-text").focus();
 }
 
-function selectMany(which) {
+function selectMany(which, group) {
   for (const box of $("many-list").querySelectorAll("input")) {
-    box.checked = which === "all" || (which === "online" && box.dataset.online === "true");
+    box.checked = which === "all" ||
+      (which === "online" && box.dataset.online === "true") ||
+      (which === "group" && box.dataset.group === group);
   }
 }
 
@@ -740,6 +807,30 @@ async function sendMany(ev) {
   } catch (e) {
     err.textContent = e.message;
     err.hidden = false;
+  }
+}
+
+function openGroup() {
+  const c = state.contacts.get(state.current);
+  if (!c) return;
+  $("group-who").textContent = c.displayName;
+  $("group-input").value = c.group;
+  $("group-input").maxLength = state.limits.maxName;
+  const list = $("group-names");
+  list.replaceChildren(...groupNames().map((n) => Object.assign(document.createElement("option"), { value: n })));
+  $("group-error").hidden = true;
+  $("group-dialog").showModal();
+}
+
+async function saveGroup(ev) {
+  if (ev.submitter?.value !== "save") return;
+  ev.preventDefault();
+  try {
+    await api.group(state.current, $("group-input").value);
+    $("group-dialog").close();
+  } catch (e) {
+    $("group-error").textContent = e.message;
+    $("group-error").hidden = false;
   }
 }
 
@@ -843,6 +934,8 @@ function bind() {
   $("status-form").addEventListener("submit", saveStatus);
   $("settings-form").addEventListener("submit", saveSettings);
   $("alias-btn").addEventListener("click", openAlias);
+  $("group-btn").addEventListener("click", openGroup);
+  $("group-form").addEventListener("submit", saveGroup);
   $("alias-form").addEventListener("submit", saveAlias);
   $("back-btn").addEventListener("click", closeChat);
 

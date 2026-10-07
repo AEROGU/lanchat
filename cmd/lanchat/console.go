@@ -68,6 +68,7 @@ const help = `Comandos:
   /hist N             últimos mensajes con el contacto N
   /nombre texto       cambia tu nombre (vacío = usar el hostname)
   /alias N texto      pone un alias local al contacto N (vacío = quitarlo)
+  /grupo N nombre     pone al contacto N en un grupo (vacío = sin grupo)
   /estado E [texto]   E = disponible, ausente u ocupado; texto opcional
   /todos texto         envía "texto" a todos los contactos en línea
   /salir              cierra LanChat`
@@ -123,6 +124,13 @@ func (c *console) command(line string) error {
 			}
 			fmt.Printf("  [%s] %s: %s%s\n", m.At.Format("02/01 15:04"), who, m.Body, statusMark(m))
 		}
+	case cmd == "/grupo":
+		n, group, _ := strings.Cut(rest, " ")
+		ct, err := c.pick(n)
+		if err != nil {
+			return err
+		}
+		return c.app.SetGroup(ctx, ct.ID, group)
 	case cmd == "/alias":
 		n, alias, _ := strings.Cut(rest, " ")
 		ct, err := c.pick(n)
