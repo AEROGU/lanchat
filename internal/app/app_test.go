@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net/netip"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
@@ -25,11 +27,17 @@ type node struct {
 // startNode arranca un App en loopback; manual son puertos UDP de otros nodos.
 func startNode(t *testing.T, dir, host string, manual ...int) *node {
 	t.Helper()
+	return startNodeWith(t, dir, host, nil, manual...)
+}
+
+// startNodeWith permite ajustar las opciones (p. ej. IdleTime) antes de arrancar.
+func startNodeWith(t *testing.T, dir, host string, tune func(*Options), manual ...int) *node {
+	t.Helper()
 	var peers []string
 	for _, p := range manual {
 		peers = append(peers, fmt.Sprintf("127.0.0.1:%d", p))
 	}
-	a, err := New(Options{
+	opts := Options{
 		Dir:      dir,
 		Hostname: host,
 		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -42,7 +50,11 @@ func startNode(t *testing.T, dir, host string, manual ...int) *node {
 			c.Interval = 100 * time.Millisecond
 			c.TTL = time.Second
 		},
-	})
+	}
+	if tune != nil {
+		tune(&opts)
+	}
+	a, err := New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,5 +209,46 @@ func TestNamesAndAliases(t *testing.T) {
 	}
 	if _, err := a.app.Send(ctx, idB, "   "); err == nil {
 		t.Error("un mensaje vacío debía fallar")
+	}
+}
+
+func TestStatusAndAutoAway(t *testing.T) {
+	var idle atomic.Int64 // nanosegundos sin usar la PC (simulado)
+	a := startNode(t, tempDir(t), "PC-A")
+	b := startNodeWith(t, tempDir(t), "PC-B", func(o *Options) {
+		o.IdleTime = func() (time.Duration, error) { return time.Duration(idle.Load()), nil }
+		o.IdleCheckInterval = 50 * time.Millisecond
+	}, a.udpPort())
+	idB := b.app.Self().ID
+	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idB))
+	status := func(st, text string) func(any) bool {
+		return func(ev any) bool {
+			e, ok := ev.(discovery.Event)
+			return ok && e.Peer.ID == idB && e.Peer.Status == st && e.Peer.StatusText == text
+		}
+	}
+
+	if err := b.app.SetStatus("vacaciones", ""); err == nil {
+		t.Error("un estado desconocido debía rechazarse")
+	}
+	if err := b.app.SetStatus(protocol.StatusBusy, "  En junta "); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, a, "A ve Ocupado", status(protocol.StatusBusy, "En junta"))
+
+	// Ocupado no cambia por inactividad; Disponible sí pasa a Ausente.
+	b.app.SetStatus(protocol.StatusAvailable, "")
+	waitFor(t, a, "A ve Disponible", status(protocol.StatusAvailable, ""))
+	idle.Store(int64(11 * time.Minute))
+	waitFor(t, a, "A ve Ausente por inactividad", status(protocol.StatusAway, ""))
+	if s := b.app.Self(); !s.Idle || s.Status != protocol.StatusAvailable {
+		t.Errorf("Self = %+v", s)
+	}
+	idle.Store(0)
+	waitFor(t, a, "A ve que B volvió", status(protocol.StatusAvailable, ""))
+
+	c, _, _ := a.app.Contact(context.Background(), idB)
+	if c.Status != protocol.StatusAvailable {
+		t.Errorf("contacto: %+v", c)
 	}
 }

@@ -109,3 +109,34 @@ func hasControl(s string, allowNewlines bool) bool {
 	}
 	return false
 }
+
+// Estados de presencia que cada equipo anuncia.
+const (
+	StatusAvailable = "available"
+	StatusAway      = "away"
+	// StatusBusy es "no molestar": el equipo no muestra notificaciones.
+	StatusBusy = "busy"
+	// MaxStatusTextLen es el largo máximo del texto de estado ("En junta…").
+	MaxStatusTextLen = 80 // en caracteres
+)
+
+// NormalizeStatus devuelve el estado si es conocido, o Disponible: así un
+// estado nuevo de una versión futura no rompe a las anteriores.
+func NormalizeStatus(s string) string {
+	switch s {
+	case StatusAway, StatusBusy:
+		return s
+	}
+	return StatusAvailable
+}
+
+// ValidateStatusText valida el texto de estado (vacío es válido).
+func ValidateStatusText(s string) error {
+	if utf8.RuneCountInString(s) > MaxStatusTextLen {
+		return fmt.Errorf("el estado admite máximo %d caracteres", MaxStatusTextLen)
+	}
+	if !utf8.ValidString(s) || hasControl(s, false) {
+		return errors.New("el estado contiene caracteres no permitidos")
+	}
+	return nil
+}

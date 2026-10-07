@@ -9,6 +9,7 @@
   --bubble-in: #ffffff;
   --bubble-out: #dbe7ff;
   --online: #16a34a;
+  --away: #f59e0b;
   --offline: #a0a7b1;
   --danger: #dc2626;
   --warn-bg: #fff7e6;
@@ -134,6 +135,39 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 
 .dot.online { background: var(--online); }
+.dot.online.away { background: var(--away); }
+.dot.online.busy { background: var(--danger); }
+
+.status-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status-btn:hover { background: var(--bg); }
+
+.contact .status-line {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status-options { display: flex; flex-direction: column; }
+.status-options label.check { margin-top: 8px; }
+.help-inline { color: var(--muted); font-size: 12px; }
 
 .badge {
   min-width: 20px;

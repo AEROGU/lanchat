@@ -68,6 +68,8 @@ type Backend interface {
 	Send(ctx context.Context, peerID, body string) (store.Message, error)
 	History(ctx context.Context, peerID, beforeID string, limit int) ([]store.Message, error)
 	SetName(name string) error
+	SetStatus(status, text string) error
+	SetAutoAway(enabled bool) error
 	SetAlias(ctx context.Context, peerID, alias string) error
 	ManualPeers() []string
 	SetManualPeers(peers []string) error
@@ -184,6 +186,8 @@ func (s *Server) Publish(ctx context.Context, ev any) {
 			s.publishContact(ctx, e.Message.PeerID)
 			s.unreadChanged(ctx)
 		}
+	case app.SelfChanged:
+		s.hub.broadcast("self", toSelfJSON(s.b.Self()))
 	case transfer.Event:
 		if e.Type == transfer.TransferProgress {
 			s.hub.broadcast("progress", toProgressJSON(e.Progress))
@@ -229,6 +233,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/messages", s.handleSend)
 	mux.HandleFunc("POST /api/read", s.handleRead)
 	mux.HandleFunc("POST /api/name", s.handleName)
+	mux.HandleFunc("POST /api/status", s.handleStatus)
 	mux.HandleFunc("POST /api/alias", s.handleAlias)
 	mux.HandleFunc("POST /api/manual-peers", s.handleManualPeers)
 	mux.HandleFunc("POST /api/presence", s.handlePresence)
@@ -318,7 +323,8 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		Contacts:    make([]contactJSON, len(contacts)),
 		ManualPeers: s.b.ManualPeers(),
 		DownloadDir: s.b.DownloadDir(),
-		Limits:      limitsJSON{MaxName: protocol.MaxNameLen, MaxMessageBytes: protocol.MaxMessageBytes},
+		Limits: limitsJSON{MaxName: protocol.MaxNameLen, MaxMessageBytes: protocol.MaxMessageBytes,
+			MaxStatusText: protocol.MaxStatusTextLen},
 	}
 	for i, c := range contacts {
 		out.Contacts[i] = toContactJSON(c)
@@ -516,3 +522,24 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (s *Server) cookieName() string { return cookiePrefix + strconv.Itoa(s.Port()) }
+
+// handleStatus cambia el estado, su texto y el ausente automático.
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Status   string `json:"status"`
+		Text     string `json:"text"`
+		AutoAway bool   `json:"autoAway"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	err := s.b.SetStatus(req.Status, req.Text)
+	if err == nil {
+		err = s.b.SetAutoAway(req.AutoAway)
+	}
+	if err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
+}

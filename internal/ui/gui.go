@@ -18,6 +18,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/config"
 	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/platform"
+	"github.com/AEROGU/lanchat/internal/protocol"
 )
 
 const (
@@ -81,7 +82,7 @@ func RunGUI(o Options) error {
 		return nil
 	}
 
-	a, err := app.New(app.Options{Dir: o.Dir, Log: o.Log})
+	a, err := app.New(app.Options{Dir: o.Dir, Log: o.Log, IdleTime: platform.IdleTime})
 	if err != nil {
 		return err
 	}
@@ -218,6 +219,9 @@ func (g *gui) applyTray(unread int) {
 func (g *gui) maybeNotify(ctx context.Context, ev any) {
 	e, ok := ev.(chat.Event)
 	if !ok || e.Type != chat.MessageReceived || !g.srv.ShouldNotify(e.Message.PeerID) {
+		return
+	}
+	if g.app.Self().Status == protocol.StatusBusy { // "no molestar"
 		return
 	}
 	c, _, err := g.app.Contact(ctx, e.Message.PeerID)

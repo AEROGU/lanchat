@@ -32,6 +32,11 @@ type Config struct {
 	// SetupDone: ya se aplicaron los ajustes de la primera ejecución (p. ej.
 	// activar el inicio con Windows); después manda lo que elija el usuario.
 	SetupDone bool `json:"setup_done"`
+	// Status y StatusText son el estado elegido por el usuario (protocol.Status*).
+	Status     string `json:"status"`
+	StatusText string `json:"status_text"`
+	// DisableAutoAway desactiva el paso a Ausente por inactividad.
+	DisableAutoAway bool `json:"disable_auto_away"`
 }
 
 // DefaultDir devuelve %APPDATA%\LanChat (o su equivalente en otros sistemas).
@@ -72,6 +77,10 @@ func Load(dir string) (*Config, error) {
 		c.HTTPPort = protocol.DefaultHTTPPort
 		changed = true
 	}
+	if c.Status != protocol.NormalizeStatus(c.Status) {
+		c.Status = protocol.StatusAvailable
+		changed = true
+	}
 	if c.ManualPeers == nil {
 		c.ManualPeers = []string{}
 		changed = true
@@ -92,6 +101,9 @@ func (c *Config) validate() error {
 		return err
 	}
 	if err := protocol.ValidateName(c.Name); err != nil {
+		return err
+	}
+	if err := protocol.ValidateStatusText(c.StatusText); err != nil {
 		return err
 	}
 	for _, p := range []int{c.UDPPort, c.HTTPPort} {

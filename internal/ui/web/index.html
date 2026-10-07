@@ -20,6 +20,10 @@
           <span aria-hidden="true">⚙</span>
         </button>
       </header>
+      <button id="status-btn" class="status-btn" title="Cambiar tu estado">
+        <span id="status-dot" class="dot online available"></span>
+        <span id="status-label"></span>
+      </button>
       <input id="search" type="search" placeholder="Buscar contacto" autocomplete="off">
       <ul id="contacts" aria-label="Contactos"></ul>
       <p id="no-contacts" class="hint" hidden>Aún no se ha visto ningún equipo en la red.</p>
@@ -90,6 +94,28 @@
       <div class="actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button id="settings-save" value="save" class="primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="status-dialog">
+    <form method="dialog" id="status-form">
+      <h2>Tu estado</h2>
+      <div class="status-options">
+        <label class="check"><input type="radio" name="status" value="available"><span class="dot online available"></span> Disponible</label>
+        <label class="check"><input type="radio" name="status" value="away"><span class="dot online away"></span> Ausente</label>
+        <label class="check"><input type="radio" name="status" value="busy"><span class="dot online busy"></span> Ocupado <small class="help-inline">(sin notificaciones)</small></label>
+      </div>
+      <label for="status-text">Mensaje (opcional)</label>
+      <input id="status-text" autocomplete="off" placeholder="p. ej. En junta hasta las 12">
+      <label class="check">
+        <input type="checkbox" id="autoaway-input">
+        Ponerme Ausente tras 10 minutos sin usar la PC
+      </label>
+      <p id="status-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary">Guardar</button>
       </div>
     </form>
   </dialog>

@@ -38,6 +38,9 @@ type packet struct {
 	Hostname string     `json:"host"`
 	// HTTPPort es el puerto donde el remitente atiende mensajes y archivos.
 	HTTPPort int `json:"port"`
+	// Status y StatusText: presencia (desde 0.10; las versiones viejas los ignoran).
+	Status     string `json:"st,omitempty"`
+	StatusText string `json:"stx,omitempty"`
 }
 
 func decodePacket(b []byte) (packet, error) {
@@ -59,10 +62,12 @@ func decodePacket(b []byte) (packet, error) {
 	if p.HTTPPort < 1 || p.HTTPPort > 65535 {
 		return p, errors.New("puerto inválido")
 	}
+	p.Status = protocol.NormalizeStatus(p.Status)
 	return p, errors.Join(
 		protocol.ValidateID(p.ID),
 		protocol.ValidateName(p.Name),
 		protocol.ValidateHostname(p.Hostname),
 		protocol.ValidateAppVersion(p.App),
+		protocol.ValidateStatusText(p.StatusText),
 	)
 }

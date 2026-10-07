@@ -35,6 +35,9 @@ type Config struct {
 	ID       string
 	Name     string
 	Hostname string
+	// Status y StatusText iniciales (ver SetStatus).
+	Status     string
+	StatusText string
 	// UDPPort es el puerto de descubrimiento (0 = uno libre, útil en pruebas).
 	UDPPort int
 	// BindIP limita la escucha a una IP; vacío = todas las interfaces.
@@ -61,6 +64,8 @@ type Service struct {
 
 	mu         sync.Mutex
 	name       string
+	status     string
+	statusText string
 	manual     []manualPeer
 	manualAddr []netip.AddrPort // última resolución de manual
 	dupWarned  bool
@@ -90,14 +95,16 @@ func New(cfg Config, log *slog.Logger) (*Service, error) {
 	}
 	cfg.UDPPort = conn.LocalAddr().(*net.UDPAddr).Port
 	return &Service{
-		cfg:     cfg,
-		conn:    conn,
-		reg:     newRegistry(),
-		log:     log,
-		events:  make(chan Event, eventBuffer),
-		refresh: make(chan struct{}, 1),
-		manual:  manual,
-		name:    cfg.Name,
+		cfg:        cfg,
+		conn:       conn,
+		reg:        newRegistry(),
+		log:        log,
+		events:     make(chan Event, eventBuffer),
+		refresh:    make(chan struct{}, 1),
+		manual:     manual,
+		name:       cfg.Name,
+		status:     protocol.NormalizeStatus(cfg.Status),
+		statusText: cfg.StatusText,
 	}, nil
 }
 
@@ -127,6 +134,18 @@ func (s *Service) SetName(name string) {
 	s.name = name
 	s.mu.Unlock()
 	s.sendAll(typeAnnounce)
+}
+
+// SetStatus cambia el estado propio y lo anuncia de inmediato si cambió.
+func (s *Service) SetStatus(status, text string) {
+	status = protocol.NormalizeStatus(status)
+	s.mu.Lock()
+	changed := s.status != status || s.statusText != text
+	s.status, s.statusText = status, text
+	s.mu.Unlock()
+	if changed {
+		s.sendAll(typeAnnounce)
+	}
 }
 
 // Run anuncia este equipo hasta que ctx se cancele; al salir envía bye.
@@ -252,14 +271,16 @@ func (s *Service) packet(t packetType) packet {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return packet{
-		Magic:    protocol.Magic,
-		Version:  protocol.Version,
-		App:      version.App,
-		Type:     t,
-		ID:       s.cfg.ID,
-		Name:     s.name,
-		Hostname: s.cfg.Hostname,
-		HTTPPort: s.cfg.HTTPPort,
+		Magic:      protocol.Magic,
+		Version:    protocol.Version,
+		App:        version.App,
+		Type:       t,
+		ID:         s.cfg.ID,
+		Name:       s.name,
+		Hostname:   s.cfg.Hostname,
+		HTTPPort:   s.cfg.HTTPPort,
+		Status:     s.status,
+		StatusText: s.statusText,
 	}
 }
 

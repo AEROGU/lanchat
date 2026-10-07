@@ -13,6 +13,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/version"
 )
@@ -67,6 +68,7 @@ const help = `Comandos:
   /hist N             últimos mensajes con el contacto N
   /nombre texto       cambia tu nombre (vacío = usar el hostname)
   /alias N texto      pone un alias local al contacto N (vacío = quitarlo)
+  /estado E [texto]   E = disponible, ausente u ocupado; texto opcional
   /salir              cierra LanChat`
 
 func (c *console) readLoop() {
@@ -96,6 +98,13 @@ func (c *console) command(line string) error {
 		return c.printList(ctx)
 	case cmd == "/nombre":
 		return c.app.SetName(rest)
+	case cmd == "/estado":
+		word, text, _ := strings.Cut(rest, " ")
+		status, ok := consoleStatuses[strings.ToLower(word)]
+		if !ok {
+			return fmt.Errorf("usa: /estado disponible|ausente|ocupado [texto]")
+		}
+		return c.app.SetStatus(status, text)
 	case cmd == "/hist":
 		ct, err := c.pick(rest)
 		if err != nil {
@@ -147,7 +156,15 @@ func (c *console) printList(ctx context.Context) error {
 		if ct.Online {
 			state = "●"
 		}
-		fmt.Printf("  %2d %s %s  (%s)\n", i+1, state, ct.DisplayName(), ct.Detail())
+		status := ""
+		if ct.Online {
+			status = statusNames[ct.Status]
+			if ct.StatusText != "" {
+				status += ": " + ct.StatusText
+			}
+			status = "  [" + status + "]"
+		}
+		fmt.Printf("  %2d %s %s  (%s)%s\n", i+1, state, ct.DisplayName(), ct.Detail(), status)
 	}
 	return nil
 }
@@ -186,4 +203,16 @@ func statusMark(m store.Message) string {
 		return "  (pendiente)"
 	}
 	return ""
+}
+
+var consoleStatuses = map[string]string{
+	"disponible": protocol.StatusAvailable,
+	"ausente":    protocol.StatusAway,
+	"ocupado":    protocol.StatusBusy,
+}
+
+var statusNames = map[string]string{
+	protocol.StatusAvailable: "disponible",
+	protocol.StatusAway:      "ausente",
+	protocol.StatusBusy:      "ocupado",
 }

@@ -59,6 +59,7 @@ const api = {
   send: (peer, body) => request("POST", "/api/messages", { peer, body }),
   read: (peer) => request("POST", "/api/read", { peer }),
   name: (name) => request("POST", "/api/name", { name }),
+  status: (status, text, autoAway) => request("POST", "/api/status", { status, text, autoAway }),
   alias: (peer, alias) => request("POST", "/api/alias", { peer, alias }),
   manualPeers: (peers) => request("POST", "/api/manual-peers", { peers }),
   presence: (focused, viewing) => request("POST", "/api/presence", { focused, viewing }),
@@ -123,10 +124,53 @@ function totalUnread() {
 
 // ---------- Render: barra lateral ----------
 
+const STATUS_LABELS = { available: "Disponible", away: "Ausente", busy: "Ocupado" };
+
+// statusLabel describe el estado de un contacto en línea ("" si no lo está).
+function statusLabel(status, text) {
+  if (!status) return "";
+  return STATUS_LABELS[status] + (text ? ` · ${text}` : "");
+}
+
+function dotClass(online, status) {
+  return "dot" + (online ? ` online ${status || "available"}` : "");
+}
+
 function renderSelf() {
   const s = state.self;
   $("me-name").textContent = s.name || s.hostname;
   $("me-detail").textContent = s.name ? s.hostname : "Sin nombre: haz clic en ⚙ para elegirlo";
+  // Inactivo y Disponible: los demás te ven Ausente.
+  const shown = s.status === "available" && s.idle ? "away" : s.status;
+  $("status-dot").className = dotClass(true, shown);
+  $("status-label").textContent = statusLabel(shown, s.statusText) + (shown !== s.status ? " (inactivo)" : "");
+}
+
+function openStatus() {
+  const s = state.self;
+  for (const r of document.querySelectorAll("#status-form input[name=status]")) r.checked = r.value === s.status;
+  $("status-text").value = s.statusText;
+  $("status-text").maxLength = state.limits.maxStatusText ?? 80;
+  $("autoaway-input").checked = s.autoAway;
+  $("status-error").hidden = true;
+  $("status-dialog").showModal();
+}
+
+async function saveStatus(ev) {
+  if (ev.submitter?.value !== "save") return;
+  ev.preventDefault();
+  try {
+    state.self = await api.status(
+      document.querySelector("#status-form input[name=status]:checked")?.value ?? "available",
+      $("status-text").value,
+      $("autoaway-input").checked,
+    );
+    renderSelf();
+    $("status-dialog").close();
+  } catch (e) {
+    $("status-error").textContent = e.message;
+    $("status-error").hidden = false;
+  }
 }
 
 function renderContacts() {
@@ -139,10 +183,10 @@ function renderContacts() {
   for (const c of list) {
     const li = document.createElement("li");
     li.className = "contact" + (c.online ? "" : " offline") + (c.id === state.current ? " selected" : "");
-    li.title = c.online ? "En línea" : "Desconectado";
+    li.title = c.online ? statusLabel(c.status, c.statusText) : "Desconectado";
 
     const dot = document.createElement("span");
-    dot.className = "dot" + (c.online ? " online" : "");
+    dot.className = dotClass(c.online, c.status);
 
     const text = document.createElement("div");
     text.className = "text";
@@ -153,6 +197,12 @@ function renderContacts() {
     detail.className = "detail";
     detail.textContent = c.detail;
     text.append(name, detail);
+    if (c.online && c.statusText) {
+      const st = document.createElement("span");
+      st.className = "status-line";
+      st.textContent = c.statusText;
+      text.append(st);
+    }
 
     li.append(dot, text);
     if (c.unread > 0) {
@@ -177,11 +227,12 @@ function renderHeader() {
   if (!c) return;
   $("peer-name").textContent = c.displayName;
   let detail = c.detail;
+  if (c.online) detail += ` · ${statusLabel(c.status, c.statusText)}`;
   if (c.appVersion && c.appVersion !== state.self.version) {
     detail += ` · versión ${c.appVersion} (la tuya es ${state.self.version})`;
   }
   $("peer-detail").textContent = detail;
-  $("peer-dot").className = "dot" + (c.online ? " online" : "");
+  $("peer-dot").className = dotClass(c.online, c.status);
   const note = $("offline-note");
   note.hidden = c.online;
   note.textContent = `${c.displayName} está desconectado. Los mensajes que envíes se entregarán cuando se conecte.`;
@@ -674,6 +725,11 @@ function connectEvents() {
     if (!m.outgoing && m.peerId === state.current) markReadIfVisible();
   });
 
+  es.addEventListener("self", (e) => {
+    state.self = JSON.parse(e.data);
+    renderSelf();
+  });
+
   es.addEventListener("transfer", (e) => updateTransfer(JSON.parse(e.data)));
 
   es.addEventListener("progress", (e) => {
@@ -691,6 +747,8 @@ function connectEvents() {
 function bind() {
   $("search").addEventListener("input", renderContacts);
   $("settings-btn").addEventListener("click", openSettings);
+  $("status-btn").addEventListener("click", openStatus);
+  $("status-form").addEventListener("submit", saveStatus);
   $("settings-form").addEventListener("submit", saveSettings);
   $("alias-btn").addEventListener("click", openAlias);
   $("alias-form").addEventListener("submit", saveAlias);

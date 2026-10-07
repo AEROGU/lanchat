@@ -74,6 +74,14 @@ func TestDiscoveryUnicastBothWays(t *testing.T) {
 	if ev := waitEvent(t, a, PeerUpdated, "B"); ev.Peer.Name != "Ventas" {
 		t.Errorf("nombre = %q, quería Ventas", ev.Peer.Name)
 	}
+	if ev.Peer.Status != protocol.StatusAvailable {
+		t.Errorf("estado inicial = %q", ev.Peer.Status)
+	}
+
+	b.SetStatus(protocol.StatusBusy, "En junta")
+	if ev := waitEvent(t, a, PeerUpdated, "B"); ev.Peer.Status != protocol.StatusBusy || ev.Peer.StatusText != "En junta" {
+		t.Errorf("estado = %q %q", ev.Peer.Status, ev.Peer.StatusText)
+	}
 
 	cancelB()
 	for range b.Events() {

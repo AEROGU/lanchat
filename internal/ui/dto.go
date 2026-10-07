@@ -22,17 +22,26 @@ type stateJSON struct {
 type limitsJSON struct {
 	MaxName         int `json:"maxName"`
 	MaxMessageBytes int `json:"maxMessageBytes"`
+	MaxStatusText   int `json:"maxStatusText"`
 }
 
 type selfJSON struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Hostname string `json:"hostname"`
-	Version  string `json:"version"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Hostname   string `json:"hostname"`
+	Version    string `json:"version"`
+	Status     string `json:"status"`
+	StatusText string `json:"statusText"`
+	// Idle: ahora se anuncia Ausente por inactividad.
+	Idle     bool `json:"idle"`
+	AutoAway bool `json:"autoAway"`
 }
 
 func toSelfJSON(s app.Self) selfJSON {
-	return selfJSON{ID: s.ID, Name: s.Name, Hostname: s.Hostname, Version: version.App}
+	return selfJSON{
+		ID: s.ID, Name: s.Name, Hostname: s.Hostname, Version: version.App,
+		Status: s.Status, StatusText: s.StatusText, Idle: s.Idle, AutoAway: s.AutoAwayEnabled,
+	}
 }
 
 type contactJSON struct {
@@ -47,6 +56,9 @@ type contactJSON struct {
 	Online      bool   `json:"online"`
 	LastSeen    int64  `json:"lastSeen"`
 	Unread      int    `json:"unread"`
+	// Status: available, away o busy; vacío si está desconectado.
+	Status     string `json:"status"`
+	StatusText string `json:"statusText"`
 }
 
 func toContactJSON(c app.Contact) contactJSON {
@@ -62,6 +74,8 @@ func toContactJSON(c app.Contact) contactJSON {
 		Online:      c.Online,
 		LastSeen:    c.LastSeen.UnixMilli(),
 		Unread:      c.Unread,
+		Status:      c.Status,
+		StatusText:  c.StatusText,
 	}
 }
 

@@ -19,6 +19,9 @@ type Peer struct {
 	HTTPPort int
 	// AppVersion es la versión del programa que usa (puede estar vacía).
 	AppVersion string
+	// Status es protocol.StatusAvailable, StatusAway o StatusBusy.
+	Status     string
+	StatusText string
 	LastSeen   time.Time
 	Online     bool
 
@@ -36,7 +39,7 @@ type EventType int
 const (
 	// PeerOnline: equipo nuevo o que volvió a conectarse.
 	PeerOnline EventType = iota
-	// PeerUpdated: cambió su nombre, hostname, IP, puerto o versión.
+	// PeerUpdated: cambió su nombre, hostname, IP, puerto, versión o estado.
 	PeerUpdated
 	// PeerOffline: se despidió o dejó de anunciarse.
 	PeerOffline
@@ -86,12 +89,15 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 		IP:         src.Addr(),
 		HTTPPort:   p.HTTPPort,
 		AppVersion: p.App,
+		Status:     p.Status,
+		StatusText: p.StatusText,
 		LastSeen:   now,
 		Online:     true,
 		udp:        src,
 	}
 	changed := cur.Name != updated.Name || cur.Hostname != updated.Hostname || cur.IP != updated.IP ||
-		cur.HTTPPort != updated.HTTPPort || cur.AppVersion != updated.AppVersion
+		cur.HTTPPort != updated.HTTPPort || cur.AppVersion != updated.AppVersion ||
+		cur.Status != updated.Status || cur.StatusText != updated.StatusText
 	cameOnline = !cur.Online
 	*cur = updated
 

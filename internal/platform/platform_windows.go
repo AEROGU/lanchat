@@ -185,3 +185,29 @@ func RunElevated(exe, args string) (int, error) {
 	}
 	return int(code), nil
 }
+
+// ---------- Inactividad ----------
+
+var (
+	user32               = windows.NewLazySystemDLL("user32.dll")
+	procGetLastInputInfo = user32.NewProc("GetLastInputInfo")
+	kernel32             = windows.NewLazySystemDLL("kernel32.dll")
+	procGetTickCount     = kernel32.NewProc("GetTickCount")
+)
+
+// lastInputInfo es LASTINPUTINFO de user32.
+type lastInputInfo struct {
+	size uint32
+	time uint32 // GetTickCount del último uso de teclado o mouse
+}
+
+// IdleTime es cuánto tiempo lleva el usuario sin usar teclado ni mouse.
+func IdleTime() (time.Duration, error) {
+	info := lastInputInfo{size: uint32(unsafe.Sizeof(lastInputInfo{}))}
+	if ok, _, err := procGetLastInputInfo.Call(uintptr(unsafe.Pointer(&info))); ok == 0 {
+		return 0, err
+	}
+	now, _, _ := procGetTickCount.Call()
+	// Restar en uint32 tolera que el contador dé la vuelta (cada 49 días).
+	return time.Duration(uint32(now)-info.time) * time.Millisecond, nil
+}

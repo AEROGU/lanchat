@@ -40,3 +40,15 @@ func TestPeerTTLToleratesLostAnnounces(t *testing.T) {
 		t.Fatalf("PeerTTL (%v) debe superar 3 anuncios (%v)", PeerTTL, 3*AnnounceInterval)
 	}
 }
+
+func TestStatus(t *testing.T) {
+	for in, want := range map[string]string{"away": "away", "busy": "busy", "": "available", "vacaciones": "available"} {
+		if got := NormalizeStatus(in); got != want {
+			t.Errorf("NormalizeStatus(%q) = %q", in, got)
+		}
+	}
+	if ValidateStatusText("En junta hasta las 12 🕛") != nil || ValidateStatusText("a\nb") == nil ||
+		ValidateStatusText(strings.Repeat("x", MaxStatusTextLen+1)) == nil {
+		t.Error("ValidateStatusText")
+	}
+}

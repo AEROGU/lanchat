@@ -455,3 +455,11 @@ func TestSplitMultiSelect(t *testing.T) {
 		}
 	}
 }
+
+func (f *fakeBackend) SetStatus(status, text string) error {
+	if status != protocol.NormalizeStatus(status) {
+		return errors.New("estado desconocido")
+	}
+	return nil
+}
+func (f *fakeBackend) SetAutoAway(bool) error { return nil }

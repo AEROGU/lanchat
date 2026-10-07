@@ -33,6 +33,10 @@ const (
 	// shutdownTimeout: espera máxima a que terminen las peticiones en curso al cerrar.
 	shutdownTimeout = 5 * time.Second
 	eventBuffer     = 256
+	// autoAwayAfter: sin usar la PC este tiempo, se anuncia Ausente.
+	autoAwayAfter = 10 * time.Minute
+	// idleCheckInterval: cada cuánto se revisa la inactividad.
+	idleCheckInterval = 30 * time.Second
 )
 
 type Options struct {
@@ -44,6 +48,11 @@ type Options struct {
 	// HTTPAddr y Tune permiten a las pruebas usar loopback y puertos libres.
 	HTTPAddr string
 	Tune     func(*discovery.Config)
+	// IdleTime dice cuánto lleva el usuario sin usar la PC (platform.IdleTime);
+	// nil desactiva el ausente automático (modo consola).
+	IdleTime func() (time.Duration, error)
+	// IdleCheckInterval: cada cuánto se consulta IdleTime (0 = idleCheckInterval).
+	IdleCheckInterval time.Duration
 }
 
 type App struct {
@@ -59,8 +68,13 @@ type App struct {
 	// events lleva discovery.Event, chat.Event y transfer.Event.
 	events chan any
 
+	idleTime  func() (time.Duration, error)
+	idleCheck time.Duration
+
 	mu  sync.Mutex
 	cfg *config.Config
+	// idle: el ausente automático está activo ahora.
+	idle bool
 }
 
 func New(o Options) (a *App, err error) {
@@ -114,6 +128,8 @@ func New(o Options) (a *App, err error) {
 		UDPPort:     cfg.UDPPort,
 		HTTPPort:    srv.Port(),
 		ManualPeers: cfg.ManualPeers,
+		Status:      cfg.Status,
+		StatusText:  cfg.StatusText,
 	}
 	if o.Tune != nil {
 		o.Tune(&dcfg)
@@ -128,15 +144,17 @@ func New(o Options) (a *App, err error) {
 	ch.Register(srv)
 
 	a = &App{
-		dir:    o.Dir,
-		host:   o.Hostname,
-		log:    o.Log,
-		store:  st,
-		srv:    srv,
-		disc:   disc,
-		chat:   ch,
-		events: make(chan any, eventBuffer),
-		cfg:    cfg,
+		dir:       o.Dir,
+		host:      o.Hostname,
+		log:       o.Log,
+		store:     st,
+		srv:       srv,
+		disc:      disc,
+		chat:      ch,
+		events:    make(chan any, eventBuffer),
+		cfg:       cfg,
+		idleTime:  o.IdleTime,
+		idleCheck: cmp.Or(o.IdleCheckInterval, idleCheckInterval),
 	}
 	a.transfer = transfer.New(transfer.Config{
 		StagingDir:  filepath.Join(o.Dir, stagingDirName),
@@ -146,8 +164,8 @@ func New(o Options) (a *App, err error) {
 	return a, nil
 }
 
-// Events entrega discovery.Event, chat.Event y transfer.Event. Debe leerse
-// hasta que se cierre.
+// Events entrega discovery.Event, chat.Event, transfer.Event y SelfChanged.
+// Debe leerse hasta que se cierre.
 func (a *App) Events() <-chan any { return a.events }
 
 // Run funciona hasta que ctx se cancele; luego se despide de la red y cierra todo.
@@ -174,11 +192,17 @@ func (a *App) Run(ctx context.Context) error {
 
 	discErr := make(chan error, 1)
 	go func() { discErr <- a.disc.Run(ctx) }()
+	idleDone := make(chan struct{})
+	go func() {
+		defer close(idleDone)
+		a.watchIdle(ctx)
+	}()
 	for ev := range a.disc.Events() {
 		a.onPeer(ev)
 		a.events <- ev
 	}
 	discRunErr := <-discErr
+	<-idleDone
 
 	// Primero se cortan los envíos largos para que el servidor no los espere.
 	a.transfer.Stop()
@@ -211,12 +235,22 @@ type Self struct {
 	Name     string
 	Hostname string
 	Dir      string
+	// Status y StatusText son los elegidos por el usuario.
+	Status     string
+	StatusText string
+	// Idle: ahora se anuncia Ausente por inactividad.
+	Idle            bool
+	AutoAwayEnabled bool
 }
 
 func (a *App) Self() Self {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return Self{ID: a.cfg.ID, Name: a.cfg.Name, Hostname: a.host, Dir: a.dir}
+	return Self{
+		ID: a.cfg.ID, Name: a.cfg.Name, Hostname: a.host, Dir: a.dir,
+		Status: a.cfg.Status, StatusText: a.cfg.StatusText,
+		Idle: a.idle, AutoAwayEnabled: !a.cfg.DisableAutoAway,
+	}
 }
 
 // Contact es un equipo conocido, conectado o no.
@@ -232,6 +266,9 @@ type Contact struct {
 	LastSeen   time.Time
 	// Unread es la cantidad de mensajes suyos sin leer.
 	Unread int
+	// Status y StatusText: presencia anunciada (solo si está en línea).
+	Status     string
+	StatusText string
 }
 
 func contactFromStore(r store.Peer) Contact {
@@ -243,6 +280,10 @@ func contactFromStore(r store.Peer) Contact {
 func (c *Contact) overlay(p discovery.Peer) {
 	c.ID, c.Name, c.Hostname, c.IP = p.ID, p.Name, p.Hostname, p.IP.String()
 	c.AppVersion, c.Online, c.LastSeen = p.AppVersion, p.Online, p.LastSeen
+	c.Status, c.StatusText = "", ""
+	if p.Online {
+		c.Status, c.StatusText = p.Status, p.StatusText
+	}
 }
 
 // DisplayName: alias local > nombre elegido por el otro > hostname > IP.
@@ -509,4 +550,81 @@ func (a *App) FirstRun() (bool, error) {
 	}
 	a.cfg.SetupDone = true
 	return true, a.cfg.Save(a.dir)
+}
+
+// ---------- Estado ----------
+
+// SelfChanged es un evento: cambió algo de este equipo que la interfaz
+// muestra (p. ej. pasó a Ausente por inactividad).
+type SelfChanged struct{}
+
+// SetStatus cambia el estado elegido (protocol.Status*) y su texto.
+func (a *App) SetStatus(status, text string) error {
+	if status != protocol.NormalizeStatus(status) {
+		return fmt.Errorf("estado desconocido: %q", status)
+	}
+	text = strings.TrimSpace(text)
+	if err := protocol.ValidateStatusText(text); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	a.cfg.Status, a.cfg.StatusText = status, text
+	err := a.cfg.Save(a.dir)
+	a.mu.Unlock()
+	a.applyStatus()
+	return err
+}
+
+// SetAutoAway activa o desactiva el paso a Ausente por inactividad.
+func (a *App) SetAutoAway(enabled bool) error {
+	a.mu.Lock()
+	a.cfg.DisableAutoAway = !enabled
+	if !enabled {
+		a.idle = false
+	}
+	err := a.cfg.Save(a.dir)
+	a.mu.Unlock()
+	a.applyStatus()
+	return err
+}
+
+// applyStatus anuncia el estado efectivo: el elegido, salvo que el usuario
+// esté Disponible e inactivo, que se anuncia Ausente.
+func (a *App) applyStatus() {
+	a.mu.Lock()
+	status, text := a.cfg.Status, a.cfg.StatusText
+	if status == protocol.StatusAvailable && a.idle {
+		status = protocol.StatusAway
+	}
+	a.mu.Unlock()
+	a.disc.SetStatus(status, text)
+}
+
+// watchIdle revisa la inactividad hasta que ctx se cancele.
+func (a *App) watchIdle(ctx context.Context) {
+	if a.idleTime == nil {
+		return
+	}
+	t := time.NewTicker(a.idleCheck)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			d, err := a.idleTime()
+			if err != nil {
+				continue
+			}
+			a.mu.Lock()
+			idle := !a.cfg.DisableAutoAway && d >= autoAwayAfter
+			changed := idle != a.idle
+			a.idle = idle
+			a.mu.Unlock()
+			if changed {
+				a.applyStatus()
+				a.events <- SelfChanged{}
+			}
+		}
+	}
 }

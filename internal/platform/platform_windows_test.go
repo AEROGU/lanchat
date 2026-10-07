@@ -16,3 +16,10 @@ func TestAutostartCommand(t *testing.T) {
 		t.Errorf("comando = %s\nquería    %s", got, want)
 	}
 }
+
+func TestIdleTime(t *testing.T) {
+	d, err := IdleTime()
+	if err != nil || d < 0 {
+		t.Errorf("IdleTime = %v, %v", d, err)
+	}
+}
