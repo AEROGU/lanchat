@@ -289,3 +289,29 @@ func TestReadReceipts(t *testing.T) {
 		t.Error("con avisos desactivados no debía marcarse como leído")
 	}
 }
+
+// B y C solo conocen a A (como dos PCs de otra subred configuradas en una
+// sola PC); B descubre a C a través de la lista que comparte A.
+func TestSharedPeerLists(t *testing.T) {
+	a := startNode(t, testutil.TempDir(t), "PC-A")
+	c := startNode(t, testutil.TempDir(t), "PC-C", a.udpPort())
+	idA, idC := a.app.Self().ID, c.app.Self().ID
+	waitFor(t, a, "A ve a C", peerEvent(discovery.PeerOnline, idC))
+
+	b := startNode(t, testutil.TempDir(t), "PC-B", a.udpPort())
+	idB := b.app.Self().ID
+	waitFor(t, b, "B ve a A", peerEvent(discovery.PeerOnline, idA))
+	waitFor(t, b, "B descubre a C por A", peerEvent(discovery.PeerOnline, idC))
+	waitFor(t, c, "C ve a B", peerEvent(discovery.PeerOnline, idB))
+}
+
+func TestShareableAddr(t *testing.T) {
+	for ip, want := range map[string]bool{
+		"192.168.1.20": true, "10.0.5.3": true, "172.16.0.9": true, "127.0.0.1": true,
+		"8.8.8.8": false, "fe80::1": false,
+	} {
+		if got := shareableAddr(netip.MustParseAddr(ip)); got != want {
+			t.Errorf("%s: %v", ip, got)
+		}
+	}
+}

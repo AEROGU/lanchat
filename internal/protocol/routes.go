@@ -14,6 +14,9 @@ import (
 var (
 	// RouteMessage recibe un mensaje de chat (POST).
 	RouteMessage = APIPrefix + "/msg"
+	// RoutePeers entrega los equipos en línea que conoce este equipo (GET), para
+	// que los de otras subredes se descubran sin configurarlos en cada PC.
+	RoutePeers = APIPrefix + "/peers"
 	// RouteRead recibe avisos de lectura: el otro equipo leyó estos mensajes (POST).
 	RouteRead = APIPrefix + "/read"
 	// RouteFile entrega un archivo de una oferta (GET, admite Range).
@@ -47,6 +50,8 @@ const (
 	MaxTokenLen    = 128
 	// MaxReceiptIDs: mensajes por aviso de lectura (se envían en tandas).
 	MaxReceiptIDs = 500
+	// MaxSharedPeers: equipos por lista compartida.
+	MaxSharedPeers = 256
 )
 
 // Estados que un equipo puede comunicar al otro en RouteTransferState.

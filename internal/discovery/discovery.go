@@ -68,7 +68,10 @@ type Service struct {
 	statusText string
 	manual     []manualPeer
 	manualAddr []netip.AddrPort // última resolución de manual
-	dupWarned  bool
+	// hints son equipos que nos contaron otros equipos (p. ej. de otra
+	// subred), con la hora hasta la que se les sigue saludando.
+	hints     map[netip.AddrPort]time.Time
+	dupWarned bool
 }
 
 // New abre el socket UDP. Falla si el puerto ya está en uso, lo que normalmente
@@ -101,6 +104,7 @@ func New(cfg Config, log *slog.Logger) (*Service, error) {
 		log:        log,
 		events:     make(chan Event, eventBuffer),
 		refresh:    make(chan struct{}, 1),
+		hints:      map[netip.AddrPort]time.Time{},
 		manual:     manual,
 		name:       cfg.Name,
 		status:     protocol.NormalizeStatus(cfg.Status),
@@ -324,8 +328,16 @@ func (s *Service) targets() []netip.AddrPort {
 		}
 	}
 
+	now := time.Now()
 	s.mu.Lock()
 	manual := s.manualAddr
+	for ap, until := range s.hints {
+		if now.After(until) {
+			delete(s.hints, ap)
+			continue
+		}
+		manual = append(manual, ap)
+	}
 	s.mu.Unlock()
 	for _, ap := range manual {
 		add(ap)
@@ -372,3 +384,35 @@ func (s *Service) SetManualPeers(list []string) error {
 	}
 	return nil
 }
+
+// hintTTL: cuánto se saluda a un equipo que nos contó otro equipo; si
+// responde, desde entonces se le saluda como a cualquier conocido.
+const hintTTL = time.Hour
+
+// AddHints agrega equipos que conoce otro equipo (su dirección UDP) y los
+// saluda de inmediato. Así basta con configurar a mano una PC de otra subred
+// en un solo equipo.
+func (s *Service) AddHints(addrs []netip.AddrPort) {
+	until := time.Now().Add(hintTTL)
+	added := false
+	s.mu.Lock()
+	for _, ap := range addrs {
+		if !ap.Addr().Is4() {
+			continue
+		}
+		if _, ok := s.hints[ap]; !ok {
+			added = true
+		}
+		s.hints[ap] = until
+	}
+	s.mu.Unlock()
+	if added {
+		select {
+		case s.refresh <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// UDPAddr es la dirección UDP desde la que se anuncia el equipo.
+func (p Peer) UDPAddr() netip.AddrPort { return p.udp }

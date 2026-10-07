@@ -45,6 +45,8 @@ Rutas definidas en `internal/protocol/routes.go`:
 - `GET /v1/transfers/{id}/files/{idx}` — descarga; encabezado `X-Lanchat-Token`, admite `Range: bytes=N-` y manda el SHA-256 del archivo completo en el trailer `X-Lanchat-Sha256`.
 - `POST /v1/transfers/{id}/files/{idx}/done` — el destinatario confirma que llegó íntegro.
 - `POST /v1/transfers/{id}/state` — avisa un rechazo o cancelación al otro equipo.
+- `POST /v1/read` — avisos de lectura (IDs leídos, en tandas).
+- `GET /v1/peers` — equipos en línea que conoce este equipo (listas compartidas).
 
 ### Reglas de archivos
 1. El remitente ofrece; nada se transfiere hasta que el destinatario **acepta**.
@@ -89,8 +91,15 @@ packaging/            LEEME.txt del zip
 - [x] **Hito 4 — Archivos**: ofertas, aceptar/rechazar, descarga única, progreso, cancelar, reanudar, verificación SHA-256, arrastrar y soltar.
 - [x] **Hito 5 — Distribución**: `.exe` sin consola con ícono, versión y manifest; regla del firewall (`-firewall`, botón en Ajustes); inicio con Windows; `mage dist` arma el zip con LEEME.txt.
 
-### Fase 2
-Mensaje a varios / a todos · grupos locales de contactos · estados (Disponible/Ausente/Ocupado) con auto-ausente · confirmación de lectura · envío de carpetas · intercambio de listas de equipos entre PCs (gossip) para otras subredes.
+### Fase 2 (completa)
+- [x] Estados Disponible / Ausente / Ocupado con texto y ausente automático (10 min); Ocupado silencia notificaciones.
+- [x] Mensaje a varios / a todos (marcado "📢 Mensaje a varios").
+- [x] Confirmación de lectura (✓✓), desactivable.
+- [x] Grupos locales de contactos (lista plegable; selección por grupo en el mensaje a varios).
+- [x] Envío de carpetas (selector 📁 y arrastrar; estructura conservada; "Proyecto (1)" si ya existe).
+- [x] Listas de equipos compartidas (`GET /v1/peers`): una PC de otra subred configurada en un solo equipo llega a todos.
+
+Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue chateando con las nuevas (no ve estados ni ✓✓ y recibe las carpetas como archivos sueltos).
 
 ### Fase 3
 TLS entre equipos (certificado propio por PC, confianza en el primer uso) · salas de chat grupales · UI alternativa en tview.

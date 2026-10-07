@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -53,6 +54,8 @@ type Options struct {
 	IdleTime func() (time.Duration, error)
 	// IdleCheckInterval: cada cuánto se consulta IdleTime (0 = idleCheckInterval).
 	IdleCheckInterval time.Duration
+	// GossipInterval: cada cuánto se piden las listas de equipos (0 = gossipInterval).
+	GossipInterval time.Duration
 }
 
 type App struct {
@@ -68,8 +71,10 @@ type App struct {
 	// events lleva discovery.Event, chat.Event y transfer.Event.
 	events chan any
 
-	idleTime  func() (time.Duration, error)
-	idleCheck time.Duration
+	idleTime    func() (time.Duration, error)
+	idleCheck   time.Duration
+	gossipEvery time.Duration
+	http        *http.Client
 
 	mu  sync.Mutex
 	cfg *config.Config
@@ -144,18 +149,21 @@ func New(o Options) (a *App, err error) {
 	ch.Register(srv)
 
 	a = &App{
-		dir:       o.Dir,
-		host:      o.Hostname,
-		log:       o.Log,
-		store:     st,
-		srv:       srv,
-		disc:      disc,
-		chat:      ch,
-		events:    make(chan any, eventBuffer),
-		cfg:       cfg,
-		idleTime:  o.IdleTime,
-		idleCheck: cmp.Or(o.IdleCheckInterval, idleCheckInterval),
+		dir:         o.Dir,
+		host:        o.Hostname,
+		log:         o.Log,
+		store:       st,
+		srv:         srv,
+		disc:        disc,
+		chat:        ch,
+		events:      make(chan any, eventBuffer),
+		cfg:         cfg,
+		idleTime:    o.IdleTime,
+		idleCheck:   cmp.Or(o.IdleCheckInterval, idleCheckInterval),
+		gossipEvery: cmp.Or(o.GossipInterval, gossipInterval),
+		http:        peer.NewClient(),
 	}
+	srv.Handle("GET "+protocol.RoutePeers, http.HandlerFunc(a.handlePeers))
 	a.transfer = transfer.New(transfer.Config{
 		StagingDir:  filepath.Join(o.Dir, stagingDirName),
 		DownloadDir: a.configuredDownloadDir,
@@ -197,12 +205,22 @@ func (a *App) Run(ctx context.Context) error {
 		defer close(idleDone)
 		a.watchIdle(ctx)
 	}()
+	var gossipWG sync.WaitGroup
+	gossipWG.Add(1)
+	go func() {
+		defer gossipWG.Done()
+		a.gossipLoop(ctx, &gossipWG)
+	}()
 	for ev := range a.disc.Events() {
 		a.onPeer(ev)
+		if ev.Type == discovery.PeerOnline {
+			a.gossip(ctx, &gossipWG, ev.Peer)
+		}
 		a.events <- ev
 	}
 	discRunErr := <-discErr
 	<-idleDone
+	gossipWG.Wait()
 
 	// Primero se cortan los envíos largos para que el servidor no los espere.
 	a.transfer.Stop()
