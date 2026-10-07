@@ -198,8 +198,10 @@ type Contact struct {
 	Hostname string
 	IP       string
 	Alias    string
-	Online   bool
-	LastSeen time.Time
+	// AppVersion solo se conoce si el equipo se vio desde que arrancó LanChat.
+	AppVersion string
+	Online     bool
+	LastSeen   time.Time
 }
 
 // DisplayName: alias local > nombre elegido por el otro > hostname > IP.
@@ -240,7 +242,7 @@ func (a *App) Contacts(ctx context.Context) ([]Contact, error) {
 			out = append(out, c)
 		}
 		c.Name, c.Hostname, c.IP = p.Name, p.Hostname, p.IP.String()
-		c.Online, c.LastSeen = p.Online, p.LastSeen
+		c.Online, c.LastSeen, c.AppVersion = p.Online, p.LastSeen, p.AppVersion
 	}
 
 	res := make([]Contact, len(out))
@@ -265,7 +267,7 @@ func (a *App) Contact(ctx context.Context, id string) (Contact, bool, error) {
 	c := Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, LastSeen: r.LastSeen}
 	if p, live := a.disc.Peer(id); live {
 		c.ID, c.Name, c.Hostname, c.IP = p.ID, p.Name, p.Hostname, p.IP.String()
-		c.Online, c.LastSeen = p.Online, p.LastSeen
+		c.Online, c.LastSeen, c.AppVersion = p.Online, p.LastSeen, p.AppVersion
 		ok = true
 	}
 	return c, ok, nil

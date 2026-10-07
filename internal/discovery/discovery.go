@@ -12,6 +12,8 @@ import (
 	"net/netip"
 	"sync"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/version"
 )
 
 const (
@@ -136,6 +138,7 @@ func (s *Service) Run(ctx context.Context) error {
 
 func (s *Service) recvLoop() {
 	buf := make([]byte, 64*1024)
+	incompatWarned := map[netip.Addr]bool{}
 	for {
 		n, src, err := s.conn.ReadFromUDPAddrPort(buf)
 		if err != nil {
@@ -148,6 +151,13 @@ func (s *Service) recvLoop() {
 		}
 		p, err := decodePacket(buf[:n])
 		if err != nil {
+			var inc incompatibleError
+			if errors.As(err, &inc) && !incompatWarned[src.Addr()] {
+				incompatWarned[src.Addr()] = true
+				s.log.Warn("equipo con otra versión de LanChat; hay que actualizar uno de los dos",
+					"ip", src.Addr().Unmap(), "app", p.App, "err", err)
+				continue
+			}
 			s.log.Debug("paquete descartado", "src", src, "err", err)
 			continue
 		}
@@ -192,7 +202,8 @@ func (s *Service) packet(t packetType) packet {
 	defer s.mu.Unlock()
 	return packet{
 		Magic:    protoMagic,
-		Version:  protoVersion,
+		Version:  version.Protocol,
+		App:      version.App,
 		Type:     t,
 		ID:       s.cfg.ID,
 		Name:     s.name,

@@ -15,9 +15,11 @@ type Peer struct {
 	Hostname string
 	IP       netip.Addr
 	// Port es el puerto HTTP del equipo.
-	Port     int
-	LastSeen time.Time
-	Online   bool
+	Port int
+	// AppVersion es la versión del programa que usa (puede estar vacía).
+	AppVersion string
+	LastSeen   time.Time
+	Online     bool
 
 	// udp es la dirección UDP de origen de sus anuncios.
 	udp netip.AddrPort
@@ -33,7 +35,7 @@ type EventType int
 const (
 	// PeerOnline: equipo nuevo o que volvió a conectarse.
 	PeerOnline EventType = iota
-	// PeerUpdated: cambió su nombre, hostname, IP o puerto.
+	// PeerUpdated: cambió su nombre, hostname, IP, puerto o versión.
 	PeerUpdated
 	// PeerOffline: se despidió o dejó de anunciarse.
 	PeerOffline
@@ -77,7 +79,8 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 		r.peers[p.ID] = cur
 	}
 	ip := src.Addr()
-	changed := cur.Name != p.Name || cur.Hostname != p.Hostname || cur.IP != ip || cur.Port != p.Port
+	changed := cur.Name != p.Name || cur.Hostname != p.Hostname || cur.IP != ip ||
+		cur.Port != p.Port || cur.AppVersion != p.App
 	cameOnline = !cur.Online
 
 	cur.Name = p.Name
@@ -85,6 +88,7 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 	cur.IP = ip
 	cur.udp = src
 	cur.Port = p.Port
+	cur.AppVersion = p.App
 	cur.LastSeen = now
 	cur.Online = true
 

@@ -18,12 +18,19 @@ import (
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/version"
 )
 
 func main() {
 	dir := flag.String("dir", "", `carpeta de datos (por defecto %APPDATA%\LanChat)`)
 	debug := flag.Bool("debug", false, "mostrar mensajes de depuración")
+	showVersion := flag.Bool("version", false, "mostrar la versión y salir")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("LanChat %s (protocolo v%d)\n", version.App, version.Protocol)
+		return
+	}
 
 	level := slog.LevelInfo
 	if *debug {
@@ -47,7 +54,8 @@ func run(dir string, log *slog.Logger) error {
 	if name == "" {
 		name = "(sin nombre)"
 	}
-	fmt.Printf("LanChat — %s · %s\nDatos en %s\nEscribe /ayuda para ver los comandos.\n\n", name, self.Hostname, self.Dir)
+	fmt.Printf("LanChat %s — %s · %s\nDatos en %s\nEscribe /ayuda para ver los comandos.\n\n",
+		version.App, name, self.Hostname, self.Dir)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

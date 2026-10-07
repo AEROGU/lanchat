@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -132,7 +133,14 @@ func TestDecodePacketRejectsForeign(t *testing.T) {
 			t.Errorf("debía rechazar %s", b)
 		}
 	}
-	if _, err := decodePacket([]byte(`{"m":"lanchat","v":1,"t":"hello","id":"x","host":"h","port":50001}`)); err != nil {
-		t.Errorf("paquete válido rechazado: %v", err)
+	p, err := decodePacket([]byte(`{"m":"lanchat","v":1,"app":"1.0.0","t":"hello","id":"x","host":"h","port":50001,"campo_futuro":true}`))
+	if err != nil || p.App != "1.0.0" {
+		t.Errorf("paquete válido rechazado: %+v, %v", p, err)
+	}
+
+	_, err = decodePacket([]byte(`{"m":"lanchat","v":2,"t":"hello","id":"x","host":"h","port":50001}`))
+	var inc incompatibleError
+	if !errors.As(err, &inc) || inc.version != 2 {
+		t.Errorf("protocolo v2 debía ser incompatible, err = %v", err)
 	}
 }

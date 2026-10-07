@@ -25,18 +25,20 @@ import (
 	"github.com/AEROGU/lanchat/internal/ids"
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/version"
 )
 
 const (
 	// MaxBodyBytes es el tamaño máximo del texto de un mensaje.
 	MaxBodyBytes = 64 << 10
 
-	msgPath       = "/v1/msg"
 	retryInterval = 30 * time.Second
 	maxIDLen      = 64
 	maxNameLen    = 64
 	maxHostLen    = 255
 )
+
+var msgPath = version.APIPrefix + "/msg"
 
 // Directory dice dónde está cada equipo; lo implementa discovery.Service.
 type Directory interface {
