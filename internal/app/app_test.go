@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/discovery"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/testutil"
 )
 
 type node struct {
@@ -81,28 +81,6 @@ func (n *node) stop() {
 
 func (n *node) udpPort() int { return n.app.disc.LocalPort() }
 
-// tempDir es como t.TempDir pero reintenta el borrado: en Windows, el
-// antivirus puede retener un instante los archivos que SQLite acaba de
-// borrar (-wal, -shm) y la carpeta aparece "no vacía".
-func tempDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "lanchat-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		deadline := time.Now().Add(5 * time.Second)
-		for err := os.RemoveAll(dir); err != nil; err = os.RemoveAll(dir) {
-			if time.Now().After(deadline) {
-				t.Errorf("borrando %s: %v", dir, err)
-				return
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-	})
-	return dir
-}
-
 func waitFor(t *testing.T, n *node, what string, match func(any) bool) any {
 	t.Helper()
 	timeout := time.After(5 * time.Second)
@@ -136,8 +114,8 @@ func chatEvent(typ chat.EventType, body string) func(any) bool {
 }
 
 func TestChatDeliveryAndOfflineQueue(t *testing.T) {
-	dirB := tempDir(t)
-	a := startNode(t, tempDir(t), "PC-A")
+	dirB := testutil.TempDir(t)
+	a := startNode(t, testutil.TempDir(t), "PC-A")
 	b := startNode(t, dirB, "PC-B", a.udpPort())
 	idA, idB := a.app.Self().ID, b.app.Self().ID
 
@@ -179,8 +157,8 @@ func TestChatDeliveryAndOfflineQueue(t *testing.T) {
 }
 
 func TestNamesAndAliases(t *testing.T) {
-	a := startNode(t, tempDir(t), "PC-A")
-	b := startNode(t, tempDir(t), "PC-B", a.udpPort())
+	a := startNode(t, testutil.TempDir(t), "PC-A")
+	b := startNode(t, testutil.TempDir(t), "PC-B", a.udpPort())
 	idB := b.app.Self().ID
 	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idB))
 
@@ -214,8 +192,8 @@ func TestNamesAndAliases(t *testing.T) {
 
 func TestStatusAndAutoAway(t *testing.T) {
 	var idle atomic.Int64 // nanosegundos sin usar la PC (simulado)
-	a := startNode(t, tempDir(t), "PC-A")
-	b := startNodeWith(t, tempDir(t), "PC-B", func(o *Options) {
+	a := startNode(t, testutil.TempDir(t), "PC-A")
+	b := startNodeWith(t, testutil.TempDir(t), "PC-B", func(o *Options) {
 		o.IdleTime = func() (time.Duration, error) { return time.Duration(idle.Load()), nil }
 		o.IdleCheckInterval = 50 * time.Millisecond
 	}, a.udpPort())
@@ -254,9 +232,9 @@ func TestStatusAndAutoAway(t *testing.T) {
 }
 
 func TestSendMany(t *testing.T) {
-	a := startNode(t, tempDir(t), "PC-A")
-	b := startNode(t, tempDir(t), "PC-B", a.udpPort())
-	c := startNode(t, tempDir(t), "PC-C", a.udpPort())
+	a := startNode(t, testutil.TempDir(t), "PC-A")
+	b := startNode(t, testutil.TempDir(t), "PC-B", a.udpPort())
+	c := startNode(t, testutil.TempDir(t), "PC-C", a.udpPort())
 	idB, idC := b.app.Self().ID, c.app.Self().ID
 	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idB))
 	waitFor(t, a, "A ve a C", peerEvent(discovery.PeerOnline, idC))
@@ -274,5 +252,34 @@ func TestSendMany(t *testing.T) {
 	}
 	if _, err := a.app.SendMany(ctx, nil, "hola"); err == nil {
 		t.Error("sin contactos debía fallar")
+	}
+}
+
+func TestReadReceipts(t *testing.T) {
+	a := startNode(t, testutil.TempDir(t), "PC-A")
+	b := startNode(t, testutil.TempDir(t), "PC-B", a.udpPort())
+	idA, idB := a.app.Self().ID, b.app.Self().ID
+	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idB))
+	waitFor(t, b, "B ve a A", peerEvent(discovery.PeerOnline, idA))
+	ctx := context.Background()
+
+	m, _ := a.app.Send(ctx, idB, "¿leíste?")
+	waitFor(t, b, "B recibe", chatEvent(chat.MessageReceived, "¿leíste?"))
+	if _, err := b.app.MarkRead(ctx, idA); err != nil {
+		t.Fatal(err)
+	}
+	ev := waitFor(t, a, "A sabe que B leyó", chatEvent(chat.MessageRead, "¿leíste?")).(chat.Event)
+	if ev.Message.ID != m.ID || ev.Message.ReadAt.IsZero() {
+		t.Errorf("lectura: %+v", ev.Message)
+	}
+
+	// Con los avisos desactivados, A no se entera.
+	b.app.SetReadReceipts(false)
+	a.app.Send(ctx, idB, "segundo")
+	waitFor(t, b, "B recibe el segundo", chatEvent(chat.MessageReceived, "segundo"))
+	b.app.MarkRead(ctx, idA)
+	time.Sleep(500 * time.Millisecond)
+	if h, _ := a.app.History(ctx, idB, "", 1); !h[0].ReadAt.IsZero() {
+		t.Error("con avisos desactivados no debía marcarse como leído")
 	}
 }

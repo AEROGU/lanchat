@@ -37,6 +37,8 @@ type Config struct {
 	StatusText string `json:"status_text"`
 	// DisableAutoAway desactiva el paso a Ausente por inactividad.
 	DisableAutoAway bool `json:"disable_auto_away"`
+	// NoReadReceipts: no avisar a los demás cuando se leen sus mensajes.
+	NoReadReceipts bool `json:"no_read_receipts"`
 }
 
 // DefaultDir devuelve %APPDATA%\LanChat (o su equivalente en otros sistemas).

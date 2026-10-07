@@ -14,6 +14,8 @@ import (
 var (
 	// RouteMessage recibe un mensaje de chat (POST).
 	RouteMessage = APIPrefix + "/msg"
+	// RouteRead recibe avisos de lectura: el otro equipo leyó estos mensajes (POST).
+	RouteRead = APIPrefix + "/read"
 	// RouteFile entrega un archivo de una oferta (GET, admite Range).
 	RouteFile = APIPrefix + "/transfers/{id}/files/{idx}"
 	// RouteFileDone confirma que el archivo llegó íntegro (POST).
@@ -43,6 +45,8 @@ const (
 	MaxOfferFiles  = 1000
 	MaxFileNameLen = 255 // en bytes
 	MaxTokenLen    = 128
+	// MaxReceiptIDs: mensajes por aviso de lectura (se envían en tandas).
+	MaxReceiptIDs = 500
 )
 
 // Estados que un equipo puede comunicar al otro en RouteTransferState.

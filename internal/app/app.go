@@ -241,6 +241,8 @@ type Self struct {
 	// Idle: ahora se anuncia Ausente por inactividad.
 	Idle            bool
 	AutoAwayEnabled bool
+	// ReadReceipts: se avisa a los demás cuando se leen sus mensajes.
+	ReadReceipts bool
 }
 
 func (a *App) Self() Self {
@@ -250,6 +252,7 @@ func (a *App) Self() Self {
 		ID: a.cfg.ID, Name: a.cfg.Name, Hostname: a.host, Dir: a.dir,
 		Status: a.cfg.Status, StatusText: a.cfg.StatusText,
 		Idle: a.idle, AutoAwayEnabled: !a.cfg.DisableAutoAway,
+		ReadReceipts: !a.cfg.NoReadReceipts,
 	}
 }
 
@@ -371,7 +374,22 @@ func (a *App) TotalUnread(ctx context.Context) (int, error) {
 // MarkRead marca como leídos los mensajes de peerID; changed indica si había
 // alguno sin leer.
 func (a *App) MarkRead(ctx context.Context, peerID string) (changed bool, err error) {
-	return a.store.MarkRead(ctx, peerID)
+	a.mu.Lock()
+	receipts := !a.cfg.NoReadReceipts
+	a.mu.Unlock()
+	changed, err = a.store.MarkRead(ctx, peerID, receipts)
+	if changed && receipts {
+		a.chat.Flush(peerID) // envía el aviso de lectura ya
+	}
+	return changed, err
+}
+
+// SetReadReceipts activa o desactiva los avisos de lectura a los demás.
+func (a *App) SetReadReceipts(enabled bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.NoReadReceipts = !enabled
+	return a.cfg.Save(a.dir)
 }
 
 // Send envía (o deja en cola) un mensaje para el contacto.

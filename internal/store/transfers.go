@@ -114,12 +114,8 @@ func (s *Store) TransfersByID(ctx context.Context, ids []string) (map[string]Tra
 	if len(ids) == 0 {
 		return out, nil
 	}
-	args := make([]any, len(ids))
-	for i, id := range ids {
-		args[i] = id
-	}
 	ts, err := s.queryTransfers(ctx, `SELECT `+transferColumns+` FROM transfers WHERE id IN (?`+
-		strings.Repeat(", ?", len(ids)-1)+`)`, args...)
+		strings.Repeat(", ?", len(ids)-1)+`)`, anySlice(ids)...)
 	for _, t := range ts {
 		out[t.ID] = t
 	}

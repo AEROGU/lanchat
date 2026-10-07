@@ -2,6 +2,7 @@ package ui
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -35,12 +36,15 @@ type selfJSON struct {
 	// Idle: ahora se anuncia Ausente por inactividad.
 	Idle     bool `json:"idle"`
 	AutoAway bool `json:"autoAway"`
+	// ReadReceipts: se avisa a los demás cuando se leen sus mensajes.
+	ReadReceipts bool `json:"readReceipts"`
 }
 
 func toSelfJSON(s app.Self) selfJSON {
 	return selfJSON{
 		ID: s.ID, Name: s.Name, Hostname: s.Hostname, Version: version.App,
 		Status: s.Status, StatusText: s.StatusText, Idle: s.Idle, AutoAway: s.AutoAwayEnabled,
+		ReadReceipts: s.ReadReceipts,
 	}
 }
 
@@ -92,6 +96,8 @@ type messageJSON struct {
 	Transfer *transferJSON `json:"transfer,omitempty"`
 	// Broadcast: enviado a varios contactos a la vez.
 	Broadcast bool `json:"broadcast"`
+	// ReadAt: cuándo el destinatario lo leyó (0 si no se sabe).
+	ReadAt int64 `json:"readAt"`
 }
 
 func toMessageJSON(m store.Message) messageJSON {
@@ -112,7 +118,16 @@ func toMessageJSON(m store.Message) messageJSON {
 		At:        m.At.UnixMilli(),
 		Status:    status,
 		Broadcast: m.Broadcast,
+		ReadAt:    unixMilli(m.ReadAt),
 	}
+}
+
+// unixMilli es 0 para la hora cero (en vez de un número negativo).
+func unixMilli(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 type transferJSON struct {

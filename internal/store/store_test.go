@@ -8,12 +8,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/testutil"
 )
 
 func openTest(t *testing.T) *Store {
 	t.Helper()
 	// Ruta con espacios y acentos, como suele pasar en %APPDATA%.
-	dir := filepath.Join(t.TempDir(), "carpeta con espacios ñ")
+	dir := filepath.Join(testutil.TempDir(t), "carpeta con espacios ñ")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -108,10 +110,10 @@ func TestUnread(t *testing.T) {
 	if err != nil || counts["a"] != 2 || counts["b"] != 1 {
 		t.Fatalf("counts = %v, %v", counts, err)
 	}
-	if changed, err := s.MarkRead(ctx, "a"); err != nil || !changed {
+	if changed, err := s.MarkRead(ctx, "a", true); err != nil || !changed {
 		t.Fatalf("MarkRead = %v, %v", changed, err)
 	}
-	if changed, _ := s.MarkRead(ctx, "a"); changed {
+	if changed, _ := s.MarkRead(ctx, "a", true); changed {
 		t.Error("la segunda vez no debía cambiar nada")
 	}
 	counts, _ = s.UnreadCounts(ctx)
@@ -200,5 +202,43 @@ func TestHistorySameMillisecond(t *testing.T) {
 	}
 	if strings.Join(got, ",") != "a4,a3,a2,a1" {
 		t.Errorf("paginado = %v", got)
+	}
+}
+
+func TestReadReceipts(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	now := time.Now()
+	for _, m := range []Message{
+		{ID: "in1", PeerID: "a", Body: "x", At: now, SentAt: now, Unread: true},
+		{ID: "in2", PeerID: "a", Body: "x", At: now, SentAt: now, Unread: true},
+		{ID: "out1", PeerID: "a", Outgoing: true, Body: "x", At: now, SentAt: now},
+		{ID: "out2", PeerID: "b", Outgoing: true, Body: "x", At: now, SentAt: now},
+	} {
+		if _, err := s.InsertMessage(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Leer con avisos activados deja los avisos pendientes.
+	s.MarkRead(ctx, "a", true)
+	ids, _ := s.PendingReceipts(ctx, "a", 10)
+	peers, _ := s.PeersWithPendingReceipts(ctx)
+	if strings.Join(ids, ",") != "in1,in2" || len(peers) != 1 {
+		t.Fatalf("pendientes = %v, %v", ids, peers)
+	}
+	s.ClearReceipts(ctx, ids)
+	if ids, _ := s.PendingReceipts(ctx, "a", 10); len(ids) != 0 {
+		t.Errorf("tras limpiar quedan %v", ids)
+	}
+
+	// "a" avisa que leyó: solo cambia lo que le enviamos a "a".
+	at := time.UnixMilli(1_700_000_000_000)
+	got, err := s.MarkReadByPeer(ctx, "a", []string{"out1", "out2", "in1"}, at)
+	if err != nil || len(got) != 1 || got[0].ID != "out1" || !got[0].ReadAt.Equal(at) {
+		t.Fatalf("MarkReadByPeer = %+v, %v", got, err)
+	}
+	if h, _ := s.History(ctx, "b", "", 1); !h[0].ReadAt.IsZero() {
+		t.Error("no debía marcar mensajes de otro contacto")
 	}
 }

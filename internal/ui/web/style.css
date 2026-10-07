@@ -254,6 +254,7 @@ button, input, textarea { font: inherit; color: inherit; }
 
 .msg.pending .meta::after { content: " · pendiente"; }
 .msg.out.delivered .meta::after { content: " ✓"; }
+.msg.out.delivered.read .meta::after { content: " ✓✓"; color: var(--brand); }
 
 /* ---------- Archivos ---------- */
 

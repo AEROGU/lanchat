@@ -15,6 +15,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/discovery"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/testutil"
 )
 
 type noPeers struct{}
@@ -23,7 +24,7 @@ func (noPeers) Peer(string) (discovery.Peer, bool) { return discovery.Peer{}, fa
 
 func newTestService(t *testing.T) *Service {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	st, err := store.Open(filepath.Join(testutil.TempDir(t), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

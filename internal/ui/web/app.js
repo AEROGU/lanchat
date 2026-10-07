@@ -61,6 +61,7 @@ const api = {
   name: (name) => request("POST", "/api/name", { name }),
   status: (status, text, autoAway) => request("POST", "/api/status", { status, text, autoAway }),
   sendMany: (peers, body) => request("POST", "/api/messages/many", { peers, body }),
+  readReceipts: (enabled) => request("POST", "/api/read-receipts", { enabled }),
   alias: (peer, alias) => request("POST", "/api/alias", { peer, alias }),
   manualPeers: (peers) => request("POST", "/api/manual-peers", { peers }),
   presence: (focused, viewing) => request("POST", "/api/presence", { focused, viewing }),
@@ -252,7 +253,7 @@ function dayLabel(ts) {
 function messageElement(m) {
   if (m.kind === "files" && m.transfer) return transferCard(m);
   const div = document.createElement("div");
-  div.className = `msg ${m.outgoing ? "out" : "in"} ${m.status}`;
+  div.className = msgClass(m);
   div.dataset.id = m.id;
   if (m.broadcast) {
     const tag = document.createElement("span");
@@ -264,11 +265,18 @@ function messageElement(m) {
   return div;
 }
 
+// msgClass: dirección, estado de entrega y si el destinatario ya lo leyó.
+function msgClass(m) {
+  return `msg ${m.outgoing ? "out" : "in"} ${m.status}` + (m.readAt ? " read" : "");
+}
+
 function metaElement(m) {
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = timeFmt.format(new Date(m.at));
   if (m.status === "pending") meta.title = "Pendiente: se entregará cuando el contacto se conecte";
+  else if (m.outgoing && m.readAt) meta.title = `Leído: ${dayLabel(m.readAt)} ${timeFmt.format(new Date(m.readAt))}`;
+  else if (m.outgoing) meta.title = "Entregado";
   return meta;
 }
 
@@ -328,7 +336,7 @@ function transferStatus(m, t) {
 function transferCard(m) {
   const t = m.transfer;
   const div = document.createElement("div");
-  div.className = `msg ${m.outgoing ? "out" : "in"} files ${t.state} ${m.status}`;
+  div.className = `${msgClass(m)} files ${t.state}`;
   div.dataset.id = m.id;
 
   const title = document.createElement("div");
@@ -603,6 +611,7 @@ function openSettings() {
   $("name-help").textContent = `Así te verán los demás. Vacío = se usa el nombre del equipo (${s.hostname}).`;
   $("peers-input").value = (state.manualPeers ?? []).join("\n");
   $("download-input").value = state.downloadDir;
+  $("receipts-input").checked = state.self.readReceipts;
   $("about").textContent = `LanChat ${s.version} · ${s.hostname}`;
   $("settings-error").hidden = true;
   $("settings").showModal();
@@ -619,6 +628,14 @@ function renderSystem(sys) {
 function settingsError(e) {
   $("settings-error").textContent = e.message;
   $("settings-error").hidden = false;
+}
+
+async function toggleReceipts() {
+  try {
+    state.self = await api.readReceipts($("receipts-input").checked);
+  } catch (e) {
+    settingsError(e);
+  }
 }
 
 async function toggleAutostart() {
@@ -842,6 +859,7 @@ function bind() {
   $("input").addEventListener("input", autoGrow);
   $("attach-btn").addEventListener("click", pickAndSend);
   $("autostart-input").addEventListener("change", toggleAutostart);
+  $("receipts-input").addEventListener("change", toggleReceipts);
   $("firewall-btn").addEventListener("click", allowFirewall);
   $("open-downloads").addEventListener("click", () =>
     api.openDownloadDir().catch((e) => showBanner(e.message, 5000)));

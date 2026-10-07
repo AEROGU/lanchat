@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -58,6 +59,8 @@ const (
 	MessageQueued
 	// MessageDelivered: el destinatario confirmó que lo guardó.
 	MessageDelivered
+	// MessageRead: el destinatario leyó un mensaje que le enviamos.
+	MessageRead
 )
 
 type Event struct {
@@ -179,6 +182,7 @@ func New(self Identity, st *store.Store, dir Directory, client *http.Client, log
 // Register agrega la ruta de mensajes al servidor entre equipos.
 func (s *Service) Register(srv *peer.Server) {
 	srv.Handle("POST "+protocol.RouteMessage, http.HandlerFunc(s.handleMsg))
+	srv.Handle("POST "+protocol.RouteRead, http.HandlerFunc(s.handleRead))
 }
 
 // Events debe leerse hasta que se cierre (en Close).
@@ -289,6 +293,7 @@ func (s *Service) flush(peerID string) {
 		m.Status = store.StatusDelivered
 		s.emit(Event{MessageDelivered, m})
 	}
+	s.sendReceipts(p)
 }
 
 func (s *Service) deliver(p discovery.Peer, m store.Message) error {
@@ -311,26 +316,32 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 		}
 		wm.Offer = toWireOffer(t)
 	}
-	b, err := json.Marshal(wm)
+	status, err := s.post(p, protocol.RouteMessage, wm)
+	if err == nil && status != http.StatusNoContent {
+		err = fmt.Errorf("respuesta %d", status)
+	}
+	return err
+}
+
+// post envía v como JSON al equipo p y devuelve el código de respuesta.
+func (s *Service) post(p discovery.Peer, path string, v any) (int, error) {
+	b, err := json.Marshal(v)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	req, err := http.NewRequestWithContext(s.ctx, http.MethodPost,
-		"http://"+p.HTTPAddr().String()+protocol.RouteMessage, bytes.NewReader(b))
+		"http://"+p.HTTPAddr().String()+path, bytes.NewReader(b))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseDrain)) // permite reutilizar la conexión
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("respuesta %s", resp.Status)
-	}
-	return nil
+	return resp.StatusCode, nil
 }
 
 func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
@@ -402,11 +413,12 @@ func (s *Service) retryLoop() {
 			return
 		case <-t.C:
 			peers, err := s.store.PeersWithPending(s.ctx)
-			if err != nil {
+			withReceipts, rerr := s.store.PeersWithPendingReceipts(s.ctx)
+			if err = errors.Join(err, rerr); err != nil {
 				s.log.Error("buscando pendientes", "err", err)
 				continue
 			}
-			for _, id := range peers {
+			for _, id := range slices.Compact(slices.Sorted(slices.Values(append(peers, withReceipts...)))) {
 				s.Flush(id)
 			}
 		}

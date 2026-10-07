@@ -71,6 +71,7 @@ type Backend interface {
 	SetName(name string) error
 	SetStatus(status, text string) error
 	SetAutoAway(enabled bool) error
+	SetReadReceipts(enabled bool) error
 	SetAlias(ctx context.Context, peerID, alias string) error
 	ManualPeers() []string
 	SetManualPeers(peers []string) error
@@ -236,6 +237,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/read", s.handleRead)
 	mux.HandleFunc("POST /api/name", s.handleName)
 	mux.HandleFunc("POST /api/status", s.handleStatus)
+	mux.HandleFunc("POST /api/read-receipts", s.handleReadReceipts)
 	mux.HandleFunc("POST /api/alias", s.handleAlias)
 	mux.HandleFunc("POST /api/manual-peers", s.handleManualPeers)
 	mux.HandleFunc("POST /api/presence", s.handlePresence)
@@ -572,4 +574,18 @@ func (s *Server) handleSendMany(w http.ResponseWriter, r *http.Request) {
 		out.Error = err.Error()
 	}
 	writeJSON(w, http.StatusCreated, out)
+}
+
+func (s *Server) handleReadReceipts(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	if err := s.b.SetReadReceipts(req.Enabled); err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
 }

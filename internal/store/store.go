@@ -72,6 +72,13 @@ var migrations = [][]string{
 		// broadcast = 1: se envió a varios contactos a la vez.
 		`ALTER TABLE messages ADD COLUMN broadcast INTEGER NOT NULL DEFAULT 0`,
 	},
+	{
+		// read_at: hora (ms) en que el destinatario leyó un mensaje saliente.
+		// receipt = 1: hay que avisar al remitente que leímos este entrante.
+		`ALTER TABLE messages ADD COLUMN read_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE messages ADD COLUMN receipt INTEGER NOT NULL DEFAULT 0`,
+		`CREATE INDEX messages_receipt ON messages(peer_id) WHERE receipt = 1`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -225,6 +232,8 @@ type Message struct {
 	Kind   Kind
 	// Broadcast: se envió a varios contactos a la vez ("Mensaje a varios").
 	Broadcast bool
+	// ReadAt: cuándo el destinatario leyó este mensaje saliente (cero si no se sabe).
+	ReadAt time.Time
 }
 
 type Kind int
@@ -235,7 +244,11 @@ const (
 	KindFiles Kind = 1
 )
 
+// messageColumns son las que se escriben al insertar; messageSelect agrega las
+// que solo cambian después.
 const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast`
+
+const messageSelect = messageColumns + `, read_at`
 
 // InsertMessage guarda el mensaje; inserted es false si ese ID ya existía
 // (un reenvío del mismo mensaje).
@@ -275,10 +288,10 @@ func (s *Store) MarkDelivered(ctx context.Context, id string) error {
 }
 
 // MarkRead marca como leídos los mensajes entrantes de peerID; changed indica
-// si había alguno sin leer.
-func (s *Store) MarkRead(ctx context.Context, peerID string) (changed bool, err error) {
+// si había alguno sin leer. Con receipts, quedan pendientes de avisar al remitente.
+func (s *Store) MarkRead(ctx context.Context, peerID string, receipts bool) (changed bool, err error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE messages SET unread = 0 WHERE peer_id = ? AND unread = 1`, peerID)
+		`UPDATE messages SET unread = 0, receipt = ? WHERE peer_id = ? AND unread = 1`, receipts, peerID)
 	if err != nil {
 		return false, err
 	}
@@ -308,7 +321,7 @@ func (s *Store) UnreadCounts(ctx context.Context) (map[string]int, error) {
 
 // Pending devuelve los mensajes salientes sin entregar a peerID, del más antiguo al más nuevo.
 func (s *Store) Pending(ctx context.Context, peerID string) ([]Message, error) {
-	return s.queryMessages(ctx, `SELECT `+messageColumns+` FROM messages
+	return s.queryMessages(ctx, `SELECT `+messageSelect+` FROM messages
 		WHERE peer_id = ? AND status = ? ORDER BY at, rowid`, peerID, StatusPending)
 }
 
@@ -344,7 +357,7 @@ func (s *Store) History(ctx context.Context, peerID, beforeID string, limit int)
 			return nil, fmt.Errorf("mensaje de referencia %s: %w", beforeID, err)
 		}
 	}
-	msgs, err := s.queryMessages(ctx, `SELECT `+messageColumns+` FROM messages
+	msgs, err := s.queryMessages(ctx, `SELECT `+messageSelect+` FROM messages
 		WHERE peer_id = ? AND (at, rowid) < (?, ?)
 		ORDER BY at DESC, rowid DESC LIMIT ?`, peerID, at, rowid, limit)
 	if err != nil {
@@ -363,12 +376,16 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 	var out []Message
 	for rows.Next() {
 		var m Message
-		var at, sent int64
-		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread, &m.Kind, &m.Broadcast); err != nil {
+		var at, sent, readAt int64
+		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread,
+			&m.Kind, &m.Broadcast, &readAt); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)
 		m.SentAt = time.UnixMilli(sent)
+		if readAt > 0 {
+			m.ReadAt = time.UnixMilli(readAt)
+		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
