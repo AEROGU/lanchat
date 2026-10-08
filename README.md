@@ -88,6 +88,28 @@ P-256 en `identity.key`) y los demás la reconocen por su **huella**:
 Desde la 0.10 se usa el protocolo v2 (cifrado), que no se comunica con
 versiones anteriores: hay que actualizar todas las PCs.
 
+## Privacidad
+
+En **Ajustes > Privacidad**:
+
+- **Descargar mis datos**: guarda en Descargas una copia de `lanchat.db`
+  (historial, contactos, salas y ofertas de archivos). Se abre con cualquier
+  programa para SQLite, p. ej. DB Browser for SQLite.
+- **Borrar todos mis datos** (p. ej. cuando alguien deja la empresa): sale de
+  las salas avisando a los demás, cancela los archivos pendientes y borra las
+  conversaciones, salas, alias y grupos de contactos, el nombre y el mensaje
+  de estado. Pide escribir `BORRAR` para confirmar. Conserva la configuración
+  de red y la identidad de la PC. Los archivos ya recibidos quedan en su
+  carpeta.
+
+Cada conversación (o sala) tiene además el botón **Borrar**: borra sus
+mensajes y cancela los archivos pendientes con ese contacto; el contacto se
+conserva. Borrar una sala de la que ya saliste la quita de la lista.
+
+Lo borrado no queda recuperable en `lanchat.db`: la base usa `secure_delete`
+(sobrescribe con ceros) y se vacía su registro (`-wal`). Borrar es solo en
+esta PC: los demás conservan su copia de las conversaciones.
+
 ## Archivos en `%APPDATA%\LanChat`
 
 | Archivo | Contenido |
@@ -95,7 +117,7 @@ versiones anteriores: hay que actualizar todas las PCs.
 | `config.json` | ID del equipo, nombre, puertos, equipos de otras subredes |
 | `identity.key`, `identity.crt` | identidad de esta PC; no copiarlos a otra PC (si se borran, los demás verán "identidad cambió") |
 | `lanchat.db` | contactos, alias e historial (SQLite) |
-| `lanchat.log` | registro (se rota al pasar de 1 MB) |
+| `lanchat.log` | registro (se rota al pasar de 1 MB); no guarda mensajes |
 | `ui.json` | puerto y token de la ventana; existe mientras LanChat está abierto |
 | `icon.png` | icono que usan las notificaciones |
 | `edge\` | perfil de Edge de la ventana de LanChat |

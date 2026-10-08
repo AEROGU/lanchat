@@ -98,7 +98,7 @@ func (s *Server) handleRoomSend(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRoomAction atiende los cambios a una sala: agregar miembros,
-// renombrar, salir y marcar como leída.
+// renombrar, salir, borrar sus mensajes y marcar como leída.
 func (s *Server) handleRoomAction(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Room    string   `json:"room"`
@@ -117,6 +117,8 @@ func (s *Server) handleRoomAction(w http.ResponseWriter, r *http.Request) {
 		err = s.b.RenameRoom(ctx, req.Room, req.Name)
 	case "leave":
 		err = s.b.LeaveRoom(ctx, req.Room)
+	case "delete":
+		err = s.deleteRoom(r, req.Room)
 	case "read":
 		var changed bool
 		if changed, err = s.b.MarkRoomRead(ctx, req.Room); err == nil && changed {

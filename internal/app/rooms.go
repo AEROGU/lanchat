@@ -35,10 +35,11 @@ func (a *App) Rooms(ctx context.Context) ([]Room, error) {
 	return out, nil
 }
 
+// Room busca una sala visible (las borradas no cuentan).
 func (a *App) Room(ctx context.Context, id string) (Room, bool, error) {
 	r, ok, err := a.store.Room(ctx, id)
-	if err != nil || !ok {
-		return Room{}, ok, err
+	if err != nil || !ok || r.Hidden {
+		return Room{}, false, err
 	}
 	unread, err := a.store.RoomUnreadCounts(ctx)
 	return Room{Room: r, Unread: unread[id]}, true, err

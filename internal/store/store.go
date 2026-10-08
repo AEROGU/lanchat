@@ -113,6 +113,11 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX room_deliveries_pending ON room_deliveries(peer_id) WHERE delivered = 0`,
 	},
+	{
+		// hidden: sala borrada de la que este equipo ya salió. Se conserva
+		// para ignorar los mensajes de quienes aún no saben que salió.
+		`ALTER TABLE rooms ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -123,8 +128,9 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	// WAL: las lecturas no bloquean a las escrituras.
-	db, err := sql.Open("sqlite", fmt.Sprintf("%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)",
+	// WAL: las lecturas no bloquean a las escrituras. secure_delete: lo borrado
+	// se sobrescribe con ceros (ver privacy.go).
+	db, err := sql.Open("sqlite", fmt.Sprintf("%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=secure_delete(on)",
 		path, busyTimeout.Milliseconds()))
 	if err != nil {
 		return nil, err

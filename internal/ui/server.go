@@ -98,6 +98,11 @@ type Backend interface {
 	SendRoom(ctx context.Context, roomID, body string) (store.Message, error)
 	RoomHistory(ctx context.Context, roomID, beforeID string, limit int) ([]store.Message, error)
 	MarkRoomRead(ctx context.Context, roomID string) (bool, error)
+
+	ExportData(ctx context.Context, path string) error
+	DeleteConversation(ctx context.Context, peerID string) error
+	DeleteRoomConversation(ctx context.Context, roomID string) error
+	WipeData(ctx context.Context) error
 }
 
 type Server struct {
@@ -262,6 +267,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
 	mux.HandleFunc("POST /api/download-dir", s.handleDownloadDir)
 	mux.HandleFunc("POST /api/download-dir/open", s.handleOpenDownloadDir)
+	mux.HandleFunc("GET /api/data/export", s.handleExport)
+	mux.HandleFunc("POST /api/data/wipe", s.handleWipe)
+	mux.HandleFunc("POST /api/conversation/delete", s.handleDeleteConversation)
 	mux.HandleFunc("POST /api/rooms", s.handleCreateRoom)
 	mux.HandleFunc("GET /api/rooms/messages", s.handleRoomHistory)
 	mux.HandleFunc("POST /api/rooms/messages", s.handleRoomSend)

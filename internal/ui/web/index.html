@@ -54,6 +54,7 @@
         <button id="room-add-btn" class="text-btn room-only" title="Agregar contactos a la sala">Agregar</button>
         <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
         <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
+        <button id="delete-chat-btn" class="text-btn danger-btn" title="Borrar esta conversación de esta PC">Borrar</button>
       </header>
 
       <div id="identity-note" class="note danger" hidden>
@@ -112,6 +113,13 @@
         </div>
         <small class="help">Hace falta para recibir mensajes y archivos en redes privadas. Pide permiso de administrador.</small>
       </div>
+
+      <label>Privacidad</label>
+      <div class="input-row">
+        <button type="button" id="export-btn" class="text-btn">Descargar mis datos</button>
+        <button type="button" id="wipe-open-btn" class="text-btn danger-btn">Borrar todos mis datos…</button>
+      </div>
+      <small class="help">La copia es la base de datos de LanChat (se abre con programas para SQLite, p. ej. DB Browser for SQLite). Para borrar una sola conversación usa "Borrar" dentro de ella.</small>
 
       <p id="settings-error" class="error" hidden></p>
       <p class="about" id="about"></p>
@@ -198,6 +206,28 @@
       <div class="actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button value="save" class="primary" id="room-save"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="wipe-dialog">
+    <form method="dialog" id="wipe-form">
+      <h2>Borrar todos mis datos</h2>
+      <p class="help">Por ejemplo, cuando dejas de usar esta PC o de trabajar en la empresa. Se borra de esta PC:</p>
+      <ul class="help-list">
+        <li>todas las conversaciones y salas (sales de ellas y se avisa a los demás),</li>
+        <li>las ofertas de archivos (las pendientes se cancelan),</li>
+        <li>los alias y grupos que pusiste a tus contactos,</li>
+        <li>tu nombre y tu mensaje de estado.</li>
+      </ul>
+      <p class="help">No se puede deshacer. Los demás conservan su copia de las conversaciones. Los archivos ya recibidos siguen en <span id="wipe-downloads"></span>: bórralos aparte si hace falta.</p>
+      <p class="help"><button type="button" id="wipe-export-btn" class="link-btn">Descargar antes una copia de mis datos</button></p>
+      <label for="wipe-input">Escribe <strong>BORRAR</strong> para confirmar</label>
+      <input id="wipe-input" autocomplete="off" spellcheck="false">
+      <p id="wipe-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary danger" id="wipe-btn" disabled>Borrar todo</button>
       </div>
     </form>
   </dialog>

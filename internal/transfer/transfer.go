@@ -548,6 +548,25 @@ func (s *Service) Cancel(ctx context.Context, id string) error {
 	return nil
 }
 
+// CancelAll cancela las transferencias sin terminar con peerID ("" = con
+// todos), avisando al otro equipo; se usa antes de borrar conversaciones.
+func (s *Service) CancelAll(ctx context.Context, peerID string) error {
+	var errs []error
+	for _, outgoing := range []bool{true, false} {
+		ts, err := s.store.TransfersInState(ctx, outgoing,
+			store.TransferOffered, store.TransferDownloading, store.TransferFailed)
+		if err != nil {
+			return err
+		}
+		for _, t := range ts {
+			if peerID == "" || t.PeerID == peerID {
+				errs = append(errs, s.Cancel(ctx, t.ID))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func (s *Service) incoming(ctx context.Context, id string) (store.Transfer, error) {
 	t, ok, err := s.store.Transfer(ctx, id)
 	if err != nil {

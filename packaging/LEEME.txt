@@ -42,6 +42,9 @@ USO
   conversación. El otro debe aceptarlos; una vez recibidos no se pueden
   volver a descargar (hay que reenviarlos). Se guardan en
   Descargas\LanChat (se cambia en Ajustes).
+- Privacidad: el botón "Borrar" de una conversación la borra de esta PC
+  (los demás conservan su copia). En Ajustes > Privacidad puedes descargar
+  una copia de tus datos o borrarlos todos, p. ej. al dejar la empresa.
 
 ACTUALIZAR
 ----------

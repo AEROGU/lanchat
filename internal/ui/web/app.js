@@ -93,6 +93,8 @@ const api = {
   roomSend: (room, body) => request("POST", "/api/rooms/messages", { room, body }),
   // action: members, rename, leave o read.
   room: (action, room, extra) => request("POST", `/api/rooms/${action}`, { room, ...extra }),
+  deleteConversation: (peer) => request("POST", "/api/conversation/delete", { peer }),
+  wipe: (confirm) => request("POST", "/api/data/wipe", { confirm }),
 };
 
 function expire() {
@@ -780,6 +782,18 @@ function closeChat() {
   reportPresence();
 }
 
+// showEmpty deja la ventana sin conversación abierta.
+function showEmpty() {
+  closeChat();
+  $("empty").hidden = false;
+  $("chat-header").hidden = true;
+  $("composer").hidden = true;
+  $("offline-note").hidden = true;
+  $("identity-note").hidden = true;
+  $("messages").replaceChildren();
+  renderContacts();
+}
+
 async function loadHistory(peer, before) {
   let page;
   try {
@@ -1167,6 +1181,87 @@ async function leaveRoom() {
   }
 }
 
+// ---------- Privacidad ----------
+
+const WIPE_WORD = "BORRAR";
+
+// exportData descarga la copia de la base (el navegador la guarda en Descargas).
+function exportData() {
+  const a = document.createElement("a");
+  a.href = "/api/data/export";
+  a.download = "";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  showBanner("Descargando la copia de tus datos…", 4000);
+}
+
+async function deleteChat() {
+  const room = currentRoom();
+  const c = state.contacts.get(state.current);
+  let question;
+  if (room) {
+    question = room.left
+      ? `¿Borrar la sala «${room.name}» y todos sus mensajes de esta PC?`
+      : `¿Borrar todos los mensajes de «${room.name}» de esta PC? Sigues en la sala; los demás conservan sus mensajes.`;
+  } else if (c) {
+    question = `¿Borrar toda la conversación con ${c.displayName} de esta PC? Se cancelan los archivos pendientes con este contacto. ${c.displayName} conserva su copia.`;
+  } else {
+    return;
+  }
+  if (!confirm(question)) return;
+  try {
+    if (room) await api.room("delete", room.id);
+    else await api.deleteConversation(c.id);
+  } catch (e) {
+    showBanner(e.message, 5000);
+  }
+}
+
+// cleared llega cuando se borró una conversación (en esta u otra ventana).
+function cleared(ev) {
+  const key = ev.room ? ROOM + ev.room : ev.peer;
+  if (ev.removed) state.rooms.delete(ev.room);
+  if (key !== state.current) {
+    state.messages.delete(key);
+    renderContacts();
+    return;
+  }
+  if (ev.removed) return showEmpty();
+  state.messages.set(key, { list: [], complete: true });
+  renderMessages();
+}
+
+function openWipe() {
+  $("settings").close();
+  $("wipe-input").value = "";
+  $("wipe-btn").disabled = true;
+  $("wipe-downloads").textContent = state.downloadDir || "Descargas\\LanChat";
+  $("wipe-error").hidden = true;
+  $("wipe-dialog").showModal();
+}
+
+async function wipe(ev) {
+  if (ev.submitter?.value !== "save") return;
+  ev.preventDefault();
+  try {
+    await api.wipe($("wipe-input").value.trim());
+    $("wipe-dialog").close();
+  } catch (e) {
+    $("wipe-error").textContent = e.message;
+    $("wipe-error").hidden = false;
+  }
+}
+
+// reload llega tras borrar todos los datos: se empieza de cero.
+async function reloadAll() {
+  state.messages.clear();
+  state.progress.clear();
+  showEmpty();
+  await loadState().catch((e) => showBanner(e.message));
+  showBanner("Se borraron todos tus datos de esta PC.", 5000);
+}
+
 // ---------- Eventos en vivo ----------
 
 function connectEvents() {
@@ -1238,6 +1333,9 @@ function connectEvents() {
     if (card) paintProgress(card, p);
   });
 
+  es.addEventListener("cleared", (e) => cleared(JSON.parse(e.data)));
+  es.addEventListener("reload", reloadAll);
+
   es.addEventListener("focus", () => window.focus());
 }
 
@@ -1253,6 +1351,13 @@ function bind() {
   $("room-rename-btn").addEventListener("click", () => openRoomDialog("rename"));
   $("room-leave-btn").addEventListener("click", leaveRoom);
   $("room-form").addEventListener("submit", saveRoom);
+  $("delete-chat-btn").addEventListener("click", deleteChat);
+  $("export-btn").addEventListener("click", exportData);
+  $("wipe-export-btn").addEventListener("click", exportData);
+  $("wipe-open-btn").addEventListener("click", openWipe);
+  $("wipe-form").addEventListener("submit", wipe);
+  $("wipe-input").addEventListener("input", () =>
+    ($("wipe-btn").disabled = $("wipe-input").value.trim() !== WIPE_WORD));
   $("about-btn").addEventListener("click", openAbout);
   $("settings-about").addEventListener("click", () => {
     $("settings").close();

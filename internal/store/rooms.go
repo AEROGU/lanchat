@@ -16,17 +16,19 @@ type Room struct {
 	Members []string // IDs de los equipos, incluido este
 	Version int64
 	// Left: este equipo salió de la sala (se conserva el historial).
-	Left      bool
+	Left bool
+	// Hidden: el usuario borró la sala tras salir; no se lista.
+	Hidden    bool
 	UpdatedAt time.Time
 }
 
-const roomColumns = `id, name, members, version, left_room, updated_at`
+const roomColumns = `id, name, members, version, left_room, hidden, updated_at`
 
 func scanRoom(sc scanner) (Room, error) {
 	var r Room
 	var members string
 	var updated int64
-	if err := sc.Scan(&r.ID, &r.Name, &members, &r.Version, &r.Left, &updated); err != nil {
+	if err := sc.Scan(&r.ID, &r.Name, &members, &r.Version, &r.Left, &r.Hidden, &updated); err != nil {
 		return r, err
 	}
 	r.UpdatedAt = time.UnixMilli(updated)
@@ -41,8 +43,9 @@ func (s *Store) Room(ctx context.Context, id string) (Room, bool, error) {
 	return r, err == nil, err
 }
 
+// Rooms devuelve las salas visibles (no las borradas).
 func (s *Store) Rooms(ctx context.Context) ([]Room, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+roomColumns+` FROM rooms ORDER BY name, id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+roomColumns+` FROM rooms WHERE hidden = 0 ORDER BY name, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -65,26 +68,29 @@ func (s *Store) SaveRoom(ctx context.Context, r Room) error {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, members = excluded.members,
-			version = excluded.version, left_room = excluded.left_room, updated_at = excluded.updated_at`,
-		r.ID, r.Name, string(members), r.Version, r.Left, time.Now().UnixMilli())
+			version = excluded.version, left_room = excluded.left_room, hidden = excluded.hidden,
+			updated_at = excluded.updated_at`,
+		r.ID, r.Name, string(members), r.Version, r.Left, r.Hidden, time.Now().UnixMilli())
 	return err
 }
 
 // ApplyRoom guarda una versión de la sala recibida de otro equipo solo si es
-// nueva o más reciente que la local; applied indica si se guardó.
+// nueva o más reciente que la local; applied indica si se guardó. Como la
+// versión recibida incluye a este equipo, la sala vuelve a ser visible.
 func (s *Store) ApplyRoom(ctx context.Context, r Room) (applied bool, err error) {
 	members, err := json.Marshal(r.Members)
 	if err != nil {
 		return false, err
 	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, members = excluded.members,
-			version = excluded.version, left_room = excluded.left_room, updated_at = excluded.updated_at
+			version = excluded.version, left_room = excluded.left_room, hidden = excluded.hidden,
+			updated_at = excluded.updated_at
 		WHERE excluded.version > rooms.version`,
-		r.ID, r.Name, string(members), r.Version, r.Left, time.Now().UnixMilli())
+		r.ID, r.Name, string(members), r.Version, r.Left, r.Hidden, time.Now().UnixMilli())
 	if err != nil {
 		return false, err
 	}
@@ -142,6 +148,20 @@ func (s *Store) MarkRoomDelivered(ctx context.Context, msgID, peerID string) (al
 	}
 	if left == 0 {
 		if _, err := tx.ExecContext(ctx, `UPDATE messages SET status = ? WHERE id = ?`, StatusDelivered, msgID); err != nil {
+			return false, err
+		}
+		// El aviso de salida de una sala borrada (oculta o ya inexistente)
+		// solo esperaba a entregarse.
+		hidden := `SELECT id FROM messages WHERE room_id != '' AND room_id NOT IN (SELECT id FROM rooms WHERE hidden = 0)`
+		for _, q := range []string{
+			`DELETE FROM room_deliveries WHERE message_id = ? AND message_id IN (` + hidden + `)`,
+			`DELETE FROM messages WHERE id = ? AND id IN (` + hidden + `)`,
+		} {
+			if _, err := tx.ExecContext(ctx, q, msgID); err != nil {
+				return false, err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, forgetHiddenRooms); err != nil {
 			return false, err
 		}
 	}

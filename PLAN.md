@@ -70,6 +70,13 @@ Rutas definidas en `internal/protocol/routes.go`:
 ## Almacenamiento
 `%APPDATA%\LanChat\`: `config.json` (preferencias), `lanchat.db` (SQLite embebido en el ejecutable con `modernc.org/sqlite`, sin instalar nada): alias, historial, cola de pendientes, ofertas de archivos.
 
+## Privacidad
+- `GET /api/data/export` (interfaz local): copia consistente con `VACUUM INTO`.
+- Borrar una conversación: mensajes y transferencias con ese contacto (las pendientes se cancelan y se avisa al otro); el contacto (alias, grupo, huella) se conserva.
+- Borrar una sala: sus mensajes, salvo los avisos de salida aún sin entregar. Si ya se salió, la sala queda oculta (`rooms.hidden`) y, entregado el aviso, sin nombre ni miembros: solo su ID, para ignorar los mensajes de quienes aún no saben que salió. Si alguien vuelve a agregar al equipo (versión nueva), reaparece.
+- Borrar todo: salir de las salas, cancelar transferencias, borrar mensajes/salas/transferencias, alias y grupos, nombre y estado; `VACUUM`. Se conservan el directorio de equipos con sus huellas (no son datos del usuario y protegen contra suplantaciones), la configuración de red y la identidad.
+- La base usa `secure_delete` y tras cada borrado se vacía el WAL (`wal_checkpoint(TRUNCATE)`): lo borrado no queda en el disco.
+
 ## Estructura
 ```
 cmd/lanchat/          main

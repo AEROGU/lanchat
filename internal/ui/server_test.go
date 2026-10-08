@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -627,5 +628,77 @@ func TestRooms(t *testing.T) {
 	postJSON(c, base(s)+"/api/presence", `{"focused":true,"viewing":"room:r1"}`)
 	if s.ShouldNotify(roomViewPrefix+"r1") || !s.ShouldNotify("c1") {
 		t.Error("ShouldNotify con la sala abierta")
+	}
+}
+
+// Privacidad: el fake anota qué se pidió.
+
+func (f *fakeBackend) ExportData(_ context.Context, path string) error {
+	return os.WriteFile(path, []byte("SQLite format 3\x00copia"), 0o600)
+}
+func (f *fakeBackend) DeleteConversation(_ context.Context, peer string) error {
+	return f.record("delete-conversation", peer)
+}
+func (f *fakeBackend) DeleteRoomConversation(_ context.Context, room string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.room != nil && f.room.ID == room && f.room.Left {
+		f.room = nil
+	}
+	return nil
+}
+func (f *fakeBackend) WipeData(context.Context) error { return f.record("wipe", "") }
+
+func TestPrivacy(t *testing.T) {
+	s, b := startServer(t)
+	c := loggedClient(t, s)
+
+	resp, err := c.Get(base(s) + "/api/data/export")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(string(body), "SQLite format 3") ||
+		!strings.Contains(resp.Header.Get("Content-Disposition"), `attachment; filename=LanChat-PC-YO-`) {
+		t.Errorf("exportar: %d %q %q", resp.StatusCode, resp.Header.Get("Content-Disposition"), body)
+	}
+
+	events, err := c.Get(base(s) + "/api/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer events.Body.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for !s.HasWindow() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	resp, _ = postJSON(c, base(s)+"/api/conversation/delete", `{"peer":"c1"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("borrar conversación: %d", resp.StatusCode)
+	}
+	got := readEvents(t, events.Body, 1)
+	if got[0].name != "cleared" || !strings.Contains(got[0].data, `"peer":"c1"`) {
+		t.Errorf("evento al borrar: %+v", got)
+	}
+
+	// Sin la palabra de confirmación no se borra nada.
+	resp, _ = postJSON(c, base(s)+"/api/data/wipe", `{"confirm":"borrar"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("borrar todo sin confirmar: %d", resp.StatusCode)
+	}
+	resp, _ = postJSON(c, base(s)+"/api/data/wipe", `{"confirm":"BORRAR"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("borrar todo: %d", resp.StatusCode)
+	}
+	b.mu.Lock()
+	actions := strings.Join(b.sent, ",")
+	b.mu.Unlock()
+	if actions != "delete-conversation:c1,wipe:" {
+		t.Errorf("acciones = %q", actions)
 	}
 }

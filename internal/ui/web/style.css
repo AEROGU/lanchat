@@ -378,6 +378,10 @@ button { cursor: pointer; }
 }
 
 .primary:hover { background: var(--brand-hover); }
+.primary.danger { background: var(--danger); }
+.primary:disabled { opacity: 0.5; cursor: default; }
+.text-btn.danger-btn { color: var(--danger); }
+.help-list { color: var(--muted); font-size: 12px; margin: 4px 0; padding-left: 20px; }
 
 .icon-btn, .text-btn {
   background: none;
