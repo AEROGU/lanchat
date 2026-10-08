@@ -57,8 +57,6 @@ type openFileName struct {
 	flagsEx       uint32
 }
 
-// pickFiles muestra el selector de archivos de Windows sobre la ventana de
-// LanChat. Devuelve nil si el usuario cancela.
 // beginDialog prepara el hilo para un diálogo de Windows (que necesita COM)
 // y evita abrir dos a la vez. El hilo queda bloqueado a la goroutine y Go lo
 // descarta al terminar, junto con su estado COM. Llamar a la función
@@ -72,6 +70,8 @@ func beginDialog() (func(), error) {
 	return pickerMu.Unlock, nil
 }
 
+// pickFiles muestra el selector de archivos de Windows sobre la ventana de
+// LanChat. Devuelve nil si el usuario cancela.
 func pickFiles() ([]string, error) {
 	done, err := beginDialog()
 	if err != nil {
@@ -81,7 +81,7 @@ func pickFiles() ([]string, error) {
 
 	buf := make([]uint16, pickerBufferChars)
 	title, _ := windows.UTF16PtrFromString("Elegir archivos para enviar")
-	filter, _ := windows.UTF16FromString("Todos los archivos\x00*.*\x00")
+	filter := fileFilter()
 	ofn := openFileName{
 		owner:   findWindow(),
 		filter:  &filter[0],
@@ -103,6 +103,12 @@ func pickFiles() ([]string, error) {
 		return nil, fmt.Errorf("selector de archivos: error %#x", code)
 	}
 	return splitMultiSelect(decodeUntilDoubleNull(buf)), nil
+}
+
+// fileFilter es el filtro del selector: pares "descripción\0patrón\0" y un
+// \0 final. No sirve windows.UTF16FromString: rechaza textos con \0.
+func fileFilter() []uint16 {
+	return utf16.Encode([]rune("Todos los archivos\x00*.*\x00\x00"))
 }
 
 // decodeUntilDoubleNull convierte el búfer a texto conservando los NUL que

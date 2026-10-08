@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
@@ -700,5 +701,21 @@ func TestPrivacy(t *testing.T) {
 	b.mu.Unlock()
 	if actions != "delete-conversation:c1,wipe:" {
 		t.Errorf("acciones = %q", actions)
+	}
+}
+
+// Un error de programación en una acción responde 500 y no corta la conexión
+// (la página mostraría "LanChat no responde").
+func TestRecoverPanic(t *testing.T) {
+	s, _ := startServer(t)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/x", nil)
+	func() {
+		defer s.recoverPanic(rec, req)
+		var empty []uint16
+		_ = empty[0]
+	}()
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "error interno") {
+		t.Errorf("respuesta: %d %s", rec.Code, rec.Body.String())
 	}
 }

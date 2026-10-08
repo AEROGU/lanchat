@@ -24,6 +24,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -326,8 +327,25 @@ func (s *Server) guard(next http.Handler) http.Handler {
 				return
 			}
 		}
+		defer s.recoverPanic(w, r)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// recoverPanic anota en el registro un error de programación al atender una
+// petición y responde un error. Sin esto net/http corta la conexión y la
+// página cree que LanChat se cerró, y el detalle se pierde (el .exe no tiene
+// consola).
+func (s *Server) recoverPanic(w http.ResponseWriter, r *http.Request) {
+	v := recover()
+	if v == nil {
+		return
+	}
+	if v == http.ErrAbortHandler {
+		panic(v)
+	}
+	s.log.Error("error interno en la interfaz", "ruta", r.URL.Path, "err", v, "pila", string(debug.Stack()))
+	s.fail(w, http.StatusInternalServerError, errors.New("error interno de LanChat (detalles en lanchat.log)"))
 }
 
 func (s *Server) validToken(t string) bool {
