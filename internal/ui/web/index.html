@@ -16,6 +16,9 @@
           <strong id="me-name"></strong>
           <small id="me-detail"></small>
         </div>
+        <button id="new-room-btn" class="icon-btn" title="Nueva sala de chat grupal" aria-label="Nueva sala">
+          <span aria-hidden="true">👥</span>
+        </button>
         <button id="many-btn" class="icon-btn" title="Mensaje a varios" aria-label="Mensaje a varios">
           <span aria-hidden="true">📢</span>
         </button>
@@ -30,7 +33,7 @@
         <span id="status-dot" class="dot online available"></span>
         <span id="status-label"></span>
       </button>
-      <input id="search" type="search" placeholder="Buscar contacto" autocomplete="off">
+      <input id="search" type="search" placeholder="Buscar contacto o sala" autocomplete="off">
       <ul id="contacts" aria-label="Contactos"></ul>
       <p id="no-contacts" class="hint" hidden>Aún no se ha visto ningún equipo en la red.</p>
     </aside>
@@ -45,9 +48,12 @@
           <strong id="peer-name"></strong>
           <small id="peer-detail"></small>
         </div>
-        <button id="identity-btn" class="text-btn" title="Ver la huella de seguridad de este contacto">Identidad</button>
-        <button id="group-btn" class="text-btn" title="Poner a este contacto en un grupo">Grupo</button>
-        <button id="alias-btn" class="text-btn" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
+        <button id="identity-btn" class="text-btn contact-only" title="Ver la huella de seguridad de este contacto">Identidad</button>
+        <button id="group-btn" class="text-btn contact-only" title="Poner a este contacto en un grupo">Grupo</button>
+        <button id="alias-btn" class="text-btn contact-only" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
+        <button id="room-add-btn" class="text-btn room-only" title="Agregar contactos a la sala">Agregar</button>
+        <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
+        <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
       </header>
 
       <div id="identity-note" class="note danger" hidden>
@@ -60,8 +66,8 @@
       <div id="drop-overlay" hidden></div>
 
       <form id="composer" hidden>
-        <button type="button" id="attach-btn" class="icon-btn" title="Enviar archivos (también puedes arrastrarlos aquí)" aria-label="Enviar archivos">📎</button>
-        <button type="button" id="folder-btn" class="icon-btn" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
+        <button type="button" id="attach-btn" class="icon-btn contact-only" title="Enviar archivos (también puedes arrastrarlos aquí)" aria-label="Enviar archivos">📎</button>
+        <button type="button" id="folder-btn" class="icon-btn contact-only" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
         <textarea id="input" rows="1" placeholder="Escribe un mensaje (Enter envía, Shift+Enter nueva línea)"></textarea>
         <button type="submit" class="primary">Enviar</button>
       </form>
@@ -172,6 +178,26 @@
       <div class="actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button value="save" class="primary" id="many-send">Enviar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="room-dialog">
+    <form method="dialog" id="room-form">
+      <h2 id="room-title"></h2>
+      <div id="room-name-box">
+        <label for="room-name">Nombre de la sala</label>
+        <input id="room-name" autocomplete="off" placeholder="p. ej. Proyecto Norte">
+      </div>
+      <div id="room-members-box">
+        <label>Contactos</label>
+        <ul id="room-list" class="pick-list"></ul>
+        <small id="room-help" class="help"></small>
+      </div>
+      <p id="room-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary" id="room-save"></button>
       </div>
     </form>
   </dialog>

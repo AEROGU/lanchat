@@ -91,6 +91,28 @@ var migrations = [][]string{
 		// fingerprint: huella TLS del contacto, fijada la primera vez que se lo vio.
 		`ALTER TABLE peers ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''`,
 	},
+	{
+		// Salas grupales: miembros como JSON; version crece con cada cambio.
+		`CREATE TABLE rooms (
+			id         TEXT PRIMARY KEY,
+			name       TEXT NOT NULL,
+			members    TEXT NOT NULL,
+			version    INTEGER NOT NULL,
+			left_room  INTEGER NOT NULL DEFAULT 0,
+			updated_at INTEGER NOT NULL
+		)`,
+		// room_id: sala del mensaje ("" = conversación 1 a 1).
+		`ALTER TABLE messages ADD COLUMN room_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX messages_room ON messages(room_id, at) WHERE room_id != ''`,
+		// Entrega de cada mensaje de sala a cada miembro.
+		`CREATE TABLE room_deliveries (
+			message_id TEXT NOT NULL,
+			peer_id    TEXT NOT NULL,
+			delivered  INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (message_id, peer_id)
+		)`,
+		`CREATE INDEX room_deliveries_pending ON room_deliveries(peer_id) WHERE delivered = 0`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -264,6 +286,9 @@ type Message struct {
 	Broadcast bool
 	// ReadAt: cuándo el destinatario leyó este mensaje saliente (cero si no se sabe).
 	ReadAt time.Time
+	// RoomID es la sala del mensaje ("" = conversación 1 a 1). En una sala,
+	// PeerID es quien lo escribió (vacío si es propio).
+	RoomID string
 }
 
 type Kind int
@@ -272,11 +297,13 @@ const (
 	KindText Kind = 0
 	// KindFiles: oferta de archivos; los detalles están en Transfer con el mismo ID.
 	KindFiles Kind = 1
+	// KindRoomEvent: aviso de la sala ("Ana agregó a Luis"), no un mensaje de nadie.
+	KindRoomEvent Kind = 2
 )
 
 // messageColumns son las que se escriben al insertar; messageSelect agrega las
 // que solo cambian después.
-const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast`
+const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast, room_id`
 
 const messageSelect = messageColumns + `, read_at`
 
@@ -296,8 +323,9 @@ func (s *Store) InsertMessageWithTransfer(ctx context.Context, m Message, t *Tra
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind, m.Broadcast)
+		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind,
+		m.Broadcast, m.RoomID)
 	if err != nil {
 		return false, err
 	}
@@ -321,7 +349,7 @@ func (s *Store) MarkDelivered(ctx context.Context, id string) error {
 // si había alguno sin leer. Con receipts, quedan pendientes de avisar al remitente.
 func (s *Store) MarkRead(ctx context.Context, peerID string, receipts bool) (changed bool, err error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE messages SET unread = 0, receipt = ? WHERE peer_id = ? AND unread = 1`, receipts, peerID)
+		`UPDATE messages SET unread = 0, receipt = ? WHERE peer_id = ? AND room_id = '' AND unread = 1`, receipts, peerID)
 	if err != nil {
 		return false, err
 	}
@@ -332,7 +360,7 @@ func (s *Store) MarkRead(ctx context.Context, peerID string, receipts bool) (cha
 // UnreadCounts devuelve cuántos mensajes sin leer hay por contacto.
 func (s *Store) UnreadCounts(ctx context.Context) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT peer_id, COUNT(*) FROM messages WHERE unread = 1 GROUP BY peer_id`)
+		`SELECT peer_id, COUNT(*) FROM messages WHERE unread = 1 AND room_id = '' GROUP BY peer_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -352,13 +380,15 @@ func (s *Store) UnreadCounts(ctx context.Context) (map[string]int, error) {
 // Pending devuelve los mensajes salientes sin entregar a peerID, del más antiguo al más nuevo.
 func (s *Store) Pending(ctx context.Context, peerID string) ([]Message, error) {
 	return s.queryMessages(ctx, `SELECT `+messageSelect+` FROM messages
-		WHERE peer_id = ? AND status = ? ORDER BY at, rowid`, peerID, StatusPending)
+		WHERE peer_id = ? AND room_id = '' AND status = ? ORDER BY at, rowid`, peerID, StatusPending)
 }
 
-// PeersWithPending devuelve los contactos que tienen mensajes por entregar.
+// PeersWithPending devuelve los contactos que tienen mensajes por entregar
+// (de conversación 1 a 1 o de salas).
 func (s *Store) PeersWithPending(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT peer_id FROM messages WHERE status = ?`, StatusPending)
+		`SELECT peer_id FROM messages WHERE status = ? AND room_id = ''
+		UNION SELECT peer_id FROM room_deliveries WHERE delivered = 0`, StatusPending)
 	if err != nil {
 		return nil, err
 	}
@@ -374,22 +404,33 @@ func (s *Store) PeersWithPending(ctx context.Context) ([]string, error) {
 	return out, rows.Err()
 }
 
-// History devuelve hasta limit mensajes con peerID, en orden cronológico,
-// anteriores al mensaje beforeID ("" = los más recientes). Para paginar hacia
-// atrás se pasa el ID del mensaje más antiguo ya mostrado.
+// History devuelve hasta limit mensajes de la conversación 1 a 1 con peerID,
+// en orden cronológico, anteriores al mensaje beforeID ("" = los más
+// recientes). Para paginar hacia atrás se pasa el ID del mensaje más antiguo
+// ya mostrado.
 func (s *Store) History(ctx context.Context, peerID, beforeID string, limit int) ([]Message, error) {
+	return s.history(ctx, `peer_id = ? AND room_id = ''`, peerID, beforeID, limit)
+}
+
+// RoomHistory es como History pero de una sala.
+func (s *Store) RoomHistory(ctx context.Context, roomID, beforeID string, limit int) ([]Message, error) {
+	return s.history(ctx, `room_id = ?`, roomID, beforeID, limit)
+}
+
+// history pagina los mensajes que cumplen where (con un parámetro, key).
+func (s *Store) history(ctx context.Context, where, key, beforeID string, limit int) ([]Message, error) {
 	// Cursor (at, rowid): con solo "at" se perderían mensajes del mismo milisegundo.
 	at, rowid := int64(math.MaxInt64), int64(math.MaxInt64)
 	if beforeID != "" {
 		err := s.db.QueryRowContext(ctx,
-			`SELECT at, rowid FROM messages WHERE id = ? AND peer_id = ?`, beforeID, peerID).Scan(&at, &rowid)
+			`SELECT at, rowid FROM messages WHERE id = ? AND `+where, beforeID, key).Scan(&at, &rowid)
 		if err != nil {
 			return nil, fmt.Errorf("mensaje de referencia %s: %w", beforeID, err)
 		}
 	}
 	msgs, err := s.queryMessages(ctx, `SELECT `+messageSelect+` FROM messages
-		WHERE peer_id = ? AND (at, rowid) < (?, ?)
-		ORDER BY at DESC, rowid DESC LIMIT ?`, peerID, at, rowid, limit)
+		WHERE `+where+` AND (at, rowid) < (?, ?)
+		ORDER BY at DESC, rowid DESC LIMIT ?`, key, at, rowid, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -408,7 +449,7 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 		var m Message
 		var at, sent, readAt int64
 		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread,
-			&m.Kind, &m.Broadcast, &readAt); err != nil {
+			&m.Kind, &m.Broadcast, &m.RoomID, &readAt); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)

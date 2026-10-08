@@ -19,6 +19,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/protocol"
+	"github.com/AEROGU/lanchat/internal/store"
 )
 
 const (
@@ -218,17 +219,30 @@ func (g *gui) applyTray(unread int) {
 
 func (g *gui) maybeNotify(ctx context.Context, ev any) {
 	e, ok := ev.(chat.Event)
-	if !ok || e.Type != chat.MessageReceived || !g.srv.ShouldNotify(e.Message.PeerID) {
+	if !ok || e.Type != chat.MessageReceived || e.Message.Kind == store.KindRoomEvent {
 		return
 	}
-	if g.app.Self().Status == protocol.StatusBusy { // "no molestar"
+	m := e.Message
+	view := m.PeerID
+	if m.RoomID != "" {
+		view = roomViewPrefix + m.RoomID
+	}
+	if !g.srv.ShouldNotify(view) || g.app.Self().Status == protocol.StatusBusy { // "no molestar"
 		return
 	}
-	c, _, err := g.app.Contact(ctx, e.Message.PeerID)
+	c, _, err := g.app.Contact(ctx, m.PeerID)
 	if err != nil {
 		return
 	}
-	go g.notifier.notify(c.DisplayName(), preview(e.Message.Body))
+	title, body := c.DisplayName(), preview(m.Body)
+	if m.RoomID != "" {
+		r, ok, err := g.app.Room(ctx, m.RoomID)
+		if err != nil || !ok {
+			return
+		}
+		title, body = r.Name, c.DisplayName()+": "+body
+	}
+	go g.notifier.notify(title, body)
 }
 
 func preview(s string) string {

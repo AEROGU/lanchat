@@ -551,3 +551,30 @@ dialog input, dialog textarea {
   word-spacing: 0.2em;
   line-height: 1.7;
 }
+
+/* ---------- Salas ---------- */
+
+.contact .room-icon { width: 10px; text-align: center; font-size: 12px; flex: none; }
+
+.msg .author {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand);
+  margin-bottom: 2px;
+}
+
+.msg.event {
+  align-self: center;
+  max-width: 90%;
+  padding: 2px 10px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.msg.event .meta { display: inline; margin-left: 6px; }
+/* Sin ✓ ni "pendiente" en los avisos (.out para ganarle a .msg.out.delivered). */
+.msg.event .meta::after, .msg.out.event .meta::after { content: none; }

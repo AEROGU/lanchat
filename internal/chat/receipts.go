@@ -71,7 +71,7 @@ func (s *Service) handleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, m := range msgs {
-		s.emit(Event{MessageRead, m})
+		s.emit(Event{Type: MessageRead, Message: m})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

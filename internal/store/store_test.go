@@ -274,3 +274,59 @@ func TestFingerprintPinning(t *testing.T) {
 		t.Errorf("tras confiar = %q", p.Fingerprint)
 	}
 }
+
+func TestRooms(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	r := Room{ID: "r1", Name: "Ventas", Members: []string{"yo", "a", "b"}, Version: 2}
+	if err := s.SaveRoom(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	// Una versión vieja no reemplaza a la local; una nueva sí.
+	if ok, _ := s.ApplyRoom(ctx, Room{ID: "r1", Name: "Vieja", Members: []string{"yo"}, Version: 1}); ok {
+		t.Error("no debía aplicar una versión vieja")
+	}
+	if ok, _ := s.ApplyRoom(ctx, Room{ID: "r1", Name: "Ventas 2026", Members: []string{"yo", "a", "b", "c"}, Version: 3}); !ok {
+		t.Error("debía aplicar la versión nueva")
+	}
+	got, ok, err := s.Room(ctx, "r1")
+	if err != nil || !ok || got.Name != "Ventas 2026" || len(got.Members) != 4 {
+		t.Fatalf("Room = %+v %v %v", got, ok, err)
+	}
+
+	now := time.Now()
+	m := Message{ID: "m1", Outgoing: true, Body: "hola sala", At: now, SentAt: now, RoomID: "r1"}
+	if err := s.InsertRoomMessage(ctx, m, []string{"a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.PeersWithPending(ctx); strings.Join(p, ",") != "a,b" {
+		t.Errorf("PeersWithPending = %v", p)
+	}
+	if done, _ := s.MarkRoomDelivered(ctx, "m1", "a"); done {
+		t.Error("faltaba b")
+	}
+	if pend, _ := s.PendingRoomDeliveries(ctx, "b"); len(pend) != 1 || pend[0].RoomID != "r1" {
+		t.Errorf("pendientes de b = %+v", pend)
+	}
+	if done, _ := s.MarkRoomDelivered(ctx, "m1", "b"); !done {
+		t.Error("ya lo tenían todos")
+	}
+
+	// Entrante de la sala: cuenta como no leído de la sala, no del contacto.
+	s.InsertMessage(ctx, Message{ID: "m2", PeerID: "a", Body: "hola", At: now, SentAt: now, RoomID: "r1", Unread: true})
+	if c, _ := s.UnreadCounts(ctx); c["a"] != 0 {
+		t.Errorf("el mensaje de sala no debía contar en el contacto: %v", c)
+	}
+	if c, _ := s.RoomUnreadCounts(ctx); c["r1"] != 1 {
+		t.Errorf("RoomUnreadCounts = %v", c)
+	}
+	if h, _ := s.History(ctx, "a", "", 10); len(h) != 0 {
+		t.Errorf("el historial 1 a 1 no debía incluir la sala: %+v", h)
+	}
+	if h, _ := s.RoomHistory(ctx, "r1", "", 10); len(h) != 2 || h[1].ID != "m2" {
+		t.Errorf("RoomHistory = %+v", h)
+	}
+	if changed, _ := s.MarkRoomRead(ctx, "r1"); !changed {
+		t.Error("MarkRoomRead")
+	}
+}

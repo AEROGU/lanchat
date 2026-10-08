@@ -88,6 +88,16 @@ type Backend interface {
 	TransfersByID(ctx context.Context, ids []string) (map[string]store.Transfer, error)
 	DownloadDir() string
 	SetDownloadDir(dir string) error
+
+	Rooms(ctx context.Context) ([]app.Room, error)
+	Room(ctx context.Context, id string) (app.Room, bool, error)
+	CreateRoom(ctx context.Context, name string, members []string) (store.Room, error)
+	AddRoomMembers(ctx context.Context, roomID string, members []string) error
+	RenameRoom(ctx context.Context, roomID, name string) error
+	LeaveRoom(ctx context.Context, roomID string) error
+	SendRoom(ctx context.Context, roomID, body string) (store.Message, error)
+	RoomHistory(ctx context.Context, roomID, beforeID string, limit int) ([]store.Message, error)
+	MarkRoomRead(ctx context.Context, roomID string) (bool, error)
 }
 
 type Server struct {
@@ -186,11 +196,7 @@ func (s *Server) Publish(ctx context.Context, ev any) {
 	case discovery.Event:
 		s.publishContact(ctx, e.Peer.ID)
 	case chat.Event:
-		s.hub.broadcast("message", s.messageJSON(ctx, e.Message))
-		if e.Type == chat.MessageReceived {
-			s.publishContact(ctx, e.Message.PeerID)
-			s.unreadChanged(ctx)
-		}
+		s.publishChat(ctx, e)
 	case app.SelfChanged:
 		s.hub.broadcast("self", toSelfJSON(s.b.Self()))
 	case transfer.Event:
@@ -256,6 +262,10 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
 	mux.HandleFunc("POST /api/download-dir", s.handleDownloadDir)
 	mux.HandleFunc("POST /api/download-dir/open", s.handleOpenDownloadDir)
+	mux.HandleFunc("POST /api/rooms", s.handleCreateRoom)
+	mux.HandleFunc("GET /api/rooms/messages", s.handleRoomHistory)
+	mux.HandleFunc("POST /api/rooms/messages", s.handleRoomSend)
+	mux.HandleFunc("POST /api/rooms/{action}", s.handleRoomAction)
 	mux.HandleFunc("GET /api/system", s.handleSystem)
 	mux.HandleFunc("POST /api/system/autostart", s.handleAutostart)
 	mux.HandleFunc("POST /api/system/firewall", s.handleFirewall)
@@ -340,6 +350,10 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, c := range contacts {
 		out.Contacts[i] = toContactJSON(c)
+	}
+	if out.Rooms, err = s.roomsJSON(r.Context()); err != nil {
+		s.fail(w, http.StatusInternalServerError, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }

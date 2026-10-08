@@ -41,12 +41,19 @@ Paquetes JSON: `{"m":"lanchat","v":1,"t":"hello|announce|bye","id":"…","name":
 
 ### Comunicación — HTTP :50001 (entre equipos)
 Rutas definidas en `internal/protocol/routes.go`:
-- `POST /v1/msg` — mensaje de chat (ID para acuse y deduplicar). Una oferta de archivos es un mensaje con el campo `offer` (nombres, tamaños, token, caducidad), así reutiliza la cola para equipos desconectados.
+- `POST /v1/msg` — mensaje de chat (ID para acuse y deduplicar). Una oferta de archivos es un mensaje con el campo `offer` (nombres, tamaños, token, caducidad), así reutiliza la cola para equipos desconectados; un mensaje de sala lleva el campo `room`.
 - `GET /v1/transfers/{id}/files/{idx}` — descarga; encabezado `X-Lanchat-Token`, admite `Range: bytes=N-` y manda el SHA-256 del archivo completo en el trailer `X-Lanchat-Sha256`.
 - `POST /v1/transfers/{id}/files/{idx}/done` — el destinatario confirma que llegó íntegro.
 - `POST /v1/transfers/{id}/state` — avisa un rechazo o cancelación al otro equipo.
 - `POST /v1/read` — avisos de lectura (IDs leídos, en tandas).
 - `GET /v1/peers` — equipos en línea que conoce este equipo (listas compartidas).
+
+### Salas
+- Cada mensaje de sala es un `POST /v1/msg` con el campo `room` (`id`, `name`, `members`, `version`) que se entrega **a cada miembro por separado** con la misma cola que los mensajes 1 a 1 (tabla `room_deliveries`): un miembro desconectado lo recibe al volver. El mensaje queda ✓ cuando lo recibieron todos.
+- La sala viaja completa con cada mensaje; cada equipo se queda con la de mayor `version`. Crear, agregar miembros, renombrar o salir sube la versión y envía un aviso ("Ana agregó a Ceci") que no cuenta como no leído.
+- Cualquier miembro puede agregar a otros y renombrar; cada quien puede salir (conserva el historial). Los nuevos ven desde que entran. Máximo `protocol.MaxRoomMembers` (50).
+- Se aceptan mensajes solo de miembros (con la identidad TLS verificada). Si quien escribe no es miembro aquí, debe traer una versión más nueva de la sala (otro miembro lo agregó y el cambio aún no llega).
+- Sin archivos ni ✓✓ en las salas por ahora. Dos cambios simultáneos con la misma versión pueden dejar copias distintas hasta el siguiente cambio.
 
 ### Reglas de archivos
 1. El remitente ofrece; nada se transfiere hasta que el destinatario **acepta**.
@@ -103,5 +110,5 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 
 ### Fase 3
 - [x] TLS 1.3 mutuo entre equipos: identidad propia por PC, confianza en el primer uso, aviso y "Confiar en la nueva identidad" si cambia; protocolo v2.
-- [ ] Salas de chat grupales.
+- [x] Salas de chat grupales (👥): sin servidor, cada miembro guarda su copia; ver "Salas" arriba.
 - [ ] Interfaz alternativa en consola (tview).

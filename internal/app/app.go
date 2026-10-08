@@ -407,14 +407,19 @@ func (a *App) Contact(ctx context.Context, id string) (Contact, bool, error) {
 	return c, ok, nil
 }
 
-// TotalUnread es la cantidad de mensajes sin leer de todos los contactos.
+// TotalUnread es la cantidad de mensajes sin leer de todos los contactos y salas.
 func (a *App) TotalUnread(ctx context.Context) (int, error) {
-	unread, err := a.store.UnreadCounts(ctx)
 	total := 0
-	for _, n := range unread {
-		total += n
+	for _, count := range []func(context.Context) (map[string]int, error){a.store.UnreadCounts, a.store.RoomUnreadCounts} {
+		unread, err := count(ctx)
+		if err != nil {
+			return 0, err
+		}
+		for _, n := range unread {
+			total += n
+		}
 	}
-	return total, err
+	return total, nil
 }
 
 // MarkRead marca como leídos los mensajes de peerID; changed indica si había

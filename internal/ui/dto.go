@@ -16,6 +16,7 @@ import (
 type stateJSON struct {
 	Self        selfJSON      `json:"self"`
 	Contacts    []contactJSON `json:"contacts"`
+	Rooms       []roomJSON    `json:"rooms"`
 	ManualPeers []string      `json:"manualPeers"`
 	DownloadDir string        `json:"downloadDir"`
 	Limits      limitsJSON    `json:"limits"`
@@ -113,7 +114,10 @@ type messageJSON struct {
 	At       int64  `json:"at"`
 	// Status: "pending" (saliente sin confirmar) o "delivered".
 	Status string `json:"status"`
-	// Kind: "text" o "files"; en "files", Transfer trae la oferta.
+	// RoomID: sala del mensaje ("" = conversación con PeerID). En una sala,
+	// PeerID es el autor.
+	RoomID string `json:"roomId"`
+	// Kind: "text", "files" o "event" (aviso de sala); en "files", Transfer trae la oferta.
 	Kind     string        `json:"kind"`
 	Transfer *transferJSON `json:"transfer,omitempty"`
 	// Broadcast: enviado a varios contactos a la vez.
@@ -128,13 +132,17 @@ func toMessageJSON(m store.Message) messageJSON {
 		status = "pending"
 	}
 	kind := "text"
-	if m.Kind == store.KindFiles {
+	switch m.Kind {
+	case store.KindFiles:
 		kind = "files"
+	case store.KindRoomEvent:
+		kind = "event"
 	}
 	return messageJSON{
 		Kind:      kind,
 		ID:        m.ID,
 		PeerID:    m.PeerID,
+		RoomID:    m.RoomID,
 		Outgoing:  m.Outgoing,
 		Body:      m.Body,
 		At:        m.At.UnixMilli(),

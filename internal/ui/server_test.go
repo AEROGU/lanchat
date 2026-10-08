@@ -29,6 +29,7 @@ type fakeBackend struct {
 	unread int
 	name   string
 	manual []string
+	room   *app.Room
 }
 
 var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", Online: true}
@@ -498,3 +499,133 @@ func TestSendManyRoute(t *testing.T) {
 func (f *fakeBackend) SetReadReceipts(bool) error                     { return nil }
 func (f *fakeBackend) SetGroup(context.Context, string, string) error { return nil }
 func (f *fakeBackend) TrustIdentity(context.Context, string) error    { return nil }
+
+// Salas: el fake guarda una sola, sin miembros reales.
+
+func (f *fakeBackend) Rooms(ctx context.Context) ([]app.Room, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.room == nil {
+		return nil, nil
+	}
+	return []app.Room{*f.room}, nil
+}
+func (f *fakeBackend) Room(_ context.Context, id string) (app.Room, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.room == nil || f.room.ID != id {
+		return app.Room{}, false, nil
+	}
+	return *f.room, true, nil
+}
+func (f *fakeBackend) CreateRoom(_ context.Context, name string, members []string) (store.Room, error) {
+	if name == "" {
+		return store.Room{}, errors.New("ponle un nombre a la sala")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.room = &app.Room{Room: store.Room{ID: "r1", Name: name, Members: append([]string{"yo"}, members...), Version: 1}}
+	return f.room.Room, nil
+}
+func (f *fakeBackend) AddRoomMembers(context.Context, string, []string) error { return nil }
+func (f *fakeBackend) RenameRoom(_ context.Context, _, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.room.Name = name
+	return nil
+}
+func (f *fakeBackend) LeaveRoom(context.Context, string) error { return nil }
+func (f *fakeBackend) SendRoom(_ context.Context, room, body string) (store.Message, error) {
+	return store.Message{ID: "rm1", RoomID: room, Outgoing: true, Body: body, At: time.Now()}, nil
+}
+func (f *fakeBackend) RoomHistory(_ context.Context, room, _ string, _ int) ([]store.Message, error) {
+	return []store.Message{
+		{ID: "e1", RoomID: room, Outgoing: true, Body: "PC-YO creó la sala", Kind: store.KindRoomEvent, At: time.Now()},
+		{ID: "m1", RoomID: room, PeerID: "c1", Body: "hola sala", At: time.Now()},
+	}, nil
+}
+func (f *fakeBackend) MarkRoomRead(context.Context, string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	changed := f.room.Unread > 0
+	f.room.Unread = 0
+	return changed, nil
+}
+
+func TestRooms(t *testing.T) {
+	s, b := startServer(t)
+	c := loggedClient(t, s)
+
+	resp, _ := postJSON(c, base(s)+"/api/rooms", `{"name":"","members":["c1"]}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("sala sin nombre: %d", resp.StatusCode)
+	}
+	resp, _ = postJSON(c, base(s)+"/api/rooms", `{"name":"Contabilidad","members":["c1"]}`)
+	var room roomJSON
+	json.NewDecoder(resp.Body).Decode(&room)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated || room.ID != "r1" || len(room.Members) != 2 {
+		t.Fatalf("crear sala: %d %+v", resp.StatusCode, room)
+	}
+
+	resp, _ = c.Get(base(s) + "/api/state")
+	var st stateJSON
+	json.NewDecoder(resp.Body).Decode(&st)
+	resp.Body.Close()
+	if len(st.Rooms) != 1 || st.Rooms[0].Name != "Contabilidad" {
+		t.Errorf("salas en el estado: %+v", st.Rooms)
+	}
+
+	resp, _ = c.Get(base(s) + "/api/rooms/messages?room=r1")
+	var msgs []messageJSON
+	json.NewDecoder(resp.Body).Decode(&msgs)
+	resp.Body.Close()
+	if len(msgs) != 2 || msgs[0].Kind != "event" || msgs[1].RoomID != "r1" || msgs[1].PeerID != "c1" {
+		t.Errorf("historial de sala: %+v", msgs)
+	}
+
+	resp, _ = postJSON(c, base(s)+"/api/rooms/messages", `{"room":"r1","body":"hola"}`)
+	var m messageJSON
+	json.NewDecoder(resp.Body).Decode(&m)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated || m.RoomID != "r1" {
+		t.Errorf("enviar a la sala: %d %+v", resp.StatusCode, m)
+	}
+
+	resp, _ = postJSON(c, base(s)+"/api/rooms/rename", `{"room":"r1","name":"Conta"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent || b.room.Name != "Conta" {
+		t.Errorf("renombrar: %d %q", resp.StatusCode, b.room.Name)
+	}
+	resp, _ = postJSON(c, base(s)+"/api/rooms/otra-cosa", `{"room":"r1"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("acción desconocida: %d", resp.StatusCode)
+	}
+
+	// Un mensaje recibido en la sala actualiza su contador; ver la sala evita notificar.
+	events, err := c.Get(base(s) + "/api/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer events.Body.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for !s.HasWindow() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	b.mu.Lock()
+	b.room.Unread = 1
+	b.mu.Unlock()
+	s.Publish(context.Background(), chat.Event{Type: chat.MessageReceived,
+		Message: store.Message{ID: "m2", RoomID: "r1", PeerID: "c1", Body: "¿junta?", At: time.Now()}})
+	got := readEvents(t, events.Body, 2)
+	if got[0].name != "message" || !strings.Contains(got[0].data, `"roomId":"r1"`) ||
+		got[1].name != "room" || !strings.Contains(got[1].data, `"unread":1`) {
+		t.Errorf("eventos de sala: %+v", got)
+	}
+	postJSON(c, base(s)+"/api/presence", `{"focused":true,"viewing":"room:r1"}`)
+	if s.ShouldNotify(roomViewPrefix+"r1") || !s.ShouldNotify("c1") {
+		t.Error("ShouldNotify con la sala abierta")
+	}
+}

@@ -52,6 +52,8 @@ const (
 	MaxReceiptIDs = 500
 	// MaxSharedPeers: equipos por lista compartida.
 	MaxSharedPeers = 256
+	// MaxRoomMembers: miembros por sala (cada mensaje se entrega a cada uno).
+	MaxRoomMembers = 50
 )
 
 // Estados que un equipo puede comunicar al otro en RouteTransferState.

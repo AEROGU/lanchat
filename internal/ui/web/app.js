@@ -1,6 +1,7 @@
 // Interfaz de LanChat. Habla con el servidor local:
 //   GET  /api/state, /api/messages        estado y conversaciones
 //   POST /api/messages, /api/read, ...    acciones
+//   /api/rooms...                         salas de chat grupales
 //   GET  /api/events (Server-Sent Events)  cambios en vivo
 // El texto de los usuarios siempre se inserta con textContent, nunca como HTML.
 
@@ -10,8 +11,10 @@ const state = {
   self: null,
   limits: { maxName: 64, maxMessageBytes: 65536 },
   contacts: new Map(), // id -> contacto
-  current: null, // id del contacto abierto
-  messages: new Map(), // id de contacto -> { list: [], complete: bool }
+  rooms: new Map(), // id -> sala
+  // current es la conversación abierta: el id del contacto o ROOM + id de la sala.
+  current: null,
+  messages: new Map(), // conversación -> { list: [], complete: bool }
   progress: new Map(), // id de transferencia -> { done, total, rate }
   downloadDir: "",
   expired: false,
@@ -23,6 +26,13 @@ const RISKY_EXT = /\.(exe|msi|msix|bat|cmd|com|scr|pif|cpl|ps1|psm1|vbs|vbe|js|j
 const timeFmt = new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("es", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const encoder = new TextEncoder();
+
+// ROOM antecede al id de una sala en state.current; coincide con roomViewPrefix
+// del servidor, que usa la misma clave para no notificar la sala que se ve.
+const ROOM = "room:";
+const roomId = (key) => (key?.startsWith(ROOM) ? key.slice(ROOM.length) : null);
+const currentRoom = () => state.rooms.get(roomId(state.current));
+const convKey = (m) => (m.roomId ? ROOM + m.roomId : m.peerId);
 
 // ---------- Comunicación con el servidor ----------
 
@@ -77,6 +87,12 @@ const api = {
   system: () => request("GET", "/api/system"),
   autostart: (enabled) => request("POST", "/api/system/autostart", { enabled }),
   firewall: () => request("POST", "/api/system/firewall", {}),
+  createRoom: (name, members) => request("POST", "/api/rooms", { name, members }),
+  roomHistory: (room, before) =>
+    request("GET", `/api/rooms/messages?${new URLSearchParams({ room, before: before ?? "" })}`),
+  roomSend: (room, body) => request("POST", "/api/rooms/messages", { room, body }),
+  // action: members, rename, leave o read.
+  room: (action, room, extra) => request("POST", `/api/rooms/${action}`, { room, ...extra }),
 };
 
 function expire() {
@@ -106,6 +122,7 @@ async function loadState() {
   state.manualPeers = s.manualPeers;
   state.downloadDir = s.downloadDir;
   state.contacts = new Map(s.contacts.map((c) => [c.id, c]));
+  state.rooms = new Map(s.rooms.map((r) => [r.id, r]));
   renderSelf();
   renderContacts();
   if (state.current) {
@@ -124,6 +141,7 @@ function sortedContacts() {
 function totalUnread() {
   let n = 0;
   for (const c of state.contacts.values()) n += c.unread;
+  for (const r of state.rooms.values()) n += r.unread;
   return n;
 }
 
@@ -182,6 +200,8 @@ async function saveStatus(ev) {
 
 const COLLAPSED_KEY = "lanchat.collapsedGroups";
 const NO_GROUP = "Sin grupo";
+const ROOMS_GROUP = "Salas";
+const CONTACTS_GROUP = "Contactos";
 
 // Los grupos plegados se recuerdan solo en esta ventana (localStorage).
 function collapsedGroups() {
@@ -208,13 +228,18 @@ function groupNames() {
   return [...names].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
 }
 
-function groupHeader(name, members, collapsed) {
+// groupHeader muestra "▾ Nombre (en línea/total)"; las salas, solo el total.
+function groupHeader(name, members, collapsed, foldable = true) {
   const li = document.createElement("li");
   li.className = "group-header";
-  const online = members.filter((c) => c.online).length;
-  li.textContent = `${collapsed ? "▸" : "▾"} ${name} (${online}/${members.length})`;
-  li.title = collapsed ? "Mostrar" : "Ocultar";
-  li.addEventListener("click", () => toggleGroup(name));
+  const count = name === ROOMS_GROUP
+    ? members.length
+    : `${members.filter((c) => c.online).length}/${members.length}`;
+  li.textContent = `${foldable ? (collapsed ? "▸ " : "▾ ") : ""}${name} (${count})`;
+  if (foldable) {
+    li.title = collapsed ? "Mostrar" : "Ocultar";
+    li.addEventListener("click", () => toggleGroup(name));
+  }
   return li;
 }
 
@@ -225,11 +250,17 @@ function renderContacts() {
   const list = sortedContacts().filter(
     (c) => !filter || `${c.displayName} ${c.detail} ${c.group}`.toLocaleLowerCase("es").includes(filter),
   );
+  const rooms = sortedRooms().filter((r) => !filter || r.name.toLocaleLowerCase("es").includes(filter));
+  const collapsed = filter ? new Set() : collapsedGroups(); // al buscar se muestra todo
+  if (rooms.length > 0) {
+    ul.append(groupHeader(ROOMS_GROUP, rooms, collapsed.has(ROOMS_GROUP)));
+    if (!collapsed.has(ROOMS_GROUP)) for (const r of rooms) ul.append(roomItem(r));
+  }
   const names = groupNames();
   if (names.length === 0) {
+    if (rooms.length > 0 && list.length > 0) ul.append(groupHeader(CONTACTS_GROUP, list, false, false));
     for (const c of list) ul.append(contactItem(c));
   } else {
-    const collapsed = filter ? new Set() : collapsedGroups(); // al buscar se muestra todo
     for (const name of [...names, NO_GROUP]) {
       const members = list.filter((c) => (c.group || NO_GROUP) === name);
       if (members.length === 0) continue;
@@ -282,11 +313,84 @@ function contactItem(c) {
   return li;
 }
 
+function sortedRooms() {
+  return [...state.rooms.values()].sort(
+    (a, b) => a.left - b.left || a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+  );
+}
+
+// memberName es el nombre de un miembro de sala tal como lo ve este usuario.
+function memberName(id) {
+  if (id === state.self.id) return "Tú";
+  return state.contacts.get(id)?.displayName ?? "Alguien que no conoces";
+}
+
+function roomDetail(r) {
+  if (r.left) return "Saliste de esta sala";
+  return `${r.members.length} ${r.members.length === 1 ? "miembro" : "miembros"}`;
+}
+
+function roomItem(r) {
+  const key = ROOM + r.id;
+  const li = document.createElement("li");
+  li.className = "contact room" + (r.left ? " offline" : "") + (key === state.current ? " selected" : "");
+  li.title = r.members.map(memberName).join(", ");
+
+  const icon = document.createElement("span");
+  icon.className = "room-icon";
+  icon.textContent = "👥";
+  const text = document.createElement("div");
+  text.className = "text";
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = r.name;
+  const detail = document.createElement("span");
+  detail.className = "detail";
+  detail.textContent = roomDetail(r);
+  text.append(name, detail);
+  li.append(icon, text);
+  if (r.unread > 0) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = r.unread > 99 ? "99+" : r.unread;
+    li.append(badge);
+  }
+  li.addEventListener("click", () => openChat(key));
+  return li;
+}
+
 // ---------- Render: conversación ----------
 
+// showFor muestra los botones de contacto o los de sala.
+function showFor(room) {
+  for (const el of document.querySelectorAll(".contact-only")) el.hidden = room;
+  for (const el of document.querySelectorAll(".room-only")) el.hidden = !room;
+}
+
+function renderRoomHeader(r) {
+  showFor(true);
+  $("peer-name").textContent = r.name;
+  $("peer-detail").textContent = r.members.map(memberName).join(", ");
+  $("peer-dot").hidden = true;
+  $("identity-note").hidden = true;
+  for (const id of ["room-add-btn", "room-rename-btn", "room-leave-btn"]) $(id).disabled = r.left;
+  $("composer").hidden = r.left;
+  const note = $("offline-note");
+  note.hidden = !r.left;
+  note.textContent = "Saliste de esta sala: ya no recibes sus mensajes. Para volver, pide a un miembro que te agregue.";
+}
+
 function renderHeader() {
+  if (roomId(state.current)) {
+    const r = currentRoom();
+    if (r) renderRoomHeader(r);
+    return;
+  }
   const c = state.contacts.get(state.current);
   if (!c) return;
+  showFor(false);
+  $("peer-dot").hidden = false;
+  $("composer").hidden = false;
   $("peer-name").textContent = c.displayName;
   let detail = c.detail;
   if (c.online) detail += ` · ${statusLabel(c.status, c.statusText)}`;
@@ -315,8 +419,18 @@ function dayLabel(ts) {
 function messageElement(m) {
   if (m.kind === "files" && m.transfer) return transferCard(m);
   const div = document.createElement("div");
-  div.className = msgClass(m);
+  div.className = msgClass(m) + (m.kind === "event" ? " event" : "");
   div.dataset.id = m.id;
+  if (m.kind === "event") {
+    div.append(document.createTextNode(m.body), metaElement(m));
+    return div;
+  }
+  if (m.roomId && !m.outgoing) {
+    const author = document.createElement("span");
+    author.className = "author";
+    author.textContent = memberName(m.peerId);
+    div.append(author);
+  }
   if (m.broadcast) {
     const tag = document.createElement("span");
     tag.className = "broadcast-tag";
@@ -336,7 +450,8 @@ function metaElement(m) {
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = timeFmt.format(new Date(m.at));
-  if (m.status === "pending") meta.title = "Pendiente: se entregará cuando el contacto se conecte";
+  if (m.status === "pending" && m.roomId) meta.title = "Pendiente: falta entregarlo a algún miembro desconectado";
+  else if (m.status === "pending") meta.title = "Pendiente: se entregará cuando el contacto se conecte";
   else if (m.outgoing && m.readAt) meta.title = `Leído: ${dayLabel(m.readAt)} ${timeFmt.format(new Date(m.readAt))}`;
   else if (m.outgoing) meta.title = "Entregado";
   return meta;
@@ -649,7 +764,6 @@ async function openChat(id) {
   $("app").classList.add("chatting");
   $("empty").hidden = true;
   $("chat-header").hidden = false;
-  $("composer").hidden = false;
   $("send-error").hidden = true;
   renderHeader();
   renderContacts();
@@ -669,7 +783,8 @@ function closeChat() {
 async function loadHistory(peer, before) {
   let page;
   try {
-    page = await api.history(peer, before);
+    const room = roomId(peer);
+    page = await (room ? api.roomHistory(room, before) : api.history(peer, before));
   } catch (e) {
     showBanner(e.message, 4000);
     return;
@@ -683,16 +798,22 @@ async function loadHistory(peer, before) {
 }
 
 function addMessage(m) {
-  const conv = state.messages.get(m.peerId);
+  const key = convKey(m);
+  const conv = state.messages.get(key);
   if (!conv) return; // la conversación se cargará completa al abrirla
   const i = conv.list.findIndex((x) => x.id === m.id);
   if (i >= 0) {
-    m.transfer ??= conv.list[i].transfer; // conservar la oferta si el evento no la trae
+    const old = conv.list[i];
+    m.transfer ??= old.transfer; // conservar la oferta si el evento no la trae
+    // La respuesta del envío puede llegar después del evento de entrega: el
+    // estado nunca retrocede.
+    if (old.status === "delivered") m.status = "delivered";
+    m.readAt ||= old.readAt;
     conv.list[i] = m;
   } else {
     conv.list.push(m);
   }
-  if (m.peerId === state.current) renderMessages({ toBottom: m.outgoing });
+  if (key === state.current) renderMessages({ toBottom: m.outgoing });
 }
 
 async function sendMessage() {
@@ -707,7 +828,8 @@ async function sendMessage() {
     return;
   }
   try {
-    const m = await api.send(state.current, body);
+    const room = roomId(state.current);
+    const m = await (room ? api.roomSend(room, body) : api.send(state.current, body));
     input.value = "";
     autoGrow();
     addMessage(m);
@@ -726,6 +848,13 @@ function reportPresence() {
 }
 
 function markReadIfVisible() {
+  const r = currentRoom();
+  if (r && r.unread > 0 && windowFocused()) {
+    r.unread = 0; // el servidor confirmará con un evento "room"
+    renderContacts();
+    api.room("read", r.id).catch(() => {});
+    return;
+  }
   const c = state.contacts.get(state.current);
   if (c && c.unread > 0 && windowFocused()) {
     c.unread = 0; // el servidor confirmará con un evento "contact"
@@ -833,28 +962,7 @@ function openAbout() {
 // ---------- Mensaje a varios ----------
 
 function openMany() {
-  const ul = $("many-list");
-  ul.replaceChildren();
-  for (const c of sortedContacts()) {
-    const li = document.createElement("li");
-    const label = document.createElement("label");
-    label.className = "check";
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.value = c.id;
-    box.dataset.online = c.online;
-    box.dataset.group = c.group;
-    const dot = document.createElement("span");
-    dot.className = dotClass(c.online, c.status);
-    const name = document.createElement("span");
-    name.textContent = c.displayName;
-    const detail = document.createElement("small");
-    detail.className = "help-inline";
-    detail.textContent = c.detail;
-    label.append(box, dot, name, detail);
-    li.append(label);
-    ul.append(li);
-  }
+  $("many-list").replaceChildren(...sortedContacts().map(pickItem));
   const groups = $("many-groups");
   groups.replaceChildren();
   for (const name of groupNames()) {
@@ -868,6 +976,28 @@ function openMany() {
   $("many-error").hidden = true;
   $("many-dialog").showModal();
   $("many-text").focus();
+}
+
+// pickItem es una casilla para elegir un contacto en una lista.
+function pickItem(c) {
+  const li = document.createElement("li");
+  const label = document.createElement("label");
+  label.className = "check";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.value = c.id;
+  box.dataset.online = c.online;
+  box.dataset.group = c.group;
+  const dot = document.createElement("span");
+  dot.className = dotClass(c.online, c.status);
+  const name = document.createElement("span");
+  name.textContent = c.displayName;
+  const detail = document.createElement("small");
+  detail.className = "help-inline";
+  detail.textContent = c.detail;
+  label.append(box, dot, name, detail);
+  li.append(label);
+  return li;
 }
 
 function selectMany(which, group) {
@@ -975,6 +1105,68 @@ async function saveAlias(ev) {
   }
 }
 
+// ---------- Salas ----------
+
+// MAX_ROOM_MEMBERS coincide con protocol.MaxRoomMembers.
+const MAX_ROOM_MEMBERS = 50;
+
+// openRoomDialog sirve para crear una sala ("create"), agregar miembros
+// ("add") o renombrarla ("rename").
+let roomMode = "create";
+function openRoomDialog(mode) {
+  roomMode = mode;
+  const r = currentRoom();
+  const titles = { create: "Nueva sala", add: `Agregar a «${r?.name}»`, rename: "Renombrar la sala" };
+  $("room-title").textContent = titles[mode];
+  $("room-save").textContent = { create: "Crear", add: "Agregar", rename: "Guardar" }[mode];
+  $("room-name-box").hidden = mode === "add";
+  $("room-members-box").hidden = mode === "rename";
+  $("room-name").value = mode === "rename" ? r.name : "";
+  $("room-name").maxLength = state.limits.maxName;
+  const members = new Set(mode === "add" ? r.members : []);
+  const candidates = sortedContacts().filter((c) => !members.has(c.id));
+  $("room-list").replaceChildren(...candidates.map(pickItem));
+  $("room-help").textContent = mode === "create"
+    ? `Todos los miembros pueden escribir, agregar a otros y cambiar el nombre. Hasta ${MAX_ROOM_MEMBERS} miembros.`
+    : "Verán los mensajes a partir de ahora, no los anteriores.";
+  $("room-error").hidden = true;
+  $("room-dialog").showModal();
+  (mode === "add" ? $("room-list").querySelector("input") : $("room-name"))?.focus();
+}
+
+async function saveRoom(ev) {
+  if (ev.submitter?.value !== "save") return;
+  ev.preventDefault();
+  const picked = [...$("room-list").querySelectorAll("input:checked")].map((b) => b.value);
+  const name = $("room-name").value;
+  try {
+    if (roomMode === "create") {
+      const r = await api.createRoom(name, picked);
+      state.rooms.set(r.id, r);
+      $("room-dialog").close();
+      openChat(ROOM + r.id);
+      return;
+    }
+    const id = roomId(state.current);
+    if (roomMode === "add") await api.room("members", id, { members: picked });
+    else await api.room("rename", id, { name });
+    $("room-dialog").close();
+  } catch (e) {
+    $("room-error").textContent = e.message;
+    $("room-error").hidden = false;
+  }
+}
+
+async function leaveRoom() {
+  const r = currentRoom();
+  if (!r || !confirm(`¿Salir de «${r.name}»? Conservarás el historial, pero ya no recibirás sus mensajes.`)) return;
+  try {
+    await api.room("leave", r.id);
+  } catch (e) {
+    showBanner(e.message, 5000);
+  }
+}
+
 // ---------- Eventos en vivo ----------
 
 function connectEvents() {
@@ -1019,7 +1211,17 @@ function connectEvents() {
   es.addEventListener("message", (e) => {
     const m = JSON.parse(e.data);
     addMessage(m);
-    if (!m.outgoing && m.peerId === state.current) markReadIfVisible();
+    if (!m.outgoing && convKey(m) === state.current) markReadIfVisible();
+  });
+
+  es.addEventListener("room", (e) => {
+    const r = JSON.parse(e.data);
+    state.rooms.set(r.id, r);
+    renderContacts();
+    if (ROOM + r.id === state.current) {
+      renderHeader();
+      if (r.unread > 0) markReadIfVisible();
+    }
   });
 
   es.addEventListener("self", (e) => {
@@ -1046,6 +1248,11 @@ function bind() {
   $("settings-btn").addEventListener("click", openSettings);
   $("status-btn").addEventListener("click", openStatus);
   $("many-btn").addEventListener("click", openMany);
+  $("new-room-btn").addEventListener("click", () => openRoomDialog("create"));
+  $("room-add-btn").addEventListener("click", () => openRoomDialog("add"));
+  $("room-rename-btn").addEventListener("click", () => openRoomDialog("rename"));
+  $("room-leave-btn").addEventListener("click", leaveRoom);
+  $("room-form").addEventListener("submit", saveRoom);
   $("about-btn").addEventListener("click", openAbout);
   $("settings-about").addEventListener("click", () => {
     $("settings").close();
@@ -1091,7 +1298,7 @@ function bind() {
   let dragDepth = 0;
   const hasFiles = (e) => e.dataTransfer?.types.includes("Files");
   chat.addEventListener("dragenter", (e) => {
-    if (!hasFiles(e) || !state.current) return;
+    if (!hasFiles(e) || !state.current || roomId(state.current)) return;
     dragDepth++;
     $("drop-overlay").textContent = `Suelta para enviar a ${state.contacts.get(state.current)?.displayName ?? ""}`;
     $("drop-overlay").hidden = false;
@@ -1105,7 +1312,7 @@ function bind() {
   chat.addEventListener("drop", (e) => {
     dragDepth = 0;
     $("drop-overlay").hidden = true;
-    if (hasFiles(e)) uploadDropped(e.dataTransfer);
+    if (hasFiles(e) && !roomId(state.current)) uploadDropped(e.dataTransfer);
   });
   // Evita que soltar un archivo fuera de la zona lo abra en la ventana.
   for (const ev of ["dragover", "drop"]) window.addEventListener(ev, (e) => e.preventDefault());

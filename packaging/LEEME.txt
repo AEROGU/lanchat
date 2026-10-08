@@ -31,6 +31,9 @@ USO
   Tras 10 minutos sin usar la PC pasas a Ausente. Ocupado = sin avisos.
 - 📢 Mensaje a varios: el mismo mensaje a varios contactos o a un grupo.
 - Grupos: en una conversación, botón "Grupo" (solo los ves tú).
+- 👥 Salas: chat grupal. Cualquier miembro puede agregar a otros o
+  cambiar el nombre; "Salir" te quita de la sala (conservas el historial).
+  Quien estaba desconectado recibe los mensajes al conectarse.
 - ✓ = entregado, ✓✓ = leído (se desactiva en Ajustes).
 - Todo va cifrado. Si una conversación avisa que la identidad de alguien
   cambió, confirma con esa persona (botón "Identidad", comparen las huellas)

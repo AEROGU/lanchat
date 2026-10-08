@@ -62,11 +62,14 @@ const (
 	MessageDelivered
 	// MessageRead: el destinatario leyó un mensaje que le enviamos.
 	MessageRead
+	// RoomChanged: llegó una versión nueva de una sala (Event.Room).
+	RoomChanged
 )
 
 type Event struct {
 	Type    EventType
 	Message store.Message
+	Room    store.Room // en RoomChanged
 }
 
 // wireMessage es el JSON que viaja entre equipos.
@@ -81,6 +84,10 @@ type wireMessage struct {
 	Offer  *wireOffer `json:"offer,omitempty"`
 	// Broadcast: el remitente lo envió a varios contactos a la vez.
 	Broadcast bool `json:"broadcast,omitempty"`
+	// Room: el mensaje es de una sala; trae su versión actual.
+	Room *wireRoom `json:"room,omitempty"`
+	// Event: es un aviso de la sala ("Ana agregó a Luis"), no un mensaje.
+	Event bool `json:"event,omitempty"`
 }
 
 // wireOffer acompaña a un mensaje que ofrece archivos.
@@ -235,7 +242,7 @@ func (s *Service) send(ctx context.Context, m store.Message, t *store.Transfer) 
 	if _, err := s.store.InsertMessageWithTransfer(ctx, m, t); err != nil {
 		return store.Message{}, err
 	}
-	s.emit(Event{MessageQueued, m})
+	s.emit(Event{Type: MessageQueued, Message: m})
 	s.Flush(m.PeerID)
 	return m, nil
 }
@@ -295,7 +302,10 @@ func (s *Service) flush(peerID string) {
 			return
 		}
 		m.Status = store.StatusDelivered
-		s.emit(Event{MessageDelivered, m})
+		s.emit(Event{Type: MessageDelivered, Message: m})
+	}
+	if !s.flushRoom(p) {
+		return
 	}
 	s.sendReceipts(p)
 }
@@ -385,6 +395,10 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error interno", http.StatusInternalServerError)
 		return
 	}
+	if wm.Room != nil {
+		s.handleRoomMessage(w, r, wm)
+		return
+	}
 
 	m := store.Message{
 		ID:        wm.ID,
@@ -411,7 +425,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 	// Si no se insertó es un reenvío (el remitente no recibió nuestro 204):
 	// se confirma otra vez sin duplicarlo.
 	if inserted {
-		s.emit(Event{MessageReceived, m})
+		s.emit(Event{Type: MessageReceived, Message: m})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
