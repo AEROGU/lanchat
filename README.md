@@ -1,47 +1,64 @@
-# LanChat
+<p align="center">
+  <img src="docs/logo.png" alt="" width="96">
+</p>
 
-Mensajería y envío de archivos en la LAN, sin servidor central. Ver [PLAN.md](PLAN.md).
+<h1 align="center">LanChat</h1>
 
-## Compilar
+<p align="center">
+  Mensajería y envío de archivos para la red local de la oficina.<br>
+  Sin servidor, sin cuentas, sin Internet: se instala en cada PC y listo.
+</p>
 
-Requiere Go (la versión indicada en `go.mod`). Mage, staticcheck y govulncheck
-se instalan solos como herramientas del módulo (`tool` en `go.mod`), no hace
-falta nada más.
+<p align="center">
+  <a href="https://github.com/AEROGU/lanchat/releases/latest"><img alt="Última versión" src="https://img.shields.io/github/v/release/AEROGU/lanchat?label=versi%C3%B3n"></a>
+  <a href="https://github.com/AEROGU/lanchat/actions/workflows/ci.yml"><img alt="Pruebas" src="https://github.com/AEROGU/lanchat/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="Licencia GPL v3" src="https://img.shields.io/badge/licencia-GPL%20v3-blue"></a>
+  <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4">
+</p>
 
-```bash
-go tool mage         # lista los targets con su descripción
-go tool mage build   # compila dist/lanchat.exe (sin consola)
-go tool mage debug   # compila dist/lanchat-debug.exe, con consola
-go tool mage check   # gofmt, go vet, staticcheck y pruebas: correr antes de cada commit
-go tool mage race    # pruebas con detector de carreras (requiere gcc)
-go tool mage vuln    # vulnerabilidades conocidas en el código y sus librerías
-go tool mage dist    # dist/LanChat-<versión>.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
-```
+<p align="center">
+  <img src="docs/screenshots/conversacion.png" alt="Conversación con un contacto: mensajes, una carpeta enviada y un archivo por aceptar" width="880">
+</p>
 
-`build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y
-manifest del .exe, target `resources`); el archivo no se versiona. El texto de
-`LEEME.txt` del zip está en `packaging/LEEME.txt`.
+*[English summary below](#english).*
 
-La versión del ejecutable sale de `git describe`: la etiqueta `v1.0.0` da la
-versión 1.0.0.
+## Características
 
-### GitHub Actions
+- **Sin servidor ni configuración**: las PCs de la red se encuentran solas. Las
+  de otra subred se agregan una vez (por IP o nombre de equipo) y las demás
+  las conocen a través de ella.
+- **Sin cuentas**: cada quien elige su nombre; siempre se ve también el nombre
+  del equipo y su IP. A cada contacto le puedes poner un alias y un grupo.
+- **Mensajes** 1 a 1 con historial, entrega a los desconectados cuando se
+  conectan, ✓ entregado y ✓✓ leído (desactivable).
+- **Salas** de chat grupales y **mensajes a varios** contactos o a un grupo.
+- **Archivos y carpetas** (botón o arrastrar y soltar): el otro debe
+  aceptarlos, se descargan una sola vez, se reanudan si se corta la red y se
+  verifican con SHA-256.
+- **Estados** Disponible, Ausente y Ocupado, con mensaje y ausente automático.
+- **Cifrado** TLS 1.3 entre PCs, con aviso si la identidad de un equipo cambia.
+- **Privacidad**: descargar una copia de tus datos o borrarlos (todos, o una
+  conversación), por ejemplo cuando alguien deja la empresa.
+- Icono en la bandeja del sistema, notificaciones de Windows, inicio con
+  Windows, tema claro y oscuro. Un solo `.exe`, sin instalar nada más.
 
-- `.github/workflows/ci.yml`: en cada push a `main` y en cada pull request
-  corre `check`, `race`, `vuln` y `build` en Windows.
-- `.github/workflows/release.yml`: al subir una etiqueta `vX.Y.Z` verifica
-  todo, arma el zip y crea la Release con el zip y `SHA256SUMS.txt`. El texto
-  de la Release es el mensaje de la etiqueta:
+| Salas de chat | Mensaje a varios | Tema oscuro |
+|---|---|---|
+| [![Sala de chat con varios miembros](docs/screenshots/sala.png)](docs/screenshots/sala.png) | [![Mensaje a varios, eligiendo un grupo](docs/screenshots/mensaje-a-varios.png)](docs/screenshots/mensaje-a-varios.png) | [![La conversación en tema oscuro](docs/screenshots/tema-oscuro.png)](docs/screenshots/tema-oscuro.png) |
 
-  ```bash
-  git tag -a v1.0.0 -m "LanChat 1.0.0: lo nuevo de esta versión"
-  git push origin v1.0.0
-  ```
+## Descargar
 
-- `.github/dependabot.yml`: pull requests semanales con las versiones nuevas
-  de las librerías de Go y de las acciones.
+1. Descarga `LanChat-<versión>.zip` de la [última versión](https://github.com/AEROGU/lanchat/releases/latest).
+2. Descomprímelo en una carpeta fija (p. ej. `C:\LanChat` o Documentos) y
+   ejecuta `lanchat.exe`.
+3. Cuando Windows lo pregunte, permite el acceso en **redes privadas**.
+4. Repite en cada PC de la oficina.
 
-## Aviso de Windows SmartScreen
+Requisitos: Windows 10 u 11 de 64 bits con Microsoft Edge (viene con
+Windows). La red debe estar marcada como **privada** en Windows y permitir
+UDP 50000 y TCP 50001 entre las PCs.
+
+### Aviso de Windows SmartScreen
 
 LanChat no está firmado con un certificado de firma de código (cuestan
 dinero cada año). Por eso, la primera vez que se abre un `lanchat.exe`
@@ -52,12 +69,15 @@ Para abrirlo:
 2. Haz clic en **Ejecutar de todas formas**.
 
 Solo hace falta la primera vez en cada PC. Descarga LanChat únicamente de la
-página oficial del proyecto (https://github.com/AEROGU/lanchat) y, si
-quieres verificarlo, compila tú mismo el código fuente (ver arriba).
+página oficial del proyecto (https://github.com/AEROGU/lanchat). Para
+comprobar que el zip no fue alterado, compara su SHA-256
+(`Get-FileHash LanChat-<versión>.zip` en PowerShell) con el de
+`SHA256SUMS.txt` de la misma versión, o compila tú mismo el código fuente
+(ver [Compilar](#compilar)).
 
 ## Uso
 
-`dist/lanchat.exe` abre la ventana y queda en la bandeja del sistema (clic
+`lanchat.exe` abre la ventana y queda en la bandeja del sistema (clic
 izquierdo: abrir; clic derecho: menú con **Salir**). Cerrar la ventana no
 cierra LanChat. Abrirlo de nuevo con LanChat ya abierto solo muestra la ventana.
 
@@ -102,6 +122,9 @@ P-256 en `identity.key`) y los demás la reconocen por su **huella**:
 - El descubrimiento por UDP no va cifrado (nombre, hostname, estado y huella
   anunciados son visibles en la red), pero no permite suplantar a nadie: la
   conexión TLS comprueba la huella.
+- Los archivos recibidos llevan la "marca de la Web" de Windows, como los
+  descargados con un navegador, y LanChat pide confirmación antes de abrir
+  programas o scripts.
 
 Desde la 0.10 se usa el protocolo v2 (cifrado), que no se comunica con
 versiones anteriores: hay que actualizar todas las PCs.
@@ -140,6 +163,51 @@ esta PC: los demás conservan su copia de las conversaciones.
 | `icon.png` | icono que usan las notificaciones |
 | `edge\` | perfil de Edge de la ventana de LanChat |
 
+## Compilar
+
+Requiere Go (la versión indicada en `go.mod`). Mage, staticcheck y govulncheck
+se instalan solos como herramientas del módulo (`tool` en `go.mod`), no hace
+falta nada más.
+
+```bash
+go tool mage              # lista los targets con su descripción
+go tool mage build        # compila dist/lanchat.exe (sin consola)
+go tool mage debug        # compila dist/lanchat-debug.exe, con consola
+go tool mage check        # gofmt, go vet, staticcheck y pruebas: correr antes de cada commit
+go tool mage race         # pruebas con detector de carreras (requiere gcc)
+go tool mage vuln         # vulnerabilidades conocidas en el código y sus librerías
+go tool mage dist         # dist/LanChat-<versión>.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
+go tool mage screenshots  # regenera docs/screenshots y docs/logo.png (requiere Edge)
+```
+
+`build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y
+manifest del .exe, target `resources`); el archivo no se versiona. El texto de
+`LEEME.txt` del zip está en `packaging/LEEME.txt`.
+
+La versión del ejecutable sale de `git describe`: la etiqueta `v1.0.0` da la
+versión 1.0.0.
+
+Las capturas de pantalla se hacen con la interfaz real y una oficina de
+demostración con datos ficticios (`internal/ui/demo_test.go`), así que se
+pueden regenerar cuando cambie la interfaz. El diseño y el protocolo están
+en [PLAN.md](PLAN.md).
+
+### GitHub Actions
+
+- `.github/workflows/ci.yml`: en cada push a `main` y en cada pull request
+  corre `check`, `race`, `vuln` y `build` en Windows.
+- `.github/workflows/release.yml`: al subir una etiqueta `vX.Y.Z` verifica
+  todo, arma el zip y crea la Release con el zip y `SHA256SUMS.txt`. El texto
+  de la Release es el mensaje de la etiqueta:
+
+  ```bash
+  git tag -a v1.0.0 -m "LanChat 1.0.0: lo nuevo de esta versión"
+  git push origin v1.0.0
+  ```
+
+- `.github/dependabot.yml`: pull requests semanales con las versiones nuevas
+  de las librerías de Go y de las acciones.
+
 ## Licencia
 
 Copyright © 2026 Arturo Enrique Rosas Gutiérrez.
@@ -159,3 +227,17 @@ Las librerías de terceros incluidas en el ejecutable (todas con licencias
 BSD, MIT o Apache 2.0, compatibles con la GPL v3) se listan con sus avisos
 en `THIRD_PARTY_NOTICES.txt`, que genera `go tool mage notices` y se incluye
 en el zip.
+
+## English
+
+LanChat is a serverless LAN messenger and file-sharing app for Windows 10/11,
+similar to classic office LAN messengers. PCs discover each other
+automatically (UDP broadcast, plus manually added peers for other subnets),
+with no accounts and no Internet connection. Features: one-to-one chat with
+offline delivery and read receipts, group rooms, broadcast messages, file
+and folder transfers that must be accepted (one-time download, resumable,
+SHA-256 verified), presence status, mutual TLS 1.3 with trust-on-first-use
+identity pinning, and options to export or securely wipe your data. It is a
+single executable written in Go, with a local web UI shown in an Edge app
+window and a system tray icon. The interface is in Spanish.
+Licensed under the GPL v3.
