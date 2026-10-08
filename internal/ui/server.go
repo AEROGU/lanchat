@@ -55,6 +55,8 @@ const (
 	requestTimeout = 10 * time.Second
 	// shutdownGrace es lo que se espera a las peticiones en curso al salir.
 	shutdownGrace = time.Second
+	// faviconSize es el tamaño del ícono de la página.
+	faviconSize = 64
 )
 
 //go:embed web

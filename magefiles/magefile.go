@@ -79,9 +79,9 @@ func Vuln() error {
 	return sh.RunV("go", "tool", "govulncheck", "./...")
 }
 
-// Check corre Lint y Test; úsalo antes de cada commit.
+// Check corre Lint, Portable y Test; úsalo antes de cada commit.
 func Check() {
-	mg.SerialDeps(Lint, Test)
+	mg.SerialDeps(Lint, Portable, Test)
 }
 
 // Clean borra la carpeta dist.

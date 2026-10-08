@@ -173,11 +173,12 @@ falta nada más.
 go tool mage              # lista los targets con su descripción
 go tool mage build        # compila dist/lanchat.exe (sin consola)
 go tool mage debug        # compila dist/lanchat-debug.exe, con consola
-go tool mage check        # gofmt, go vet, staticcheck y pruebas: correr antes de cada commit
+go tool mage check        # gofmt, go vet, staticcheck, compilación para Android y pruebas: antes de cada commit
 go tool mage race         # pruebas con detector de carreras (requiere gcc)
 go tool mage vuln         # vulnerabilidades conocidas en el código y sus librerías
 go tool mage dist         # dist/LanChat-<versión>.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
 go tool mage screenshots  # regenera docs/screenshots y docs/logo.png (requiere Edge)
+go tool mage android      # android/app/libs/lanchat.aar para la app de Android (en desarrollo, ver docs/ANDROID.md)
 ```
 
 `build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y

@@ -1,3 +1,8 @@
+//go:build !android
+
+// La ventana (Edge), la bandeja y las notificaciones de escritorio. En
+// Android las reemplaza la app nativa (ver mobile/).
+
 package ui
 
 import (
@@ -9,30 +14,23 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"fyne.io/systray"
 
 	"github.com/AEROGU/lanchat/internal/app"
-	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/config"
 	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/platform"
-	"github.com/AEROGU/lanchat/internal/protocol"
-	"github.com/AEROGU/lanchat/internal/store"
 )
 
 const (
 	iconFileName = "icon.png"
-	// faviconSize y toastSize: ícono de la página y de las notificaciones.
-	faviconSize    = 64
+	// toastSize: ícono de las notificaciones.
 	toastSize      = 128
 	edgeProfileDir = "edge"
 	// reopenGuard evita abrir dos ventanas si el usuario hace doble clic en la
 	// bandeja antes de que la primera termine de cargar.
 	reopenGuard = 5 * time.Second
-	// notifyPreview es cuántos caracteres del mensaje muestra la notificación.
-	notifyPreview = 200
 	// shutdownTimeout: espera máxima a las peticiones en curso al salir.
 	shutdownTimeout = 5 * time.Second
 )
@@ -218,38 +216,9 @@ func (g *gui) applyTray(unread int) {
 }
 
 func (g *gui) maybeNotify(ctx context.Context, ev any) {
-	e, ok := ev.(chat.Event)
-	if !ok || e.Type != chat.MessageReceived || e.Message.Kind == store.KindRoomEvent {
-		return
+	if title, body, ok := g.srv.Notification(ctx, ev); ok {
+		go g.notifier.notify(title, body)
 	}
-	m := e.Message
-	view := m.PeerID
-	if m.RoomID != "" {
-		view = roomViewPrefix + m.RoomID
-	}
-	if !g.srv.ShouldNotify(view) || g.app.Self().Status == protocol.StatusBusy { // "no molestar"
-		return
-	}
-	c, _, err := g.app.Contact(ctx, m.PeerID)
-	if err != nil {
-		return
-	}
-	title, body := c.DisplayName(), preview(m.Body)
-	if m.RoomID != "" {
-		r, ok, err := g.app.Room(ctx, m.RoomID)
-		if err != nil || !ok {
-			return
-		}
-		title, body = r.Name, c.DisplayName()+": "+body
-	}
-	go g.notifier.notify(title, body)
-}
-
-func preview(s string) string {
-	if utf8.RuneCountInString(s) <= notifyPreview {
-		return s
-	}
-	return string([]rune(s)[:notifyPreview]) + "…"
 }
 
 // setupAutostart activa el inicio con Windows en la primera ejecución y, si

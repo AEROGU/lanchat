@@ -1,3 +1,19 @@
 *.exe
 *.syso
 dist/
+
+# Android (carpeta android/, ver docs/ANDROID.md)
+android/.gradle/
+android/.idea/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/app/libs/*.aar
+android/app/libs/*-sources.jar
+*.apk
+*.aab
+# Claves de firma: nunca al repositorio.
+*.jks
+*.keystore

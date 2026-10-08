@@ -91,10 +91,12 @@ internal/peer/        servidor/cliente HTTP entre equipos
 internal/chat/        mensajes, cola offline, acuses
 internal/transfer/    ofertas, tokens de un solo uso, progreso, hash
 internal/store/       SQLite
-internal/ui/          servidor web local, frontend embebido, bandeja, notificaciones
+internal/ui/          servidor web local, frontend embebido, bandeja, notificaciones (gui.go: solo escritorio)
+mobile/               API del núcleo para la app de Android (gomobile)
 internal/icon/        ícono dibujado por código (bandeja, página, .exe)
 internal/platform/    Windows: inicio automático, firewall, permisos de administrador
 packaging/            LEEME.txt del zip
+docs/                 capturas del README, ANDROID.md (guía y pendientes de Android)
 ```
 
 ## Hitos
@@ -119,3 +121,7 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 - [x] TLS 1.3 mutuo entre equipos: identidad propia por PC, confianza en el primer uso, aviso y "Confiar en la nueva identidad" si cambia; protocolo v2.
 - [x] Salas de chat grupales (👥): sin servidor, cada miembro guarda su copia; ver "Salas" arriba.
 - [ ] Interfaz alternativa en consola (tview).
+
+### Fase 4: Android
+- [x] Núcleo portable (`mage portable` en `check`) y API `mobile/` para gomobile.
+- [ ] App Android (Kotlin + WebView + servicio en primer plano): ver [docs/ANDROID.md](docs/ANDROID.md).

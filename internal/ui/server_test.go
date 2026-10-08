@@ -31,6 +31,7 @@ type fakeBackend struct {
 	unread int
 	name   string
 	manual []string
+	status string
 	room   *app.Room
 }
 
@@ -39,7 +40,7 @@ var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", 
 func (f *fakeBackend) Self() app.Self {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return app.Self{ID: "yo", Name: f.name, Hostname: "PC-YO"}
+	return app.Self{ID: "yo", Name: f.name, Hostname: "PC-YO", Status: f.status}
 }
 func (f *fakeBackend) Contacts(context.Context) ([]app.Contact, error) {
 	return []app.Contact{f.contact()}, nil
@@ -468,6 +469,9 @@ func (f *fakeBackend) SetStatus(status, text string) error {
 	if status != protocol.NormalizeStatus(status) {
 		return errors.New("estado desconocido")
 	}
+	f.mu.Lock()
+	f.status = status
+	f.mu.Unlock()
 	return nil
 }
 func (f *fakeBackend) SetAutoAway(bool) error { return nil }
@@ -717,5 +721,52 @@ func TestRecoverPanic(t *testing.T) {
 	}()
 	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "error interno") {
 		t.Errorf("respuesta: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Notification: texto de la notificación y cuándo no se notifica.
+func TestNotification(t *testing.T) {
+	s, b := startServer(t)
+	ctx := context.Background()
+	received := func(m store.Message) chat.Event { return chat.Event{Type: chat.MessageReceived, Message: m} }
+	msg := store.Message{ID: "m1", PeerID: "c1", Body: strings.Repeat("a", notifyPreview+5)}
+
+	title, body, ok := s.Notification(ctx, received(msg))
+	if !ok || title != testContact.DisplayName() || body != strings.Repeat("a", notifyPreview)+"…" {
+		t.Errorf("mensaje: %q %q %v", title, body, ok)
+	}
+	if _, _, ok := s.Notification(ctx, chat.Event{Type: chat.MessageDelivered, Message: msg}); ok {
+		t.Error("una entrega no se notifica")
+	}
+
+	// En una sala: título = sala, cuerpo = "Autor: texto"; los avisos no.
+	b.CreateRoom(ctx, "Proyecto", []string{"c1"})
+	inRoom := store.Message{ID: "m2", PeerID: "c1", RoomID: "r1", Body: "hola"}
+	if title, body, ok := s.Notification(ctx, received(inRoom)); !ok || title != "Proyecto" ||
+		body != testContact.DisplayName()+": hola" {
+		t.Errorf("sala: %q %q %v", title, body, ok)
+	}
+	inRoom.Kind = store.KindRoomEvent
+	if _, _, ok := s.Notification(ctx, received(inRoom)); ok {
+		t.Error("un aviso de sala no se notifica")
+	}
+
+	// Viendo esa conversación con la ventana abierta y enfocada, u Ocupado: no.
+	events, err := loggedClient(t, s).Get(base(s) + "/api/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer events.Body.Close()
+	for deadline := time.Now().Add(2 * time.Second); !s.HasWindow() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+	s.setPresence(true, "c1")
+	if _, _, ok := s.Notification(ctx, received(msg)); ok {
+		t.Error("conversación abierta: no se notifica")
+	}
+	s.setPresence(false, "")
+	b.SetStatus(protocol.StatusBusy, "")
+	if _, _, ok := s.Notification(ctx, received(msg)); ok {
+		t.Error("Ocupado: no se notifica")
 	}
 }
