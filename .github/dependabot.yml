@@ -1,0 +1,19 @@
+# Dependabot abre pull requests cuando hay versiones nuevas de las librerías
+# de Go o de las acciones de GitHub; ci.yml las verifica antes de aceptarlas.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

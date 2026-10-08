@@ -4,8 +4,9 @@ Mensajería y envío de archivos en la LAN, sin servidor central. Ver [PLAN.md](
 
 ## Compilar
 
-Requiere Go (la versión indicada en `go.mod`). Mage y staticcheck se instalan
-solos como herramientas del módulo (`tool` en `go.mod`), no hace falta nada más.
+Requiere Go (la versión indicada en `go.mod`). Mage, staticcheck y govulncheck
+se instalan solos como herramientas del módulo (`tool` en `go.mod`), no hace
+falta nada más.
 
 ```bash
 go tool mage         # lista los targets con su descripción
@@ -13,15 +14,32 @@ go tool mage build   # compila dist/lanchat.exe (sin consola)
 go tool mage debug   # compila dist/lanchat-debug.exe, con consola
 go tool mage check   # gofmt, go vet, staticcheck y pruebas: correr antes de cada commit
 go tool mage race    # pruebas con detector de carreras (requiere gcc)
-go tool mage dist    # dist/LanChat-<versión>.zip: exe, LEEME, licencia y avisos de terceros
+go tool mage vuln    # vulnerabilidades conocidas en el código y sus librerías
+go tool mage dist    # dist/LanChat-<versión>.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
 ```
 
 `build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y
 manifest del .exe, target `resources`); el archivo no se versiona. El texto de
 `LEEME.txt` del zip está en `packaging/LEEME.txt`.
 
-La versión del ejecutable sale de `git describe`: para publicar la 1.0.0 se
-crea la etiqueta `git tag v1.0.0` y se compila.
+La versión del ejecutable sale de `git describe`: la etiqueta `v1.0.0` da la
+versión 1.0.0.
+
+### GitHub Actions
+
+- `.github/workflows/ci.yml`: en cada push a `main` y en cada pull request
+  corre `check`, `race`, `vuln` y `build` en Windows.
+- `.github/workflows/release.yml`: al subir una etiqueta `vX.Y.Z` verifica
+  todo, arma el zip y crea la Release con el zip y `SHA256SUMS.txt`. El texto
+  de la Release es el mensaje de la etiqueta:
+
+  ```bash
+  git tag -a v1.0.0 -m "LanChat 1.0.0: lo nuevo de esta versión"
+  git push origin v1.0.0
+  ```
+
+- `.github/dependabot.yml`: pull requests semanales con las versiones nuevas
+  de las librerías de Go y de las acciones.
 
 ## Aviso de Windows SmartScreen
 

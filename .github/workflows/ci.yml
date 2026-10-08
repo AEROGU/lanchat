@@ -1,0 +1,41 @@
+# Verificación de cada cambio: formato, análisis, pruebas (también con el
+# detector de carreras) y vulnerabilidades conocidas. Corre en Windows porque
+# LanChat usa APIs de Windows.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un push nuevo cancela la verificación anterior de la misma rama.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Formato, vet, staticcheck y pruebas
+        run: go tool mage check
+
+      - name: Pruebas con detector de carreras
+        run: go tool mage race
+
+      - name: Vulnerabilidades conocidas
+        run: go tool mage vuln
+
+      - name: Compilación del ejecutable
+        run: go tool mage build

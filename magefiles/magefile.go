@@ -73,6 +73,12 @@ func Lint() error {
 	)
 }
 
+// Vuln busca vulnerabilidades conocidas en el código y sus librerías
+// (govulncheck; necesita internet para consultar la base de datos de Go).
+func Vuln() error {
+	return sh.RunV("go", "tool", "govulncheck", "./...")
+}
+
 // Check corre Lint y Test; úsalo antes de cada commit.
 func Check() {
 	mg.SerialDeps(Lint, Test)

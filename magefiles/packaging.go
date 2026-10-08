@@ -4,6 +4,8 @@ package main
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -30,6 +32,8 @@ const (
 	langSpanishMX = 0x080A
 	readmeSource  = "packaging/LEEME.txt"
 	readmeName    = "LEEME.txt"
+	// checksumsName lista el SHA-256 del zip (formato de sha256sum).
+	checksumsName = "SHA256SUMS.txt"
 )
 
 // Resources genera el ícono, los datos de versión y el manifest del .exe.
@@ -97,7 +101,7 @@ func numericVersion(v string) [4]uint16 {
 }
 
 // Dist arma dist/LanChat-<versión>.zip con el ejecutable, LEEME.txt, la
-// licencia y los avisos de terceros.
+// licencia y los avisos de terceros, y dist/SHA256SUMS.txt con su hash.
 func Dist() error {
 	mg.Deps(Build, Notices)
 	v := appVersion()
@@ -136,7 +140,21 @@ func Dist() error {
 		return err
 	}
 	fmt.Println(out)
-	return nil
+	return writeChecksum(out)
+}
+
+// writeChecksum escribe dist/SHA256SUMS.txt; se verifica con
+// "sha256sum -c SHA256SUMS.txt" o con Get-FileHash en PowerShell.
+func writeChecksum(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(b)
+	line := fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), filepath.Base(path))
+	out := filepath.Join(distDir, checksumsName)
+	fmt.Println(out)
+	return os.WriteFile(out, []byte(line), 0o644)
 }
 
 func addFile(zw *zip.Writer, name, path string) error {

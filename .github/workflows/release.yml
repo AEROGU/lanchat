@@ -1,0 +1,83 @@
+# Publicación de una versión: al subir una etiqueta vX.Y.Z se verifica todo,
+# se arma el zip con "mage dist" y se crea la Release de GitHub con el zip y
+# su SHA256SUMS.txt. El texto de la Release es el mensaje de la etiqueta:
+#
+#   git tag -a v0.12.0 -m "LanChat 0.12.0: lo nuevo de esta versión"
+#   git push origin v0.12.0
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write # crear la Release
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # la versión sale de git describe: hace falta el historial
+
+      # checkout deja la etiqueta como ligera; se trae la anotada con su mensaje.
+      - name: Etiquetas completas
+        shell: bash
+        run: git fetch --force --tags origin
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Verificar que la versión coincide con la etiqueta
+        shell: bash
+        run: |
+          version="$(go tool mage version)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::mage version dio '$version' para la etiqueta '$GITHUB_REF_NAME'"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Formato, vet, staticcheck y pruebas
+        run: go tool mage check
+
+      - name: Vulnerabilidades conocidas
+        run: go tool mage vuln
+
+      - name: Armar el zip
+        run: go tool mage dist
+
+      - name: Texto de la Release
+        shell: bash
+        run: |
+          {
+            git tag -l --format='%(contents)' "$GITHUB_REF_NAME"
+            cat <<EOF
+
+          ## Instalación
+
+          1. Descarga \`LanChat-$VERSION.zip\`, descomprímelo y ejecuta \`lanchat.exe\`.
+          2. Si Windows muestra "Windows protegió su PC" (SmartScreen), elige
+             **Más información > Ejecutar de todas formas**: el programa no está
+             firmado con un certificado de pago. Ver \`LEEME.txt\`.
+          3. Permite el acceso en **redes privadas** cuando Windows lo pida.
+
+          Para comprobar que el zip no fue alterado, compara su SHA-256 con
+          \`SHA256SUMS.txt\` (en PowerShell: \`Get-FileHash LanChat-$VERSION.zip\`).
+          EOF
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Crear la Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/LanChat-$VERSION.zip" dist/SHA256SUMS.txt \
+            --title "LanChat $VERSION" \
+            --notes-file release-notes.md \
+            --verify-tag
