@@ -176,7 +176,7 @@ Versión mínima hecha para la prueba de red; falta pulir:
       no son "suyos": no puede abrirlos desde LanChat, y si llega uno con el
       mismo nombre, el renombrado final podría fallar. Se abren desde el
       explorador de archivos.
-    - [ ] Probar recibir un archivo y verlo en el explorador de archivos.
+    - [x] Probado: recibir, abrir desde LanChat y verlo en Archivos y la galería.
 - [x] **LanChatHost**: `notify` → canal "Mensajes" (un aviso por
   conversación; al tocarlo abre la app); `unreadChanged` → texto y número en
   el aviso fijo.
