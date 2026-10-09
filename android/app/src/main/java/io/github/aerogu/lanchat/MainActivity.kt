@@ -1,6 +1,7 @@
 package io.github.aerogu.lanchat
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -9,7 +10,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.text.TextUtils
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -23,6 +23,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.text.htmlEncode
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
             WebView.setWebContentsDebuggingEnabled(true) // chrome://inspect desde la PC
         }
         web = WebView(this).apply {
+            @SuppressLint("SetJavaScriptEnabled") // solo carga la interfaz de 127.0.0.1 (Client)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             webViewClient = Client()
@@ -129,7 +131,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showError(e: Throwable) {
         val html = "<meta name=viewport content='width=device-width'>" +
-            "<h3>${getString(R.string.start_failed)}</h3><p>${TextUtils.htmlEncode(e.message ?: e.toString())}</p>"
+            "<h3>${getString(R.string.start_failed)}</h3><p>${(e.message ?: e.toString()).htmlEncode()}</p>"
         web.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
     }
 

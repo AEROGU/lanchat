@@ -5,9 +5,9 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.net.toUri
 
 /**
  * Que Android no pause LanChat para ahorrar batería: si lo hace, los mensajes
@@ -34,5 +34,5 @@ object BatteryOptimization {
         activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri(activity)))
     }
 
-    private fun packageUri(context: Context) = Uri.parse("package:${context.packageName}")
+    private fun packageUri(context: Context) = "package:${context.packageName}".toUri()
 }

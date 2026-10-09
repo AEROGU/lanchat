@@ -3,9 +3,9 @@ package io.github.aerogu.lanchat
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import io.github.aerogu.lanchat.mobile.Host
 import java.io.File
 
@@ -35,7 +35,7 @@ class LanChatHost(private val context: Context, private val screen: ScreenIdle) 
     }
 
     override fun openURL(url: String) {
-        start(Intent(Intent.ACTION_VIEW, Uri.parse(url)), "No hay un navegador para abrir $url")
+        start(Intent(Intent.ACTION_VIEW, url.toUri()), "No hay un navegador para abrir $url")
     }
 
     private fun start(intent: Intent, missing: String) {

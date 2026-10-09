@@ -57,6 +57,12 @@ jobs:
       - name: Compilación de la app (APK de prueba)
         run: go tool mage apk
 
+      # Falla con errores (p. ej. una API que no existe en Android 7); los
+      # avisos quedan en el reporte.
+      - name: Lint de Android
+        working-directory: android
+        run: ./gradlew lintDebug --console=plain
+
       - uses: actions/upload-artifact@v7
         with:
           name: apk-debug
