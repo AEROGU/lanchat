@@ -274,6 +274,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/download-dir", s.handleDownloadDir)
 	mux.HandleFunc("POST /api/download-dir/open", s.handleOpenDownloadDir)
 	mux.HandleFunc("GET /api/data/export", s.handleExport)
+	mux.HandleFunc("POST /api/data/export", s.handleSaveExport)
 	mux.HandleFunc("POST /api/data/wipe", s.handleWipe)
 	mux.HandleFunc("POST /api/conversation/delete", s.handleDeleteConversation)
 	mux.HandleFunc("POST /api/rooms", s.handleCreateRoom)

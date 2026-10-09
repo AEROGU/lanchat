@@ -107,12 +107,25 @@ function showBanner(text, ms) {
   const b = $("banner");
   b.textContent = text;
   b.hidden = false;
+  // Como popover queda en la capa superior, encima de un diálogo abierto
+  // (p. ej. "Descargar mis datos" en Ajustes). Se reabre para quedar arriba
+  // de un diálogo abierto después.
+  if (b.showPopover) {
+    if (b.matches(":popover-open")) b.hidePopover();
+    b.showPopover();
+  }
   clearTimeout(bannerTimer);
-  if (ms) bannerTimer = setTimeout(() => (b.hidden = true), ms);
+  if (ms) bannerTimer = setTimeout(closeBanner, ms);
+}
+
+function closeBanner() {
+  const b = $("banner");
+  b.hidden = true;
+  if (b.hidePopover && b.matches(":popover-open")) b.hidePopover();
 }
 
 function hideBanner() {
-  if (!state.expired) $("banner").hidden = true;
+  if (!state.expired) closeBanner();
 }
 
 // ---------- Estado ----------
@@ -969,9 +982,7 @@ function renderAndroid() {
   const android = window.LanChatAndroid;
   $("android-section").hidden = !android;
   if (!android) return;
-  // Como lo muestra el explorador de archivos: Descargas › LanChat.
-  $("android-downloads").textContent = state.downloadDir.endsWith("/Download/LanChat")
-    ? "Descargas › LanChat" : state.downloadDir;
+  $("android-downloads").textContent = friendlyDir(state.downloadDir);
   const restricted = android.backgroundRestricted();
   $("battery-status").textContent = restricted ? "Android puede pausarlo para ahorrar batería" : "Sin restricción ✓";
   $("battery-btn").hidden = !restricted;
@@ -1257,6 +1268,7 @@ const WIPE_WORD = "BORRAR";
 
 // exportData descarga la copia de la base (el navegador la guarda en Descargas).
 function exportData() {
+  if (state.mobile) return saveExport();
   const a = document.createElement("a");
   a.href = "/api/data/export";
   a.download = "";
@@ -1264,6 +1276,23 @@ function exportData() {
   a.click();
   a.remove();
   showBanner("Descargando la copia de tus datos…", 4000);
+}
+
+// saveExport: sin escritorio (la WebView no descarga), el núcleo guarda la
+// copia directamente en la carpeta de archivos recibidos.
+async function saveExport() {
+  showBanner("Guardando la copia de tus datos…");
+  try {
+    const { name, dir } = await request("POST", "/api/data/export", {});
+    showBanner(`Copia guardada en ${friendlyDir(dir)} › ${name}`, 8000);
+  } catch (e) {
+    showBanner(e.message, 6000);
+  }
+}
+
+// friendlyDir muestra la carpeta como el explorador de archivos de Android.
+function friendlyDir(dir) {
+  return dir.endsWith("/Download/LanChat") ? "Descargas › LanChat" : dir;
 }
 
 async function deleteChat() {

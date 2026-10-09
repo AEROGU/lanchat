@@ -36,6 +36,8 @@ type fakeBackend struct {
 	manual []string
 	status string
 	room   *app.Room
+	// downloadDir vacío = una ruta de Windows que no se usa.
+	downloadDir string
 }
 
 var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", Online: true}
@@ -157,7 +159,12 @@ func (f *fakeBackend) TransfersByID(_ context.Context, ids []string) (map[string
 	}
 	return out, nil
 }
-func (f *fakeBackend) DownloadDir() string         { return `C:\Descargas\LanChat` }
+func (f *fakeBackend) DownloadDir() string {
+	if f.downloadDir != "" {
+		return f.downloadDir
+	}
+	return `C:\Descargas\LanChat`
+}
 func (f *fakeBackend) SetDownloadDir(string) error { return nil }
 
 // startServer arranca el servidor; setup lo ajusta antes de Serve.
@@ -722,6 +729,49 @@ func (f *fakeBackend) DeleteRoomConversation(_ context.Context, room string) err
 	return nil
 }
 func (f *fakeBackend) WipeData(context.Context) error { return f.record("wipe", "") }
+
+// Sin escritorio (Android) la copia se guarda directo en la carpeta de
+// recibidos, sin pisar otra con el mismo nombre; en el escritorio se descarga.
+func TestSaveExport(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "LanChat")
+	s, _ := startServer(t, func(s *Server) {
+		s.b.(*fakeBackend).downloadDir = dir
+		s.Shell = &Shell{OpenFile: func(string) error { return nil }, OpenURL: func(string) error { return nil }}
+	})
+	c := loggedClient(t, s)
+	var names []string
+	for range 2 {
+		resp, err := postJSON(c, base(s)+"/api/data/export", `{}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out struct{ Name, Dir string }
+		json.NewDecoder(resp.Body).Decode(&out)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || out.Dir != dir {
+			t.Fatalf("guardar copia: %d %+v", resp.StatusCode, out)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, out.Name))
+		if err != nil || !strings.HasPrefix(string(b), "SQLite format 3") {
+			t.Errorf("%s: %v %q", out.Name, err, b)
+		}
+		names = append(names, out.Name)
+	}
+	date := time.Now().Format("2006-01-02")
+	if want := []string{"LanChat-PC-YO-" + date + ".db", "LanChat-PC-YO-" + date + " (1).db"}; !slices.Equal(names, want) {
+		t.Errorf("nombres = %v, quería %v", names, want)
+	}
+
+	desk, _ := startServer(t)
+	resp, err := postJSON(loggedClient(t, desk), base(desk)+"/api/data/export", `{}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("en el escritorio: %d, quería 404", resp.StatusCode)
+	}
+}
 
 func TestPrivacy(t *testing.T) {
 	s, b := startServer(t)

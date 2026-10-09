@@ -405,9 +405,11 @@ button { cursor: pointer; }
 
 #banner {
   position: fixed;
-  left: 50%;
-  bottom: 18px;
+  inset: auto auto 18px 50%; /* anula el centrado de [popover] */
+  margin: 0;
+  border: none;
   transform: translateX(-50%);
+  width: max-content; /* con left: 50%, fit-content usaría solo media pantalla */
   max-width: calc(100% - 32px);
   padding: 10px 16px;
   border-radius: var(--radius);

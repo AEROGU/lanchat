@@ -152,6 +152,10 @@ func (s *Server) handleDownloadDir(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOpenDownloadDir(w http.ResponseWriter, r *http.Request) {
+	if s.Shell != nil { // antes de crear la carpeta: no se abrirá
+		s.fail(w, http.StatusBadRequest, errNoFolders)
+		return
+	}
 	dir := s.b.DownloadDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		s.fail(w, http.StatusBadRequest, err)

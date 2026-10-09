@@ -224,11 +224,17 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
   `Host.openURL`. "Mostrar en carpeta" y "Abrir carpeta" se ocultan; una
   carpeta recibida se lista archivo por archivo, cada uno con "Abrir".
   - [x] Probado: enviar un archivo desde el teléfono, y recibir y abrir uno.
-- [ ] **Descargar mis datos**: en la WebView las descargas necesitan un
-  `DownloadListener`; o exponer la copia por `Host`. Además, `handleExport`
-  usa `os.MkdirTemp("")`, y en Android `os.TempDir()` es `/data/local/tmp`
-  (sin permiso de escritura): gomobile solo define `TMPDIR` en modo app, no
-  en `bind`. Hacer que `mobile.Start` lo apunte a una carpeta de la app.
+- [x] **Descargar mis datos**: la WebView no descarga archivos, y en Android
+  `os.TempDir()` es `/data/local/tmp` (sin permiso; gomobile solo define
+  `TMPDIR` en modo app, no en `bind`). Con `mobile`, la página llama a
+  `POST /api/data/export` y el núcleo guarda la copia (`VACUUM INTO`)
+  directamente en la carpeta de recibidos (Descargas/LanChat), con
+  "nombre (n).db" si ya existe: sin temporales ni descargas. En el escritorio
+  sigue `GET /api/data/export`.
+  - El aviso de la página ahora es un `popover`: se ve encima de los
+    diálogos (antes "Descargando la copia…" quedaba tapado por Ajustes).
+  - [ ] Probar desde Ajustes y desde "Borrar todos mis datos… > Descargar
+    antes una copia".
 - [x] **Ajustes**: la sección Sistema ya se oculta fuera de Windows; la
   carpeta de descargas también se oculta en Android (y el servidor no deja
   cambiarla).
