@@ -40,6 +40,9 @@ func Android() error {
 	if os.Getenv("ANDROID_HOME") == "" && os.Getenv("ANDROID_SDK_ROOT") == "" {
 		return errors.New("falta ANDROID_HOME: la ruta del SDK de Android (en Android Studio: Settings > Android SDK)")
 	}
+	if _, err := exec.LookPath("javac"); err != nil {
+		return errors.New("falta javac en el PATH: agrega %JAVA_HOME%\\bin (el JDK de Android Studio, ver docs/ANDROID.md)")
+	}
 	if err := os.MkdirAll(filepath.Dir(aarPath), 0o755); err != nil {
 		return err
 	}

@@ -29,36 +29,40 @@ App Android (Kotlin, carpeta android/)
   - `Mobile.stop()`, `Mobile.running()`, `Mobile.version()`.
   - `Host` (lo implementa Kotlin): `notify(title, body)` y
     `unreadChanged(total)`.
-- Target `go tool mage android`: genera `android/app/libs/lanchat.aar`.
-  **Aún sin probar** (esta PC no tiene el SDK de Android): es lo primero que
-  hay que verificar en la laptop.
+- Target `go tool mage android`: genera `android/app/libs/lanchat.aar`
+  (~17 MB). Probado en la laptop con NDK 30 y el JDK 25 de Android Studio.
 - `.gitignore` ya excluye lo generado por Android Studio, el `.aar` y las
   claves de firma.
 
 ## Pendientes
 
-### 1. Preparar la laptop
+### 1. Preparar la laptop (hecho)
 
-- [ ] Android Studio con, en *Settings > Languages & Frameworks > Android SDK*:
-  - SDK Platform reciente (Android 15/16).
+Sirve también para preparar otra PC:
+
+- [x] Android Studio con, en *Settings > Languages & Frameworks > Android SDK*:
+  - SDK Platform reciente.
   - *SDK Tools*: Android SDK Build-Tools, **NDK (Side by side)** y Android
-    SDK Command-line Tools.
-- [ ] Variables de entorno (ajusta las rutas):
+    SDK Command-line Tools. CMake no hace falta (gomobile usa el clang del
+    NDK y la app no tiene código C++ propio).
+- [x] Variables de entorno de usuario (ajusta las rutas):
   - `ANDROID_HOME` = `C:\Users\<usuario>\AppData\Local\Android\Sdk`
   - `ANDROID_NDK_HOME` = `%ANDROID_HOME%\ndk\<versión>`
   - `JAVA_HOME` = el JDK que trae Android Studio (`...\Android Studio\jbr`)
-- [ ] Go en la versión de `go.mod`, y gomobile:
+  - `%JAVA_HOME%\bin` en el `Path`: gomobile llama a `javac` directamente.
+- [x] Go en la versión de `go.mod`, y gomobile:
 
   ```bash
   go install golang.org/x/mobile/cmd/gomobile@latest
   gomobile init
   ```
 
-- [ ] `go tool mage android` → debe crear `android/app/libs/lanchat.aar`.
-  - Si dice que no encuentra `golang.org/x/mobile/bind`:
-    `go get -tool golang.org/x/mobile/cmd/gobind` (lo deja fijo en `go.mod`,
-    como mage) y volver a intentar. Hacer commit del `go.mod`.
+- [x] `go tool mage android` → crea `android/app/libs/lanchat.aar`.
+  `gobind` ya quedó como herramienta en `go.mod` (`go get -tool
+  golang.org/x/mobile/cmd/gobind`), igual que mage.
   - Si no encuentra el NDK, revisar `ANDROID_NDK_HOME`.
+  - Si dice `"javac": executable file not found`, falta `%JAVA_HOME%\bin`
+    en el `Path` (abrir una terminal nueva después de cambiarlo).
 
 ### 2. Prueba de red, antes que todo lo demás
 
