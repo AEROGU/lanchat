@@ -547,6 +547,8 @@ function transferCard(m) {
   title.textContent = `📎 ${t.files.length === 1 ? "1 archivo" : `${t.files.length} archivos`} · ${fmtSize(t.total)}`;
   div.append(title);
 
+  const shown = previews(t);
+  if (shown) div.append(shown);
   div.append(fileList(t));
 
   if (t.state === "downloading") {
@@ -581,6 +583,60 @@ function transferCard(m) {
 
   div.append(metaElement(m));
   return div;
+}
+
+// MAX_PREVIEWS: miniaturas que muestra una tarjeta; con más, "+N" en la última.
+const MAX_PREVIEWS = 4;
+
+// previews muestra las miniaturas de las imágenes de una oferta, como en
+// WhatsApp: una sola, grande; varias, en cuadrícula. Llegan con la oferta, así
+// que se ven antes de aceptar. Tocar abre la imagen completa si ya se puede
+// (enviada, o recibida y terminada).
+function previews(t) {
+  const withThumb = t.files.filter((f) => f.thumb);
+  if (withThumb.length === 0) return null;
+  const shown = withThumb.slice(0, MAX_PREVIEWS);
+  const box = document.createElement("div");
+  box.className = `previews n${shown.length}`;
+  shown.forEach((f, i) => {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "preview";
+    const img = document.createElement("img");
+    img.src = `/api/files/thumb?${new URLSearchParams({ id: t.id, index: f.index })}`;
+    img.alt = f.name;
+    img.loading = "lazy";
+    cell.append(img);
+    const extra = withThumb.length - shown.length;
+    if (i === shown.length - 1 && extra > 0) {
+      const more = document.createElement("span");
+      more.className = "preview-more";
+      more.textContent = `+${extra}`;
+      cell.append(more);
+    }
+    if (f.view) {
+      cell.title = `Ver ${f.name}`;
+      cell.addEventListener("click", () => openViewer(t, f));
+    } else {
+      cell.title = t.outgoing ? f.name : "Acepta para descargarla y verla completa";
+      cell.disabled = true;
+    }
+    box.append(cell);
+  });
+  return box;
+}
+
+// openViewer muestra la imagen completa, leída directo del archivo.
+function openViewer(t, f) {
+  const img = $("viewer-img");
+  img.onerror = () => {
+    $("viewer").close();
+    showBanner("No se pudo abrir la imagen: el archivo ya no está o no es una imagen.", 5000);
+  };
+  img.src = `/api/files/view?${new URLSearchParams({ id: t.id, index: f.index })}`;
+  img.alt = f.name;
+  $("viewer-name").textContent = f.savedName || f.name;
+  $("viewer").showModal();
 }
 
 // MAX_FILE_ROWS: filas que muestra una tarjeta antes de resumir "y N más".
@@ -1484,6 +1540,10 @@ function bind() {
   $("group-form").addEventListener("submit", saveGroup);
   $("alias-form").addEventListener("submit", saveAlias);
   $("back-btn").addEventListener("click", closeChat);
+  // Visor de imágenes: tocar en cualquier parte lo cierra; al cerrar se suelta
+  // la imagen (puede ser grande).
+  $("viewer").addEventListener("click", () => $("viewer").close());
+  $("viewer").addEventListener("close", () => $("viewer-img").removeAttribute("src"));
   $("more-btn").addEventListener("click", (e) => {
     e.stopPropagation(); // que no lo cierre el clic en el documento
     setMenu(!$("chat-actions").classList.contains("open"));

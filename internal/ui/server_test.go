@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -149,6 +151,16 @@ func (f *fakeBackend) CancelTransfer(_ context.Context, id string) error {
 func (f *fakeBackend) Transfer(_ context.Context, id string) (store.Transfer, bool, error) {
 	t, ok := testTransfers[id]
 	return t, ok, nil
+}
+
+// testThumb es la miniatura del archivo 0 de la transferencia "t1".
+var testThumb = []byte("\xff\xd8 miniatura")
+
+func (f *fakeBackend) Thumb(_ context.Context, id string, idx int) ([]byte, bool, error) {
+	if id == "t1" && idx == 0 {
+		return testThumb, true, nil
+	}
+	return nil, false, nil
 }
 func (f *fakeBackend) TransfersByID(_ context.Context, ids []string) (map[string]store.Transfer, error) {
 	out := map[string]store.Transfer{}
@@ -514,6 +526,67 @@ func TestShell(t *testing.T) {
 	defer mu.Unlock()
 	if want := []string{path, version.Repository}; !slices.Equal(opened, want) {
 		t.Errorf("abiertos = %v, quería %v", opened, want)
+	}
+}
+
+// Vista previa: la miniatura sale de la base y la imagen completa del archivo,
+// solo si de verdad es una imagen y la transferencia lo permite.
+func TestPreviewRoutes(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, data []byte) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	var img bytes.Buffer
+	png.Encode(&img, image.NewRGBA(image.Rect(0, 0, 4, 4)))
+	received := store.TransferFile{Index: 0, Name: "foto.png", Size: int64(img.Len()), Done: true,
+		Path: write("foto.png", img.Bytes())}
+	testTransfers["p1"] = store.Transfer{ID: "p1", PeerID: "c1", State: store.TransferCompleted, Files: []store.TransferFile{
+		received,
+		{Index: 1, Name: "pendiente.png", Path: received.Path},                                // sin terminar
+		{Index: 2, Name: "falsa.png", Done: true, Path: write("falsa.png", []byte("<html>"))}, // no es imagen
+		{Index: 3, Name: "notas.txt", Done: true, Path: write("notas.txt", []byte("hola"))},
+	}}
+	t.Cleanup(func() { delete(testTransfers, "p1") })
+
+	s, _ := startServer(t)
+	c := loggedClient(t, s)
+	get := func(path string) (*http.Response, []byte) {
+		resp, err := c.Get(base(s) + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return resp, b
+	}
+
+	resp, b := get("/api/files/thumb?id=t1&index=0")
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" || !bytes.Equal(b, testThumb) {
+		t.Errorf("miniatura: %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	if resp, _ := get("/api/files/thumb?id=t1&index=1"); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("sin miniatura: %d", resp.StatusCode)
+	}
+
+	resp, b = get("/api/files/view?id=p1&index=0")
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" ||
+		!strings.Contains(resp.Header.Get("Content-Security-Policy"), "sandbox") || !bytes.Equal(b, img.Bytes()) {
+		t.Errorf("imagen: %d %q %q", resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Security-Policy"))
+	}
+	for path, want := range map[string]int{
+		"/api/files/view?id=p1&index=1":   http.StatusNotFound,             // sin terminar
+		"/api/files/view?id=p1&index=2":   http.StatusUnsupportedMediaType, // HTML con nombre de imagen
+		"/api/files/view?id=p1&index=3":   http.StatusNotFound,             // no es imagen
+		"/api/files/view?id=nada&index=0": http.StatusNotFound,
+		"/api/files/view?id=p1":           http.StatusBadRequest,
+	} {
+		if resp, _ := get(path); resp.StatusCode != want {
+			t.Errorf("%s: %d, quería %d", path, resp.StatusCode, want)
+		}
 	}
 }
 

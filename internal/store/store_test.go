@@ -136,7 +136,7 @@ func TestTransfers(t *testing.T) {
 		ExpiresAt: now.Add(time.Hour),
 		Files: []TransferFile{
 			{Index: 0, Name: "informe.pdf", Size: 1000, ModTime: mod, Path: `C:\docs\informe.pdf`},
-			{Index: 1, Name: "foto.jpg", Size: 2000, Path: `C:\docs\foto.jpg`},
+			{Index: 1, Name: "foto.jpg", Size: 2000, Path: `C:\docs\foto.jpg`, Thumb: []byte("jpeg")},
 		},
 	}
 	m := Message{ID: "o1", PeerID: "a", Outgoing: true, Body: "2 archivos", At: now, SentAt: now, Kind: KindFiles}
@@ -154,6 +154,17 @@ func TestTransfers(t *testing.T) {
 	}
 	if h, _ := s.History(ctx, "a", "", 1); len(h) != 1 || h[0].Kind != KindFiles {
 		t.Errorf("el mensaje debía ser KindFiles: %+v", h)
+	}
+
+	// Miniaturas: al listar solo se indica si hay; los bytes, con Thumbs.
+	if got.Files[0].HasThumb || !got.Files[1].HasThumb || got.Files[1].Thumb != nil {
+		t.Errorf("HasThumb/Thumb al leer: %+v", got.Files)
+	}
+	if err := s.SetThumb(ctx, "o1", 0, []byte("pdf?")); err != nil {
+		t.Fatal(err)
+	}
+	if th, err := s.Thumbs(ctx, "o1"); err != nil || string(th[0]) != "pdf?" || string(th[1]) != "jpeg" {
+		t.Errorf("Thumbs = %v, %v", th, err)
 	}
 
 	if err := s.SetTransferState(ctx, "o1", TransferDownloading, ""); err != nil {

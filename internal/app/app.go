@@ -598,6 +598,16 @@ func (a *App) TransfersByID(ctx context.Context, ids []string) (map[string]store
 	return a.store.TransfersByID(ctx, ids)
 }
 
+// Thumb devuelve la miniatura JPEG de un archivo de una transferencia.
+func (a *App) Thumb(ctx context.Context, id string, idx int) ([]byte, bool, error) {
+	thumbs, err := a.store.Thumbs(ctx, id)
+	if err != nil {
+		return nil, false, err
+	}
+	b, ok := thumbs[idx]
+	return b, ok, nil
+}
+
 // DownloadDir es la carpeta donde se guardan los archivos recibidos.
 func (a *App) DownloadDir() string {
 	return cmp.Or(a.configuredDownloadDir(), transfer.DefaultDownloadDir())

@@ -53,6 +53,10 @@ type TransferFile struct {
 	// Path: saliente, el archivo a enviar; entrante, dónde quedó guardado.
 	Path string
 	Done bool
+	// Thumb: miniatura JPEG (vista previa) al guardar la transferencia. Al
+	// leerla solo se indica HasThumb; los bytes, con Thumbs.
+	Thumb    []byte
+	HasThumb bool
 }
 
 // Transfer es una oferta de archivos, enviada o recibida. Su ID es el del
@@ -90,9 +94,9 @@ func insertTransfer(ctx context.Context, tx *sql.Tx, t Transfer) error {
 	}
 	for _, f := range t.Files {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO transfer_files (transfer_id, idx, name, size, mod_time, path, done, dir)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			t.ID, f.Index, f.Name, f.Size, f.ModTime.UnixNano(), f.Path, f.Done, f.Dir); err != nil {
+			INSERT INTO transfer_files (transfer_id, idx, name, size, mod_time, path, done, dir, thumb)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			t.ID, f.Index, f.Name, f.Size, f.ModTime.UnixNano(), f.Path, f.Done, f.Dir, nullBytes(f.Thumb)); err != nil {
 			return err
 		}
 	}
@@ -156,6 +160,41 @@ func (s *Store) MarkFileDone(ctx context.Context, id string, idx int, path strin
 		WHERE transfer_id = ? AND idx = ?`, path, path, id, idx)
 }
 
+// SetThumb guarda la miniatura de un archivo (la genera quien lo recibe si el
+// remitente no la mandó).
+func (s *Store) SetThumb(ctx context.Context, id string, idx int, thumb []byte) error {
+	return s.execOne(ctx, `UPDATE transfer_files SET thumb = ? WHERE transfer_id = ? AND idx = ?`,
+		nullBytes(thumb), id, idx)
+}
+
+// Thumbs devuelve las miniaturas de una transferencia (índice → JPEG).
+func (s *Store) Thumbs(ctx context.Context, id string) (map[int][]byte, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT idx, thumb FROM transfer_files
+		WHERE transfer_id = ? AND thumb IS NOT NULL`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int][]byte{}
+	for rows.Next() {
+		var idx int
+		var b []byte
+		if err := rows.Scan(&idx, &b); err != nil {
+			return nil, err
+		}
+		out[idx] = b
+	}
+	return out, rows.Err()
+}
+
+// nullBytes guarda NULL en lugar de un BLOB vacío ("sin miniatura").
+func nullBytes(b []byte) any {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
+}
+
 func (s *Store) execOne(ctx context.Context, q string, args ...any) error {
 	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
@@ -202,7 +241,7 @@ func (s *Store) queryTransfers(ctx context.Context, q string, args ...any) ([]Tr
 }
 
 func (s *Store) transferFiles(ctx context.Context, id string) ([]TransferFile, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT idx, name, size, mod_time, path, done, dir
+	rows, err := s.db.QueryContext(ctx, `SELECT idx, name, size, mod_time, path, done, dir, thumb IS NOT NULL
 		FROM transfer_files WHERE transfer_id = ? ORDER BY idx`, id)
 	if err != nil {
 		return nil, err
@@ -212,7 +251,7 @@ func (s *Store) transferFiles(ctx context.Context, id string) ([]TransferFile, e
 	for rows.Next() {
 		var f TransferFile
 		var mod int64
-		if err := rows.Scan(&f.Index, &f.Name, &f.Size, &mod, &f.Path, &f.Done, &f.Dir); err != nil {
+		if err := rows.Scan(&f.Index, &f.Name, &f.Size, &mod, &f.Path, &f.Done, &f.Dir, &f.HasThumb); err != nil {
 			return nil, err
 		}
 		f.ModTime = time.Unix(0, mod)

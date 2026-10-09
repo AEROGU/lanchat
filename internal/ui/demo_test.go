@@ -256,6 +256,9 @@ func (d *demoBackend) TransfersByID(_ context.Context, ids []string) (map[string
 	}
 	return out, nil
 }
+func (d *demoBackend) Thumb(context.Context, string, int) ([]byte, bool, error) {
+	return nil, false, nil
+}
 func (d *demoBackend) DownloadDir() string         { return "" }
 func (d *demoBackend) SetDownloadDir(string) error { return errDemo }
 func (d *demoBackend) Rooms(context.Context) ([]app.Room, error) {

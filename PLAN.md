@@ -126,20 +126,20 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 - [x] Núcleo portable (`mage portable` en `check`) y API `mobile/` para gomobile.
 - [ ] App Android (Kotlin + WebView + servicio en primer plano): ver [docs/ANDROID.md](docs/ANDROID.md).
 
-### Fase 5 (después de Android)
-- [ ] **Vista previa de imágenes y archivos**, como en WhatsApp, en PC y en
-  teléfono: si el archivo es compatible se ve en la conversación; si no, se
-  muestra como ahora.
-  - **Condición**: solo se hace si no deja basura ni archivos temporales; la
-    vista previa debe mostrarse directamente (miniatura generada en memoria,
-    imagen servida desde el archivo recibido). Si no se puede así, no se hace.
-  - Hoy un archivo se ofrece y hay que aceptarlo antes de descargarlo. Para
-    ver la imagen antes de aceptar, el remitente mandaría una miniatura
-    pequeña (p. ej. JPEG de ~320 px) en la oferta, como campo opcional del
-    protocolo (las versiones anteriores lo ignoran).
-  - Ya recibida, mostrar la imagen completa en la conversación (tocar para
-    ampliar) desde una ruta local que solo sirva archivos de transferencias
-    completadas.
-  - Por decidir: qué formatos (JPG, PNG, GIF, WebP seguro; ¿video y PDF con
-    miniatura?), tamaño máximo de la miniatura y si se generan solo en Go
-    (sin cgo) o también con ayuda de Android.
+### Fase 5
+- [x] **Vista previa de imágenes**, como en WhatsApp, en PC y en teléfono,
+  con la condición de no dejar basura ni archivos temporales:
+  - El remitente genera en memoria (`internal/thumb`, Go puro) una miniatura
+    JPEG (lado mayor 320 px, ≤ 32 KB, girada según EXIF) de las primeras 10
+    imágenes de la oferta y la manda en ella (`thumb`, campo opcional: las
+    versiones anteriores lo ignoran). Se ve **antes de aceptar**. Si el
+    remitente es de una versión anterior, la genera quien recibe al terminar
+    la descarga.
+  - Se guarda en la base con la oferta (`transfer_files.thumb`) y se borra con
+    la conversación. Quien recibe solo acepta JPEG pequeños válidos.
+  - Tocarla abre la imagen completa leída directo del archivo
+    (`GET /api/files/view`: solo transferencias propias, solo si el contenido
+    es JPEG/PNG/GIF/WebP, nunca SVG, con CSP sandbox).
+  - Formatos: JPG, PNG, GIF y WebP. Video, PDF y HEIC se muestran como antes
+    (Go no los decodifica sin cgo). Imágenes de más de 50 Mpx, sin miniatura.
+  - Lo recibido con versiones anteriores no tiene miniatura.

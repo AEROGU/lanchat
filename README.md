@@ -34,7 +34,8 @@
 - **Salas** de chat grupales y **mensajes a varios** contactos o a un grupo.
 - **Archivos y carpetas** (botón o arrastrar y soltar): el otro debe
   aceptarlos, se descargan una sola vez, se reanudan si se corta la red y se
-  verifican con SHA-256.
+  verifican con SHA-256. Las imágenes (JPG, PNG, GIF, WebP) llegan con
+  **vista previa** antes de aceptarlas y se abren completas con un clic.
 - **Estados** Disponible, Ausente y Ocupado, con mensaje y ausente automático.
 - **Cifrado** TLS 1.3 entre PCs, con aviso si la identidad de un equipo cambia.
 - **Privacidad**: descargar una copia de tus datos o borrarlos (todos, o una
