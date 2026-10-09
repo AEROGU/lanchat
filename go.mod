@@ -8,7 +8,7 @@ require (
 	github.com/magefile/mage v1.17.2
 	github.com/tc-hib/winres v0.3.1
 	golang.org/x/image v0.46.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	modernc.org/sqlite v1.60.1
 )
 
