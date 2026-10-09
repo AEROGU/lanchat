@@ -22,6 +22,7 @@ type fakeHost struct {
 func (h *fakeHost) Notify(title, body string) {}
 func (h *fakeHost) OpenFile(string) error     { return nil }
 func (h *fakeHost) OpenURL(string) error      { return nil }
+func (h *fakeHost) IdleSeconds() int          { return 0 }
 func (h *fakeHost) UnreadChanged(total int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

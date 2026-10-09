@@ -140,6 +140,7 @@ async function loadState() {
   document.body.classList.toggle("mobile", s.mobile);
   if (s.mobile) {
     $("input").placeholder = "Escribe un mensaje";
+    $("autoaway-text").textContent = "Ponerme Ausente tras 10 minutos con la pantalla apagada";
     // Que abrir Ajustes no despliegue el teclado: el foco va al título y no
     // al campo del nombre.
     const title = $("settings").querySelector("h2");
@@ -428,7 +429,7 @@ function renderHeader() {
   note.hidden = c.online;
   note.textContent = `${c.displayName} está desconectado. Los mensajes que envíes se entregarán cuando se conecte.`;
   $("identity-note").hidden = !c.identityChanged;
-  $("identity-note-text").textContent = `La identidad de ${c.displayName} cambió. Si reinstaló LanChat es normal; si no, alguien podría estar haciéndose pasar por esa PC. Hasta que confíes en la nueva identidad no se le envía nada.`;
+  $("identity-note-text").textContent = `La identidad de ${c.displayName} cambió. Si reinstaló LanChat es normal; si no, alguien podría estar haciéndose pasar por ese equipo. Hasta que confíes en la nueva identidad no se le envía nada.`;
 }
 
 function dayLabel(ts) {
@@ -1307,10 +1308,10 @@ async function deleteChat() {
   let question;
   if (room) {
     question = room.left
-      ? `¿Borrar la sala «${room.name}» y todos sus mensajes de esta PC?`
-      : `¿Borrar todos los mensajes de «${room.name}» de esta PC? Sigues en la sala; los demás conservan sus mensajes.`;
+      ? `¿Borrar la sala «${room.name}» y todos sus mensajes de este equipo?`
+      : `¿Borrar todos los mensajes de «${room.name}» de este equipo? Sigues en la sala; los demás conservan sus mensajes.`;
   } else if (c) {
-    question = `¿Borrar toda la conversación con ${c.displayName} de esta PC? Se cancelan los archivos pendientes con este contacto. ${c.displayName} conserva su copia.`;
+    question = `¿Borrar toda la conversación con ${c.displayName} de este equipo? Se cancelan los archivos pendientes con este contacto. ${c.displayName} conserva su copia.`;
   } else {
     return;
   }
@@ -1364,7 +1365,7 @@ async function reloadAll() {
   state.progress.clear();
   showEmpty();
   await loadState().catch((e) => showBanner(e.message));
-  showBanner("Se borraron todos tus datos de esta PC.", 5000);
+  showBanner("Se borraron todos tus datos de este equipo.", 5000);
 }
 
 // ---------- Eventos en vivo ----------

@@ -45,6 +45,9 @@ type Host interface {
 	OpenFile(path string) error
 	// OpenURL abre un enlace en el navegador (la página del proyecto).
 	OpenURL(url string) error
+	// IdleSeconds: cuánto lleva la pantalla apagada, en segundos (0 si está
+	// encendida). Es la inactividad del ausente automático.
+	IdleSeconds() int
 }
 
 var (
@@ -91,7 +94,10 @@ func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
 	log := slog.New(slog.NewTextHandler(logFile, nil))
 	log.Info("iniciando", "version", version.App, "plataforma", "android", "redes", currentNetworks())
 
-	a, err := app.New(app.Options{Dir: dataDir, Hostname: deviceName, Log: log, LocalNets: currentNetworks})
+	a, err := app.New(app.Options{
+		Dir: dataDir, Hostname: deviceName, Log: log, LocalNets: currentNetworks,
+		IdleTime: func() (time.Duration, error) { return time.Duration(host.IdleSeconds()) * time.Second, nil },
+	})
 	if err != nil {
 		logFile.Close()
 		return "", err

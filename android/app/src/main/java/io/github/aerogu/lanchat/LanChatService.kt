@@ -24,6 +24,7 @@ import java.util.concurrent.Executors
 class LanChatService : Service() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var networks: LocalNetworks? = null
+    private var screen: ScreenIdle? = null
     private var destroyed = false
 
     override fun onCreate() {
@@ -50,8 +51,11 @@ class LanChatService : Service() {
         // Antes de Mobile.start, para que el primer saludo ya use las redes.
         networks = LocalNetworks(applicationContext).also { it.start() }
 
+        val screen = ScreenIdle(applicationContext).also { it.start() }
+        this.screen = screen
+
         result = null
-        val host = LanChatHost(applicationContext)
+        val host = LanChatHost(applicationContext, screen)
         val dataDir = filesDir.absolutePath
         val name = deviceName()
         val downloads = downloadDir()
@@ -77,6 +81,7 @@ class LanChatService : Service() {
         destroyed = true
         result = null
         networks?.stop()
+        screen?.stop()
         multicastLock?.release()
         val context = applicationContext
         // Stop espera a que el núcleo se despida de la red: fuera del hilo principal.

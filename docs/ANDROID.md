@@ -198,9 +198,15 @@ Versión mínima hecha para la prueba de red; falta pulir:
   si existe `window.LanChatAndroid`, el puente de `MainActivity`) da el
   estado, el botón "Permitir" y el enlace a la información de la app, donde
   OPPO, Xiaomi, Huawei… tienen sus propios ajustes de batería.
-  - [ ] Confirmar en el OPPO que, con la pantalla apagada un rato, los
-    mensajes llegan al momento (si no, revisar los ajustes propios de
-    ColorOS: "Permitir actividad en segundo plano").
+  - [ ] **Confirmado en el OPPO (ColorOS, Android 16)**: con solo "Sin
+    restricción" de Android, al apagar la pantalla ColorOS congela todo
+    LanChat (`/sys/fs/cgroup/apps/uid_<uid>/cgroup.freeze` = 1; en logcat,
+    `OplusHansManager … unfreeze … scene: LcdOff` al encenderla), aunque
+    tenga servicio en primer plano. Congelado no se anuncia ni recibe: las
+    PCs lo ven desconectado y los mensajes esperan a que se encienda.
+    Probar con "Permitir actividad en segundo plano" de ColorOS
+    (información de la app > Uso de la batería) y repetir 10 min con la
+    pantalla apagada, vigilando ese `cgroup.freeze`.
 - [x] Detener LanChat: botón "Detener" en el aviso fijo (`ACTION_STOP` al
   servicio) y "Detener LanChat" en Ajustes (puente `stop()`). El núcleo se
   despide de la red, la ventana se cierra y el aviso fijo desaparece; al
@@ -243,8 +249,14 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
   conversación (Identidad, Grupo, Renombrar, Borrar) van en un menú "⋯".
   En el teléfono abrir una conversación ya no despliega el teclado.
 - [ ] **Táctil**: revisar el tamaño de los botones con uso real.
-- [ ] **Ausente automático**: en Android no hay tiempo de inactividad;
-  opcionalmente usar pantalla apagada = ausente (`app.Options.IdleTime`).
+- [x] **Ausente automático**: en el teléfono, inactividad = pantalla apagada.
+  `ScreenIdle` (Kotlin) guarda desde cuándo está apagada (`ACTION_SCREEN_OFF`
+  / `ON`, con `elapsedRealtime`, que cuenta también con el teléfono dormido)
+  y `Host.IdleSeconds` se lo da al núcleo como `app.Options.IdleTime`. Tras
+  10 minutos pasa a Ausente; al encenderla vuelve en menos de 30 s (cada
+  cuánto se consulta). La casilla dice "con la pantalla apagada".
+- [x] Textos: "esta PC" → "este equipo" donde aplica a los dos (borrar
+  conversación o datos, identidad).
 
 ### 6. Distribución
 

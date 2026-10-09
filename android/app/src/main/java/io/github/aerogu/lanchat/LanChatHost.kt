@@ -13,10 +13,12 @@ import java.io.File
  * Lo que el núcleo en Go pide a Android. Go lo llama desde sus propios hilos;
  * una excepción le llega a Go como error y la página la muestra.
  */
-class LanChatHost(private val context: Context) : Host {
+class LanChatHost(private val context: Context, private val screen: ScreenIdle) : Host {
     override fun notify(title: String, body: String) = Notifications.message(context, title, body)
 
     override fun unreadChanged(total: Long) = Notifications.updateService(context, total.toInt())
+
+    override fun idleSeconds() = screen.idleSeconds()
 
     override fun openFile(path: String) {
         val file = File(path)
