@@ -197,7 +197,7 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
   (`ACTION_VIEW` con `FileProvider`, solo la carpeta de recibidos) y
   `Host.openURL`. "Mostrar en carpeta" y "Abrir carpeta" se ocultan; una
   carpeta recibida se lista archivo por archivo, cada uno con "Abrir".
-  - [ ] Probar enviar un archivo desde el teléfono, y recibir y abrir uno.
+  - [x] Probado: enviar un archivo desde el teléfono, y recibir y abrir uno.
 - [ ] **Descargar mis datos**: en la WebView las descargas necesitan un
   `DownloadListener`; o exponer la copia por `Host`. Además, `handleExport`
   usa `os.MkdirTemp("")`, y en Android `os.TempDir()` es `/data/local/tmp`

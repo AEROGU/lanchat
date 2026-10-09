@@ -125,3 +125,18 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 ### Fase 4: Android
 - [x] Núcleo portable (`mage portable` en `check`) y API `mobile/` para gomobile.
 - [ ] App Android (Kotlin + WebView + servicio en primer plano): ver [docs/ANDROID.md](docs/ANDROID.md).
+
+### Fase 5 (después de Android)
+- [ ] **Vista previa de imágenes y archivos**, como en WhatsApp, en PC y en
+  teléfono: si el archivo es compatible se ve en la conversación; si no, se
+  muestra como ahora.
+  - Hoy un archivo se ofrece y hay que aceptarlo antes de descargarlo. Para
+    ver la imagen antes de aceptar, el remitente mandaría una miniatura
+    pequeña (p. ej. JPEG de ~320 px) en la oferta, como campo opcional del
+    protocolo (las versiones anteriores lo ignoran).
+  - Ya recibida, mostrar la imagen completa en la conversación (tocar para
+    ampliar) desde una ruta local que solo sirva archivos de transferencias
+    completadas.
+  - Por decidir: qué formatos (JPG, PNG, GIF, WebP seguro; ¿video y PDF con
+    miniatura?), tamaño máximo de la miniatura y si se generan solo en Go
+    (sin cgo) o también con ayuda de Android.
