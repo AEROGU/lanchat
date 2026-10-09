@@ -166,7 +166,17 @@ Versión mínima hecha para la prueba de red; falta pulir:
   `MulticastLock`, `Mobile.start`/`Mobile.stop` en un hilo propio (en orden),
   nombre del equipo (`Settings.Global.DEVICE_NAME` o `Build.MODEL`) y
   descargas en `getExternalFilesDir(DIRECTORY_DOWNLOADS)`.
-  - [ ] Copiar lo recibido a Descargas con `MediaStore`.
+  - [x] Lo recibido va directo a **Descargas/LanChat** (Android 11+): una
+    app puede crear archivos ahí sin permisos, Android los indexa (explorador
+    de archivos, galería) y no se borran al desinstalar. No se copia nada:
+    el núcleo escribe el `.part` ahí mismo y lo renombra al terminar. En
+    Android 7 a 10, o si no se puede crear la carpeta, se usa la de la app
+    (`getExternalFilesDir`). `FileProvider` admite las dos.
+    - Ojo: tras reinstalar la app, los archivos anteriores de esa carpeta ya
+      no son "suyos": no puede abrirlos desde LanChat, y si llega uno con el
+      mismo nombre, el renombrado final podría fallar. Se abren desde el
+      explorador de archivos.
+    - [ ] Probar recibir un archivo y verlo en el explorador de archivos.
 - [x] **LanChatHost**: `notify` → canal "Mensajes" (un aviso por
   conversación; al tocarlo abre la app); `unreadChanged` → texto y número en
   el aviso fijo.

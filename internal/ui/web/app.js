@@ -969,6 +969,9 @@ function renderAndroid() {
   const android = window.LanChatAndroid;
   $("android-section").hidden = !android;
   if (!android) return;
+  // Como lo muestra el explorador de archivos: Descargas › LanChat.
+  $("android-downloads").textContent = state.downloadDir.endsWith("/Download/LanChat")
+    ? "Descargas › LanChat" : state.downloadDir;
   const restricted = android.backgroundRestricted();
   $("battery-status").textContent = restricted ? "Android puede pausarlo para ahorrar batería" : "Sin restricción ✓";
   $("battery-btn").hidden = !restricted;

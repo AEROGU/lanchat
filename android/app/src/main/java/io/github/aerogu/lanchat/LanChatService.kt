@@ -83,9 +83,21 @@ class LanChatService : Service() {
         return name?.takeIf { it.isNotBlank() } ?: Build.MODEL
     }
 
-    /** Carpeta de la app en el almacenamiento compartido: no pide permisos. */
-    private fun downloadDir(): String =
-        (getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: File(filesDir, "Descargas")).absolutePath
+    /**
+     * Descargas/LanChat, donde los ven el explorador de archivos y la galería:
+     * desde Android 11 una app puede crear archivos ahí sin pedir permisos (y
+     * siguen ahí si se desinstala). Antes, o si no se puede, la carpeta de la
+     * app en el almacenamiento compartido.
+     */
+    private fun downloadDir(): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            @Suppress("DEPRECATION") // solo la ruta; los archivos los escribe Go
+            val public = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "LanChat")
+            if (public.isDirectory || public.mkdirs()) return public.absolutePath
+            Log.w(TAG, "no se pudo crear $public; se usa la carpeta de la app")
+        }
+        return (getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: File(filesDir, "Descargas")).absolutePath
+    }
 
     companion object {
         private const val TAG = "LanChat"
