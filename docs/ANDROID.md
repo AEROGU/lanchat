@@ -206,7 +206,7 @@ Versión mínima hecha para la prueba de red; falta pulir:
   despide de la red, la ventana se cierra y el aviso fijo desaparece; al
   abrir la app arranca de nuevo. `LanChatService.running` evita que un aviso
   de no leídos tardío vuelva a poner el aviso fijo.
-  - [ ] Probar el botón "Detener" de la notificación.
+  - [x] Probado el botón "Detener" de la notificación.
 
 ### 5. Ajustes a la interfaz web y al núcleo
 
