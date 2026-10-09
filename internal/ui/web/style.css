@@ -429,6 +429,7 @@ dialog {
 
 dialog::backdrop { background: rgb(0 0 0 / 35%); }
 dialog h2 { margin: 0 0 14px; font-size: 18px; }
+dialog h2:focus { outline: none; }
 dialog label { display: block; font-weight: 600; margin: 12px 0 4px; }
 
 dialog input, dialog textarea {

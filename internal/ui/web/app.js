@@ -125,7 +125,14 @@ async function loadState() {
   state.downloadDir = s.downloadDir;
   state.mobile = s.mobile;
   document.body.classList.toggle("mobile", s.mobile);
-  if (s.mobile) $("input").placeholder = "Escribe un mensaje";
+  if (s.mobile) {
+    $("input").placeholder = "Escribe un mensaje";
+    // Que abrir Ajustes no despliegue el teclado: el foco va al título y no
+    // al campo del nombre.
+    const title = $("settings").querySelector("h2");
+    title.tabIndex = -1;
+    title.autofocus = true;
+  }
   state.contacts = new Map(s.contacts.map((c) => [c.id, c]));
   state.rooms = new Map(s.rooms.map((r) => [r.id, r]));
   renderSelf();
@@ -783,6 +790,28 @@ function setMenu(open) {
   $("chat-actions").classList.toggle("open", open);
   $("more-btn").setAttribute("aria-expanded", open);
 }
+
+// NARROW coincide con la ventana angosta de style.css (una columna).
+const NARROW = window.matchMedia("(max-width: 640px)");
+
+// lanchatBack lo llama el botón Atrás de Android (MainActivity): cierra lo
+// que esté abierto encima y devuelve true; con false la app pasa a segundo plano.
+window.lanchatBack = () => {
+  const dialog = document.querySelector("dialog[open]");
+  if (dialog) {
+    dialog.close();
+    return true;
+  }
+  if ($("chat-actions").classList.contains("open")) {
+    setMenu(false);
+    return true;
+  }
+  if (state.current && NARROW.matches) {
+    closeChat();
+    return true;
+  }
+  return false;
+};
 
 async function openChat(id) {
   setMenu(false);

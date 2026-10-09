@@ -173,8 +173,11 @@ Versión mínima hecha para la prueba de red; falta pulir:
   servicio, edge-to-edge con márgenes de barras y teclado, enlaces externos al
   navegador, depuración con `chrome://inspect` en compilaciones debug, y pide
   `POST_NOTIFICATIONS`.
-  - [ ] El botón Atrás vuelve de la conversación a la lista (la página ya
-    tiene el botón ‹ para pantallas angostas).
+  - [x] Botón Atrás: `OnBackPressedCallback` llama a `window.lanchatBack()`
+    de la página, que cierra lo que haya encima (diálogo, menú ⋯,
+    conversación en pantalla angosta). Si no había nada, `moveTaskToBack`:
+    la app pasa a segundo plano sin cerrarse. En el teléfono, abrir Ajustes
+    o una conversación no despliega el teclado.
   - [ ] `WebChromeClient.onShowFileChooser` para `<input type="file">`
     (punto 5).
 - [ ] Pedir que se ignore la optimización de batería; explicar por qué (si
@@ -229,6 +232,12 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
   apps desconocidas").
 
 ## Notas
+
+- **Depurar la página en el teléfono** (compilación debug): con el teléfono
+  conectado por USB, abrir `chrome://inspect` (o `edge://inspect`) en la PC
+  y elegir la WebView de LanChat: consola, red y DOM como en el escritorio.
+  Para scripts: `adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>`
+  y el protocolo de DevTools en `http://127.0.0.1:9333/json`.
 
 - Cada teléfono tiene su propia identidad TLS (en `filesDir`). Si se
   desinstala la app, las PCs verán "la identidad cambió" la próxima vez.

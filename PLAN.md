@@ -130,6 +130,9 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 - [ ] **Vista previa de imágenes y archivos**, como en WhatsApp, en PC y en
   teléfono: si el archivo es compatible se ve en la conversación; si no, se
   muestra como ahora.
+  - **Condición**: solo se hace si no deja basura ni archivos temporales; la
+    vista previa debe mostrarse directamente (miniatura generada en memoria,
+    imagen servida desde el archivo recibido). Si no se puede así, no se hace.
   - Hoy un archivo se ofrece y hay que aceptarlo antes de descargarlo. Para
     ver la imagen antes de aceptar, el remitente mandaría una miniatura
     pequeña (p. ej. JPEG de ~320 px) en la oferta, como campo opcional del
