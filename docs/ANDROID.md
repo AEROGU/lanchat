@@ -87,14 +87,22 @@ a los clientes o pone los teléfonos en otra red.
   primera vez que se abre LanChat. La regla queda solo para el tipo de red
   de ese momento (Pública o Privada).
 
-  Para instalarla: activar *Depuración USB* en el teléfono, conectarlo y
+  Para instalarla:
 
   ```bash
-  go tool mage android
+  go tool mage apk
   ```
 
-  y luego, en `android/`, `./gradlew installDebug` (o *Run* en Android
-  Studio).
+  deja `dist/LanChat-<versión>.apk` (núcleo + app, con la versión de git).
+  Se copia al teléfono (cable, correo, etc.) y se abre: Android pide permitir
+  "instalar apps desconocidas" a la app con que se abra. Va firmado con la
+  clave de depuración: sirve para pruebas, pero la versión con clave propia
+  (punto 6) no podrá instalarse encima; habrá que desinstalar, y las PCs
+  verán "la identidad cambió".
+
+  Para desarrollar, con *Depuración USB* activada y el teléfono conectado:
+  `go tool mage android` y luego, en `android/`, `./gradlew installDebug`
+  (o *Run* en Android Studio).
 - [ ] Si no se ven: revisar `lanchat.log` (en `filesDir`), probar con la IP
   de la PC en Ajustes > "Equipos de otras subredes", y preguntar si el Wi-Fi
   tiene aislamiento de clientes o es una red aparte.
@@ -108,8 +116,8 @@ a los clientes o pone los teléfonos en otra red.
   núcleo vuelve a saludar). En el núcleo es `discovery.Config.LocalNets`.
   `lanchat.log` muestra las redes al arrancar (`redes=[...]`) y al cambiar
   ("redes locales").
-  - [ ] Probar el cambio de red en vivo (pasar el teléfono del módem al
-    repetidor con LanChat abierto).
+  - [x] Probado el cambio de red en vivo (del módem al repetidor y al revés
+    con LanChat abierto).
 
 #### El emulador no sirve para probar el núcleo
 
@@ -125,11 +133,11 @@ Probado con el emulador x86_64 de Android Studio (API 37):
   runtime de Go lee al arrancar → `SIGILL`. En un teléfono real el kernel sí
   la atiende.
 
-Pendiente de decidir según lo que muestre el teléfono:
+En un teléfono real (arm64) funciona. Por eso:
 
-- [ ] Quitar `android/amd64` de `androidTargets` (no funciona, y el APK
-  baja ~14 MB). `android/arm` (32 bits) tiene el mismo riesgo que x86_64
-  (`lstat64`); hoy casi no hay teléfonos solo de 32 bits.
+- [x] Sin `android/amd64` en `androidTargets` (no funciona; el APK baja
+  ~14 MB). `android/arm` (32 bits) sigue, con el mismo riesgo que x86_64
+  (`lstat64`), sin probar: hoy casi no hay teléfonos solo de 32 bits.
 - [ ] Si hiciera falta x86_64 o 32 bits: en Android usar un SQLite con cgo
   (gomobile ya compila con el NDK), p. ej. `mattn/go-sqlite3` con etiqueta
   de compilación, y dejar `modernc.org/sqlite` en escritorio.

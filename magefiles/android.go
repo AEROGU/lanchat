@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
+	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 )
 
@@ -16,8 +18,11 @@ const (
 	mobilePkg = "./mobile"
 	// aarPath es donde la app de Android (carpeta android/) espera la librería.
 	aarPath = "android/app/libs/lanchat.aar"
-	// androidTargets: teléfonos de 64 y 32 bits y el emulador x86_64.
-	androidTargets = "android/arm64,android/arm,android/amd64"
+	// androidTargets: teléfonos de 64 y 32 bits. Sin x86_64: ahí la libc de
+	// modernc.org/sqlite usa syscalls que Android prohíbe (docs/ANDROID.md).
+	androidTargets = "android/arm64,android/arm"
+	// apkBuilt es lo que deja "gradlew assembleDebug"; Apk lo copia a dist.
+	apkBuilt = "android/app/build/outputs/apk/debug/app-debug.apk"
 	// androidAPI es la versión mínima de Android (24 = Android 7.0).
 	androidAPI = "24"
 	// javaPkg antecede al paquete Go: la clase queda io.github.aerogu.lanchat.mobile.Mobile.
@@ -54,4 +59,45 @@ func Android() error {
 	}
 	fmt.Printf("%s (versión %s)\n", aarPath, v)
 	return nil
+}
+
+// Apk compila dist/LanChat-<versión>.apk, para instalar a mano en el teléfono
+// ("instalar apps desconocidas"). Va firmado con la clave de depuración de
+// Android: sirve para pruebas; la versión publicada usará una clave propia
+// (docs/ANDROID.md, punto 6).
+func Apk() error {
+	mg.Deps(Android)
+	v := appVersion()
+	gradlew := "gradlew"
+	if runtime.GOOS == "windows" {
+		gradlew = "gradlew.bat"
+	}
+	gradlew, err := filepath.Abs(filepath.Join("android", gradlew))
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(gradlew, "assembleDebug", "--console=plain",
+		"-Planchat.versionName="+v, fmt.Sprintf("-Planchat.versionCode=%d", androidVersionCode(v)))
+	cmd.Dir = "android"
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		return err
+	}
+	out := filepath.Join(distDir, fmt.Sprintf("%s-%s.apk", productName, v))
+	if err := sh.Copy(out, apkBuilt); err != nil {
+		return err
+	}
+	fmt.Printf("%s (versión %s)\n", out, v)
+	return nil
+}
+
+// androidVersionCode convierte la versión de git en el número que Android
+// compara para permitir una actualización (debe crecer siempre):
+// 1.2.3-45-gabc → 1_02_003_045. Sin etiqueta de versión queda en 1 (el mínimo).
+func androidVersionCode(v string) int {
+	n := numericVersion(v)
+	return max(1, int(n[0])*10_000_000+int(n[1])*100_000+int(n[2])*1_000+min(int(n[3]), 999))
 }

@@ -11,8 +11,10 @@ android {
         applicationId = "io.github.aerogu.lanchat"
         minSdk = 24 // igual que androidAPI en magefiles/android.go
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.12.0-dev"
+        // "go tool mage apk" pasa la versión de git (magefiles/android.go);
+        // desde Android Studio queda "dev".
+        versionCode = providers.gradleProperty("lanchat.versionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("lanchat.versionName").orNull ?: "dev"
     }
 
     buildTypes {
