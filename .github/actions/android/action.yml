@@ -17,7 +17,11 @@ runs:
       run: |
         ndk=30.0.16248370 # el mismo que en la PC de desarrollo (docs/ANDROID.md)
         sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+        # Con pipefail, "yes" termina por tubería rota (141) al cerrar
+        # sdkmanager: no es un error. Si faltara una licencia, falla --install.
+        set +o pipefail
         yes | "$sdkmanager" --licenses > /dev/null
+        set -o pipefail
         "$sdkmanager" --install "ndk;$ndk" > /dev/null
         echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ndk" >> "$GITHUB_ENV"
 

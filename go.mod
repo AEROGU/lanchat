@@ -1,6 +1,6 @@
 module github.com/AEROGU/lanchat
 
-go 1.27.0
+go 1.27.2
 
 require (
 	fyne.io/systray v1.12.2
