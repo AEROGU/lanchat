@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LanChat</string>
+    <string name="channel_service">LanChat activo</string>
+    <string name="channel_service_description">Aviso fijo mientras LanChat está disponible para recibir mensajes.</string>
+    <string name="channel_messages">Mensajes</string>
+    <string name="channel_messages_description">Mensajes nuevos de los equipos de la red.</string>
+    <string name="service_running">Disponible en la red local</string>
+    <plurals name="unread">
+        <item quantity="one">%d mensaje sin leer</item>
+        <item quantity="other">%d mensajes sin leer</item>
+    </plurals>
+    <string name="start_failed">No se pudo iniciar LanChat</string>
+</resources>

@@ -69,10 +69,23 @@ Sirve también para preparar otra PC:
 El mayor riesgo no es el código, es la red: en muchas oficinas el Wi-Fi aísla
 a los clientes o pone los teléfonos en otra red.
 
-- [ ] App mínima: servicio + `Mobile.start` + WebView (puntos 3 y 4 sin
-  pulir). Con LanChat abierto en una PC de la oficina, comprobar que:
+- [x] App mínima: servicio + `Mobile.start` + WebView (puntos 3 y 4 sin
+  pulir).
+- [ ] **En un teléfono real** (el emulador no sirve, ver abajo), con
+  LanChat abierto en una PC de la oficina, comprobar que:
+  - [ ] el núcleo arranca (si falla, la app muestra el error; ver también
+    `adb logcat` y `lanchat.log`);
   - [ ] el teléfono aparece en la PC y la PC en el teléfono;
   - [ ] llegan mensajes en ambos sentidos.
+
+  Para instalarla: activar *Depuración USB* en el teléfono, conectarlo y
+
+  ```bash
+  go tool mage android
+  ```
+
+  y luego, en `android/`, `./gradlew installDebug` (o *Run* en Android
+  Studio).
 - [ ] Si no se ven: revisar `lanchat.log` (en `filesDir`), probar con la IP
   de la PC en Ajustes > "Equipos de otras subredes", y preguntar si el Wi-Fi
   tiene aislamiento de clientes o es una red aparte.
@@ -83,59 +96,76 @@ a los clientes o pone los teléfonos en otra red.
   (`ConnectivityManager` / `LinkProperties`) con una opción nueva en
   `discovery.Config`.
 
-### 3. Proyecto Android (carpeta `android/`)
+#### El emulador no sirve para probar el núcleo
 
-- [ ] Android Studio: *New Project > Empty Views Activity*, Kotlin, nombre
-  LanChat, paquete `io.github.aerogu.lanchat`, guardado en `<repo>/android`,
-  mínimo **API 24** (igual que `androidAPI` en `magefiles/android.go`).
-- [ ] `app/build.gradle.kts`: `implementation(files("libs/lanchat.aar"))`.
-  La clase generada es `io.github.aerogu.lanchat.mobile.Mobile`.
-- [ ] `AndroidManifest.xml`, permisos:
-  - `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`
-  - `CHANGE_WIFI_MULTICAST_STATE` (sin él Android descarta los broadcasts)
-  - `POST_NOTIFICATIONS` (Android 13+, pedirlo en tiempo de ejecución)
-  - `FOREGROUND_SERVICE` y el del tipo de servicio elegido (ver abajo)
-  - Opcionales: `RECEIVE_BOOT_COMPLETED` (arrancar al encender) y
-    `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
-- [ ] Tipo del servicio en primer plano (obligatorio desde Android 14).
-  `dataSync` tiene límite de 6 h diarias en Android 15, así que no sirve.
-  Para la APK de la oficina, `specialUse` con su explicación en el manifest.
-  Revisar la documentación vigente antes de publicar en Google Play.
-- [ ] La WebView carga `http://127.0.0.1`: permitir texto plano solo para
-  esa dirección con `network_security_config.xml`:
+Probado con el emulador x86_64 de Android Studio (API 37):
 
-  ```xml
-  <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-      <domain includeSubdomains="false">127.0.0.1</domain>
-    </domain-config>
-  </network-security-config>
-  ```
+- **ABI x86_64**: el proceso muere con `SIGSYS` (seccomp, syscall 6 =
+  `lstat`). `modernc.org/sqlite` usa una libc traducida de musl, que en
+  x86_64 llama a syscalls antiguas (`lstat`, `access`, …) que Android
+  prohíbe a las apps. En arm64 esas syscalls no existen y musl usa las
+  `*at` (`newfstatat`), que sí están permitidas.
+- **ABI arm64 en el emulador** (`adb install --abi arm64-v8a`): el
+  traductor ARM del emulador (Berberis) no implementa `mrs MIDR_EL1`, que el
+  runtime de Go lee al arrancar → `SIGILL`. En un teléfono real el kernel sí
+  la atiende.
+
+Pendiente de decidir según lo que muestre el teléfono:
+
+- [ ] Quitar `android/amd64` de `androidTargets` (no funciona, y el APK
+  baja ~14 MB). `android/arm` (32 bits) tiene el mismo riesgo que x86_64
+  (`lstat64`); hoy casi no hay teléfonos solo de 32 bits.
+- [ ] Si hiciera falta x86_64 o 32 bits: en Android usar un SQLite con cgo
+  (gomobile ya compila con el NDK), p. ej. `mattn/go-sqlite3` con etiqueta
+  de compilación, y dejar `modernc.org/sqlite` en escritorio.
+
+### 3. Proyecto Android (carpeta `android/`) (hecho)
+
+- [x] Proyecto Gradle a mano (equivale a *Empty Views Activity*): AGP 9.4.1
+  con Kotlin integrado (sin plugin `kotlin-android`), Gradle 9.6.1 (el
+  wrapper verifica el SHA-256), `compileSdk`/`targetSdk` 37, `minSdk` 24
+  (igual que `androidAPI` en `magefiles/android.go`). Dependencias:
+  `lanchat.aar`, `activity-ktx` y `core-ktx`.
+- [x] `AndroidManifest.xml`: `INTERNET`, `ACCESS_NETWORK_STATE`,
+  `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE`, `POST_NOTIFICATIONS`,
+  `FOREGROUND_SERVICE` y `FOREGROUND_SERVICE_SPECIAL_USE`.
+  - Pendientes opcionales: `RECEIVE_BOOT_COMPLETED` (arrancar al encender)
+    y `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (punto 4).
+  - `allowBackup="false"`: la identidad TLS no debe pasar a otro teléfono.
+- [x] Servicio `specialUse` con su explicación (`dataSync` tiene límite de
+  6 h diarias desde Android 15). Revisar la documentación vigente antes de
+  publicar en Google Play.
+- [x] `network_security_config.xml`: texto plano solo hacia `127.0.0.1`.
+- [x] Ícono: el globo de `internal/icon` como ícono adaptable (vector,
+  también monocromo) y de notificación; PNG generados con `icon.Draw` para
+  Android 7 (sin íconos adaptables).
+- El aviso `Unable to strip ... libgojni.so` al compilar es normal: AGP
+  busca el NDK 28 y gomobile ya quita los símbolos (`-s -w`).
 
 ### 4. Código Kotlin
 
-- [ ] **LanChatService** (servicio en primer plano):
-  - Tomar un `WifiManager.MulticastLock` (y soltarlo en `onDestroy`).
-  - `startForeground` con una notificación fija "LanChat activo".
-  - En un hilo aparte: `Mobile.start(filesDir.absolutePath, nombre,
-    descargas, host)`. Guardar la URL para la Activity.
-  - Nombre del equipo: `Settings.Global.DEVICE_NAME`, o `Build.MODEL` si
-    no hay.
-  - Descargas: `getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)` (no
-    pide permisos). Más adelante copiar lo recibido a Descargas con
-    `MediaStore`.
-  - `onDestroy`: `Mobile.stop()`.
-- [ ] **Host**:
-  - `notify` → `NotificationCompat` en un canal "Mensajes"; al tocarla abre
-    la app.
-  - `unreadChanged` → número en la notificación fija o en el ícono.
-- [ ] **MainActivity**:
-  - WebView con JavaScript y `domStorageEnabled`; carga la URL del servicio.
-  - El botón Atrás vuelve de la conversación a la lista (la página ya tiene
-    el botón ‹ para pantallas angostas).
-  - `WebChromeClient.onShowFileChooser` para `<input type="file">` (punto 5).
+Versión mínima hecha para la prueba de red; falta pulir:
+
+- [x] **LanChatService**: servicio en primer plano con aviso fijo,
+  `MulticastLock`, `Mobile.start`/`Mobile.stop` en un hilo propio (en orden),
+  nombre del equipo (`Settings.Global.DEVICE_NAME` o `Build.MODEL`) y
+  descargas en `getExternalFilesDir(DIRECTORY_DOWNLOADS)`.
+  - [ ] Copiar lo recibido a Descargas con `MediaStore`.
+- [x] **LanChatHost**: `notify` → canal "Mensajes" (un aviso por
+  conversación; al tocarlo abre la app); `unreadChanged` → texto y número en
+  el aviso fijo.
+- [x] **MainActivity**: WebView (JavaScript, `domStorage`) con la URL del
+  servicio, edge-to-edge con márgenes de barras y teclado, enlaces externos al
+  navegador, depuración con `chrome://inspect` en compilaciones debug, y pide
+  `POST_NOTIFICATIONS`.
+  - [ ] El botón Atrás vuelve de la conversación a la lista (la página ya
+    tiene el botón ‹ para pantallas angostas).
+  - [ ] `WebChromeClient.onShowFileChooser` para `<input type="file">`
+    (punto 5).
 - [ ] Pedir que se ignore la optimización de batería; explicar por qué (si
   no, algunos fabricantes pausan la app y los mensajes llegan con retraso).
+- [ ] Opción para detener LanChat (hoy el servicio sigue hasta que Android
+  lo detenga o se fuerce el cierre).
 
 ### 5. Ajustes a la interfaz web y al núcleo
 
@@ -153,7 +183,10 @@ Hoy algunas acciones usan funciones de Windows; en Android devuelven error.
   `openUrl(url)`, y que `Server` use un gancho en lugar de la función del
   paquete. En Android "Mostrar en carpeta" puede omitirse.
 - [ ] **Descargar mis datos**: en la WebView las descargas necesitan un
-  `DownloadListener`; o exponer la copia por `Host`.
+  `DownloadListener`; o exponer la copia por `Host`. Además, `handleExport`
+  usa `os.MkdirTemp("")`, y en Android `os.TempDir()` es `/data/local/tmp`
+  (sin permiso de escritura): gomobile solo define `TMPDIR` en modo app, no
+  en `bind`. Hacer que `mobile.Start` lo apunte a una carpeta de la app.
 - [ ] **Ajustes**: la sección Sistema ya se oculta fuera de Windows. Ocultar
   o hacer de solo lectura la carpeta de descargas.
 - [ ] **Táctil**: botones más grandes. Los botones del encabezado de la
