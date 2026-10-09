@@ -951,6 +951,7 @@ function openSettings() {
   $("receipts-input").checked = state.self.readReceipts;
   $("about").textContent = [`LanChat ${s.version} · ${s.hostname}`, s.copyright, s.license].join("\n");
   $("settings-error").hidden = true;
+  renderAndroid();
   $("settings").showModal();
   api.system().then(renderSystem).catch(() => {});
 }
@@ -960,6 +961,17 @@ function renderSystem(sys) {
   $("autostart-input").checked = sys.autostart;
   $("firewall-status").textContent = sys.firewall ? "Permitido ✓" : "Sin configurar";
   $("firewall-btn").hidden = sys.firewall;
+}
+
+// renderAndroid muestra si Android puede pausar LanChat. LanChatAndroid lo
+// pone la app de Android (MainActivity.Bridge); en el escritorio no existe.
+function renderAndroid() {
+  const android = window.LanChatAndroid;
+  $("android-section").hidden = !android;
+  if (!android) return;
+  const restricted = android.backgroundRestricted();
+  $("battery-status").textContent = restricted ? "Android puede pausarlo para ahorrar batería" : "Sin restricción ✓";
+  $("battery-btn").hidden = !restricted;
 }
 
 function settingsError(e) {
@@ -1464,6 +1476,8 @@ function bind() {
   $("autostart-input").addEventListener("change", toggleAutostart);
   $("receipts-input").addEventListener("change", toggleReceipts);
   $("firewall-btn").addEventListener("click", allowFirewall);
+  $("battery-btn").addEventListener("click", () => window.LanChatAndroid?.allowBackground());
+  $("app-settings-btn").addEventListener("click", () => window.LanChatAndroid?.openAppSettings());
   $("open-downloads").addEventListener("click", () =>
     api.openDownloadDir().catch((e) => showBanner(e.message, 5000)));
 
@@ -1508,6 +1522,12 @@ function bind() {
     markReadIfVisible();
   });
 }
+
+// lanchatResume lo llama la app de Android al volver a primer plano (p. ej.
+// desde el diálogo de batería): el estado de Ajustes pudo cambiar.
+window.lanchatResume = () => {
+  if ($("settings").open) renderAndroid();
+};
 
 bind();
 loadState()

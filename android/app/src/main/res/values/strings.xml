@@ -11,4 +11,8 @@
         <item quantity="other">%d mensajes sin leer</item>
     </plurals>
     <string name="start_failed">No se pudo iniciar LanChat</string>
+    <string name="battery_title">Recibir mensajes al momento</string>
+    <string name="battery_message">Para avisarte en cuanto llega un mensaje, LanChat debe seguir funcionando en segundo plano. Si Android lo pausa para ahorrar batería, los mensajes pueden llegar con minutos de retraso.\n\nEn la siguiente pantalla elige «Permitir». Puedes cambiarlo después en Ajustes de LanChat.</string>
+    <string name="battery_continue">Continuar</string>
+    <string name="battery_later">Ahora no</string>
 </resources>

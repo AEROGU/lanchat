@@ -144,8 +144,9 @@ Pendiente de decidir según lo que muestre el teléfono:
 - [x] `AndroidManifest.xml`: `INTERNET`, `ACCESS_NETWORK_STATE`,
   `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE`, `POST_NOTIFICATIONS`,
   `FOREGROUND_SERVICE` y `FOREGROUND_SERVICE_SPECIAL_USE`.
-  - Pendientes opcionales: `RECEIVE_BOOT_COMPLETED` (arrancar al encender)
-    y `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (punto 4).
+  - `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (punto 4). Google Play solo lo
+    acepta en ciertos tipos de app: revisarlo si algún día se publica ahí.
+  - Pendiente opcional: `RECEIVE_BOOT_COMPLETED` (arrancar al encender).
   - `allowBackup="false"`: la identidad TLS no debe pasar a otro teléfono.
 - [x] Servicio `specialUse` con su explicación (`dataSync` tiene límite de
   6 h diarias desde Android 15). Revisar la documentación vigente antes de
@@ -180,8 +181,16 @@ Versión mínima hecha para la prueba de red; falta pulir:
     o una conversación no despliega el teclado.
   - [ ] `WebChromeClient.onShowFileChooser` para `<input type="file">`
     (punto 5).
-- [ ] Pedir que se ignore la optimización de batería; explicar por qué (si
-  no, algunos fabricantes pausan la app y los mensajes llegan con retraso).
+- [x] Optimización de batería (`BatteryOptimization`): la primera vez, tras
+  el permiso de notificaciones, un diálogo explica por qué y abre el del
+  sistema ("Permitir en segundo plano"); no vuelve a preguntar solo. En
+  Ajustes, la sección "Segundo plano" (solo en la app: la página la muestra
+  si existe `window.LanChatAndroid`, el puente de `MainActivity`) da el
+  estado, el botón "Permitir" y el enlace a la información de la app, donde
+  OPPO, Xiaomi, Huawei… tienen sus propios ajustes de batería.
+  - [ ] Confirmar en el OPPO que, con la pantalla apagada un rato, los
+    mensajes llegan al momento (si no, revisar los ajustes propios de
+    ColorOS: "Permitir actividad en segundo plano").
 - [ ] Opción para detener LanChat (hoy el servicio sigue hasta que Android
   lo detenga o se fuerce el cierre).
 

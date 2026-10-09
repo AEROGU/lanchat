@@ -1,14 +1,16 @@
 package io.github.aerogu.lanchat
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.net.Uri
 import android.text.TextUtils
+import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -20,6 +22,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
@@ -27,7 +30,9 @@ import androidx.core.view.WindowInsetsCompat
 class MainActivity : ComponentActivity() {
     private lateinit var web: WebView
 
-    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    // Primero el permiso de notificaciones y después lo de la batería.
+    private val askNotifications =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { askBatteryOnce() }
 
     // <input type="file"> de la página (📎): selector de archivos de Android.
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -51,6 +56,8 @@ class MainActivity : ComponentActivity() {
             settings.domStorageEnabled = true
             webViewClient = Client()
             webChromeClient = ChromeClient()
+            // Solo carga la interfaz de 127.0.0.1 (ver Client): nadie más lo ve.
+            addJavascriptInterface(Bridge(), "LanChatAndroid")
         }
         // Edge-to-edge: la página no debe quedar bajo las barras ni el teclado.
         val root = FrameLayout(this).apply { addView(web) }
@@ -81,9 +88,32 @@ class MainActivity : ComponentActivity() {
             PackageManager.PERMISSION_GRANTED
         ) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            askBatteryOnce()
         }
         ContextCompat.startForegroundService(this, Intent(this, LanChatService::class.java))
         LanChatService.whenStarted(onStarted)
+    }
+
+    /**
+     * La primera vez, explica por qué y pide que Android no pause LanChat. No
+     * vuelve a preguntar: después se cambia en Ajustes > Segundo plano.
+     */
+    private fun askBatteryOnce() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (prefs.getBoolean(PREF_BATTERY_ASKED, false) || !BatteryOptimization.restricted(this)) return
+        prefs.edit { putBoolean(PREF_BATTERY_ASKED, true) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.battery_title)
+            .setMessage(R.string.battery_message)
+            .setPositiveButton(R.string.battery_continue) { _, _ -> BatteryOptimization.request(this) }
+            .setNegativeButton(R.string.battery_later, null)
+            .show()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        web.evaluateJavascript("window.lanchatResume?.()", null)
     }
 
     override fun onDestroy() {
@@ -96,6 +126,18 @@ class MainActivity : ComponentActivity() {
         val html = "<meta name=viewport content='width=device-width'>" +
             "<h3>${getString(R.string.start_failed)}</h3><p>${TextUtils.htmlEncode(e.message ?: e.toString())}</p>"
         web.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+    }
+
+    /** Lo que la página puede pedir a Android: Ajustes > Segundo plano. */
+    private inner class Bridge {
+        @JavascriptInterface
+        fun backgroundRestricted() = BatteryOptimization.restricted(this@MainActivity)
+
+        @JavascriptInterface
+        fun allowBackground() = runOnUiThread { BatteryOptimization.request(this@MainActivity) }
+
+        @JavascriptInterface
+        fun openAppSettings() = runOnUiThread { BatteryOptimization.openAppSettings(this@MainActivity) }
     }
 
     /** La interfaz de LanChat se queda en la WebView; los demás enlaces van al navegador. */
@@ -126,3 +168,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private const val PREFS = "lanchat"
+private const val PREF_BATTERY_ASKED = "battery_asked"
