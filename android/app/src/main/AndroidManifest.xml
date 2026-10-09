@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Para pedir que Android no pause LanChat (BatteryOptimization). -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Arrancar al encender el teléfono (StartReceiver). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- allowBackup="false": la identidad TLS (en filesDir) es de este teléfono;
          restaurarla en otro haría que dos equipos se presenten como el mismo. -->
@@ -44,6 +46,16 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Chat en la red local: mantiene el puerto abierto para recibir mensajes y archivos de los otros equipos de la oficina, sin servidor ni internet." />
         </service>
+
+        <!-- Al encender el teléfono y tras actualizar la app. Solo los envía el sistema. -->
+        <receiver
+            android:name=".StartReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Abre los archivos recibidos con otras apps (LanChatHost.openFile). -->
         <provider

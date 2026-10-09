@@ -1039,6 +1039,7 @@ function renderAndroid() {
   const android = window.LanChatAndroid;
   $("android-section").hidden = !android;
   if (!android) return;
+  $("android-autostart").checked = android.autostart();
   $("android-downloads").textContent = friendlyDir(state.downloadDir);
   const restricted = android.backgroundRestricted();
   $("battery-status").textContent = restricted ? "Android puede pausarlo para ahorrar batería" : "Sin restricción ✓";
@@ -1578,6 +1579,8 @@ function bind() {
   $("battery-btn").addEventListener("click", () => window.LanChatAndroid?.allowBackground());
   $("app-settings-btn").addEventListener("click", () => window.LanChatAndroid?.openAppSettings());
   $("stop-btn").addEventListener("click", () => window.LanChatAndroid?.stop());
+  $("android-autostart").addEventListener("change", (e) =>
+    window.LanChatAndroid?.setAutostart(e.currentTarget.checked));
   $("open-downloads").addEventListener("click", () =>
     api.openDownloadDir().catch((e) => showBanner(e.message, 5000)));
 

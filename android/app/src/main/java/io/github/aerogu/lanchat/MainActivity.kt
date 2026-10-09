@@ -104,7 +104,7 @@ class MainActivity : ComponentActivity() {
      * vuelve a preguntar: después se cambia en Ajustes > Segundo plano.
      */
     private fun askBatteryOnce() {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val prefs = AppPrefs.of(this)
         if (prefs.getBoolean(PREF_BATTERY_ASKED, false) || !BatteryOptimization.restricted(this)) return
         prefs.edit { putBoolean(PREF_BATTERY_ASKED, true) }
         AlertDialog.Builder(this)
@@ -137,6 +137,12 @@ class MainActivity : ComponentActivity() {
     private inner class Bridge {
         @JavascriptInterface
         fun stop() = runOnUiThread { LanChatService.stop(this@MainActivity) }
+
+        @JavascriptInterface
+        fun autostart() = StartReceiver.enabled(this@MainActivity)
+
+        @JavascriptInterface
+        fun setAutostart(on: Boolean) = StartReceiver.setEnabled(this@MainActivity, on)
 
         @JavascriptInterface
         fun backgroundRestricted() = BatteryOptimization.restricted(this@MainActivity)
@@ -177,5 +183,4 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private const val PREFS = "lanchat"
 private const val PREF_BATTERY_ASKED = "battery_asked"

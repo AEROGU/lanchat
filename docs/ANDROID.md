@@ -93,7 +93,8 @@ a los clientes o pone los teléfonos en otra red.
   go tool mage apk
   ```
 
-  deja `dist/LanChat-<versión>.apk` (núcleo + app, con la versión de git).
+  deja `dist/LanChat-<versión>-debug.apk` (núcleo + app; Gradle toma la
+  versión de git, como el .exe; `go tool mage apkRelease` deja el firmado).
   Se copia al teléfono (cable, correo, etc.) y se abre: Android pide permitir
   "instalar apps desconocidas" a la app con que se abra. Va firmado con la
   clave de depuración: sirve para pruebas, pero la versión con clave propia
@@ -154,7 +155,10 @@ En un teléfono real (arm64) funciona. Por eso:
   `FOREGROUND_SERVICE` y `FOREGROUND_SERVICE_SPECIAL_USE`.
   - `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (punto 4). Google Play solo lo
     acepta en ciertos tipos de app: revisarlo si algún día se publica ahí.
-  - Pendiente opcional: `RECEIVE_BOOT_COMPLETED` (arrancar al encender).
+  - `RECEIVE_BOOT_COMPLETED`: `StartReceiver` arranca LanChat al encender
+    el teléfono y tras actualizar la app (`MY_PACKAGE_REPLACED`), si está
+    activado "Iniciar LanChat al encender el teléfono" (Ajustes; activado de
+    forma predeterminada). Probado tras actualizar; falta probar reiniciando.
   - `allowBackup="false"`: la identidad TLS no debe pasar a otro teléfono.
 - [x] Servicio `specialUse` con su explicación (`dataSync` tiene límite de
   6 h diarias desde Android 15). Revisar la documentación vigente antes de

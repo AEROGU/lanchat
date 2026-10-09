@@ -180,7 +180,8 @@ go tool mage vuln         # vulnerabilidades conocidas en el código y sus libre
 go tool mage dist         # dist/LanChat-<versión>.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
 go tool mage screenshots  # regenera docs/screenshots y docs/logo.png (requiere Edge)
 go tool mage android      # android/app/libs/lanchat.aar para la app de Android (en desarrollo, ver docs/ANDROID.md)
-go tool mage apk          # dist/LanChat-<versión>.apk para instalar en el teléfono (firma de depuración, para pruebas)
+go tool mage apk          # dist/LanChat-<versión>-debug.apk para probar en el teléfono (firma de depuración)
+go tool mage apkRelease   # dist/LanChat-<versión>.apk firmado con la clave propia (ver docs/ANDROID.md)
 ```
 
 `build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y

@@ -21,8 +21,6 @@ const (
 	// androidTargets: teléfonos de 64 y 32 bits. Sin x86_64: ahí la libc de
 	// modernc.org/sqlite usa syscalls que Android prohíbe (docs/ANDROID.md).
 	androidTargets = "android/arm64,android/arm"
-	// apkBuilt es lo que deja "gradlew assembleDebug"; Apk lo copia a dist.
-	apkBuilt = "android/app/build/outputs/apk/debug/app-debug.apk"
 	// androidAPI es la versión mínima de Android (24 = Android 7.0).
 	androidAPI = "24"
 	// javaPkg antecede al paquete Go: la clase queda io.github.aerogu.lanchat.mobile.Mobile.
@@ -61,13 +59,24 @@ func Android() error {
 	return nil
 }
 
-// Apk compila dist/LanChat-<versión>.apk, para instalar a mano en el teléfono
-// ("instalar apps desconocidas"). Va firmado con la clave de depuración de
-// Android: sirve para pruebas; la versión publicada usará una clave propia
-// (docs/ANDROID.md, punto 6).
+// Apk compila dist/LanChat-<versión>-debug.apk, para pruebas: va firmado con
+// la clave de depuración de Android de esta PC. Se instala a mano en el
+// teléfono ("instalar apps desconocidas").
 func Apk() error {
+	return gradleApk("assembleDebug", "android/app/build/outputs/apk/debug/app-debug.apk", "-debug")
+}
+
+// ApkRelease compila dist/LanChat-<versión>.apk firmado con la clave propia,
+// el que se publica. La clave vive fuera del proyecto (docs/ANDROID.md,
+// "Clave de firma").
+func ApkRelease() error {
+	return gradleApk("assembleRelease", "android/app/build/outputs/apk/release/app-release.apk", "")
+}
+
+// gradleApk compila el núcleo (Android) y la app con la tarea de Gradle y copia
+// el APK a dist. La versión la toma Gradle de git, como mage la del .exe.
+func gradleApk(task, built, suffix string) error {
 	mg.Deps(Android)
-	v := appVersion()
 	gradlew := "gradlew"
 	if runtime.GOOS == "windows" {
 		gradlew = "gradlew.bat"
@@ -76,28 +85,27 @@ func Apk() error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(gradlew, "assembleDebug", "--console=plain",
-		"-Planchat.versionName="+v, fmt.Sprintf("-Planchat.versionCode=%d", androidVersionCode(v)))
+	// Uno viejo no debe pasar por nuevo si la tarea no lo genera (sin firma).
+	if err := os.Remove(built); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	cmd := exec.Command(gradlew, task, "--console=plain")
 	cmd.Dir = "android"
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		return err
 	}
+	if _, err := os.Stat(built); err != nil {
+		return errors.New("no se generó " + built + ": ¿falta la clave de firma? (docs/ANDROID.md, \"Clave de firma\")")
+	}
 	if err := os.MkdirAll(distDir, 0o755); err != nil {
 		return err
 	}
-	out := filepath.Join(distDir, fmt.Sprintf("%s-%s.apk", productName, v))
-	if err := sh.Copy(out, apkBuilt); err != nil {
+	v := appVersion()
+	out := filepath.Join(distDir, fmt.Sprintf("%s-%s%s.apk", productName, v, suffix))
+	if err := sh.Copy(out, built); err != nil {
 		return err
 	}
 	fmt.Printf("%s (versión %s)\n", out, v)
 	return nil
-}
-
-// androidVersionCode convierte la versión de git en el número que Android
-// compara para permitir una actualización (debe crecer siempre):
-// 1.2.3-45-gabc → 1_02_003_045. Sin etiqueta de versión queda en 1 (el mínimo).
-func androidVersionCode(v string) int {
-	n := numericVersion(v)
-	return max(1, int(n[0])*10_000_000+int(n[1])*100_000+int(n[2])*1_000+min(int(n[3]), 999))
 }
