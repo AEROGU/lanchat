@@ -1049,9 +1049,15 @@ function openAbout() {
   $("about-name").textContent = s.appName;
   $("about-version").textContent = `Versión ${s.version}`;
   $("about-license").textContent = s.licenseName;
-  $("about-repo").textContent = s.repository;
+  $("about-repo").replaceChildren(...breakAfterSlashes(s.repository));
   $("about-copyright").textContent = s.copyright;
   $("about-dialog").showModal();
+}
+
+// breakAfterSlashes permite partir una URL después de cada "/" (<wbr>), para
+// que en pantallas angostas no se corte a media palabra ni haya que deslizar.
+function breakAfterSlashes(url) {
+  return url.split(/(?<=\/)/).flatMap((part) => [part, document.createElement("wbr")]);
 }
 
 // ---------- Mensaje a varios ----------

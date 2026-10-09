@@ -233,7 +233,7 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
   sigue `GET /api/data/export`.
   - El aviso de la página ahora es un `popover`: se ve encima de los
     diálogos (antes "Descargando la copia…" quedaba tapado por Ajustes).
-  - [ ] Probar desde Ajustes y desde "Borrar todos mis datos… > Descargar
+  - [x] Probado desde Ajustes y desde "Borrar todos mis datos… > Descargar
     antes una copia".
 - [x] **Ajustes**: la sección Sistema ya se oculta fuera de Windows; la
   carpeta de descargas también se oculta en Android (y el servidor no deja

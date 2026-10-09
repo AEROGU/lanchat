@@ -544,7 +544,8 @@ dialog input, dialog textarea {
 
 .about-list {
   display: grid;
-  grid-template-columns: auto 1fr;
+  /* minmax(0, …): la URL no debe ensanchar el diálogo en el teléfono. */
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 6px 12px;
   text-align: left;
   margin: 0 auto 12px;
@@ -552,7 +553,9 @@ dialog input, dialog textarea {
 }
 
 .about-list dt { color: var(--muted); }
-.about-list dd { margin: 0; }
+/* La URL se parte después de "/" (<wbr>); anywhere solo si aún no cabe. */
+.about-list dd { margin: 0; overflow-wrap: anywhere; }
+.about-list .link-btn { text-align: left; }
 .about-box .actions { justify-content: center; }
 
 .link-btn {
