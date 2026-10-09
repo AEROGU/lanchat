@@ -305,17 +305,19 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
 #### Clave de firma
 
 Una sola clave sirve para todas las apps propias; vive **fuera de cualquier
-proyecto**. Se crea una vez, en una terminal (pide la contraseña: usar una
-larga y guardarla en un gestor de contraseñas):
+proyecto**. Se crea una vez, en PowerShell (pide la contraseña: usar una
+larga, sin acentos ni ñ, y guardarla en un gestor de contraseñas):
 
-```bash
-keytool -genkeypair -v -keystore "$USERPROFILE/.keystores/aerogu-release.jks" -storetype PKCS12 -keyalg RSA -keysize 4096 -validity 36500 -alias aerogu -dname "CN=Arturo Enrique Rosas Gutiérrez, O=AEROGU, C=MX"
+```powershell
+mkdir "$env:USERPROFILE\.keystores"
+keytool -genkeypair -v -keystore "$env:USERPROFILE\.keystores\aerogu-release.jks" -storetype PKCS12 -keyalg RSA -keysize 4096 -validity 36500 -alias aerogu -dname "CN=Arturo Enrique Rosas Gutiérrez, O=AEROGU, C=MX"
 ```
 
-(`keytool` viene con el JDK de Android Studio, en `%JAVA_HOME%\bin`; crear
-antes la carpeta `.keystores`.) Copia de seguridad del `.jks` y de su
-contraseña fuera de la PC. Si se pierde, una app instalada no puede
-actualizarse: hay que desinstalarla (y las PCs verán "la identidad cambió").
+(`keytool` viene con el JDK de Android Studio, en `%JAVA_HOME%\bin`. Debe
+terminar con `[Almacenando …aerogu-release.jks]` sin error.) Copia de
+seguridad del `.jks` y de su contraseña fuera de la PC. Si se pierde, una app
+instalada no puede actualizarse: hay que desinstalarla (y las PCs verán "la
+identidad cambió").
 
 Para que `mage apkRelease` (y cualquier otra app) la use, en
 `%USERPROFILE%\.gradle\gradle.properties` (fuera del proyecto; con PKCS12 las
@@ -328,8 +330,17 @@ aerogu.signing.keyAlias=aerogu
 aerogu.signing.keyPassword=LA_CONTRASEÑA
 ```
 
-Para GitHub Actions, los *secrets* del repositorio (con `gh`, en PowerShell;
-los de contraseña la piden sin mostrarla):
+Para GitHub Actions, los *secrets* del repositorio. Sin `gh`: en GitHub,
+*Settings > Secrets and variables > Actions > New repository secret*, uno por
+uno; el valor de `SIGNING_KEYSTORE_BASE64` se copia al portapapeles con
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\.keystores\aerogu-release.jks")) | Set-Clipboard
+```
+
+(después, copiar otra cosa y, si el historial del portapapeles está activo,
+borrar esa entrada con Win+V). Con `gh`, en PowerShell (los de contraseña la
+piden sin mostrarla):
 
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\.keystores\aerogu-release.jks")) | gh secret set SIGNING_KEYSTORE_BASE64
