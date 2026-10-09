@@ -14,7 +14,8 @@ import java.io.File
  * una excepción le llega a Go como error y la página la muestra.
  */
 class LanChatHost(private val context: Context, private val screen: ScreenIdle) : Host {
-    override fun notify(title: String, body: String) = Notifications.message(context, title, body)
+    override fun notify(title: String, body: String, chat: String) =
+        Notifications.message(context, title, body, chat)
 
     override fun unreadChanged(total: Long) = Notifications.updateService(context, total.toInt())
 

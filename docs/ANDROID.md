@@ -190,8 +190,11 @@ Versión mínima hecha para la prueba de red; falta pulir:
       explorador de archivos.
     - [x] Probado: recibir, abrir desde LanChat y verlo en Archivos y la galería.
 - [x] **LanChatHost**: `notify` → canal "Mensajes" (un aviso por
-  conversación; al tocarlo abre la app); `unreadChanged` → texto y número en
-  el aviso fijo.
+  conversación); `unreadChanged` → texto y número en el aviso fijo.
+  - [x] Tocar el aviso abre **esa conversación** (`ui.Notice.Chat` →
+    `MainActivity.EXTRA_CHAT` → `window.lanchatOpen`), también con la app
+    cerrada. Abrir una conversación quita su aviso, y al no quedar mensajes
+    sin leer se quitan todos. Probado en el teléfono.
 - [x] **MainActivity**: WebView (JavaScript, `domStorage`) con la URL del
   servicio, edge-to-edge con márgenes de barras y teclado, enlaces externos al
   navegador, depuración con `chrome://inspect` en compilaciones debug, y pide

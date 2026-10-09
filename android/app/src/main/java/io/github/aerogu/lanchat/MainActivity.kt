@@ -26,6 +26,7 @@ import androidx.core.content.edit
 import androidx.core.text.htmlEncode
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import org.json.JSONObject
 
 /** La ventana de LanChat: la misma interfaz web del escritorio, en una WebView. */
 class MainActivity : ComponentActivity() {
@@ -99,6 +100,21 @@ class MainActivity : ComponentActivity() {
         ContextCompat.startForegroundService(this, Intent(this, LanChatService::class.java))
         LanChatService.whenStarted(onStarted)
         LanChatService.whenStopped(onStopped)
+        pendingChat = intent.getStringExtra(EXTRA_CHAT) // se abre al cargar la página
+    }
+
+    // Tocar un aviso con la app abierta (launchMode singleTask) llega aquí.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(EXTRA_CHAT)?.let(::openChat)
+    }
+
+    // Conversación de un aviso tocado con la app cerrada: se abre en onPageFinished.
+    private var pendingChat: String? = null
+
+    /** Abre la conversación en la página (ver window.lanchatOpen en app.js). */
+    private fun openChat(chat: String) {
+        web.evaluateJavascript("window.lanchatOpen?.(${JSONObject.quote(chat)})", null)
     }
 
     /**
@@ -154,6 +170,10 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun openAppSettings() = runOnUiThread { BatteryOptimization.openAppSettings(this@MainActivity) }
+
+        /** Se abrió una conversación: su aviso ya no hace falta. */
+        @JavascriptInterface
+        fun chatOpened(chat: String) = Notifications.clearMessage(this@MainActivity, chat)
     }
 
     /** La interfaz de LanChat se queda en la WebView; los demás enlaces van al navegador. */
@@ -162,6 +182,11 @@ class MainActivity : ComponentActivity() {
             if (request.url.host == "127.0.0.1") return false
             runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
             return true
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            if (url.startsWith("http://127.0.0.1")) pendingChat?.let(::openChat)
+            pendingChat = null
         }
     }
 
@@ -182,6 +207,11 @@ class MainActivity : ComponentActivity() {
             }
             return true
         }
+    }
+
+    companion object {
+        /** Conversación que abrir (aviso tocado); la pone Notifications. */
+        const val EXTRA_CHAT = "io.github.aerogu.lanchat.CHAT"
     }
 }
 

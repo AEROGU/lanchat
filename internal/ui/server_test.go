@@ -923,23 +923,23 @@ func TestNotification(t *testing.T) {
 	received := func(m store.Message) chat.Event { return chat.Event{Type: chat.MessageReceived, Message: m} }
 	msg := store.Message{ID: "m1", PeerID: "c1", Body: strings.Repeat("a", notifyPreview+5)}
 
-	title, body, ok := s.Notification(ctx, received(msg))
-	if !ok || title != testContact.DisplayName() || body != strings.Repeat("a", notifyPreview)+"…" {
-		t.Errorf("mensaje: %q %q %v", title, body, ok)
+	n, ok := s.Notification(ctx, received(msg))
+	if !ok || n.Title != testContact.DisplayName() || n.Body != strings.Repeat("a", notifyPreview)+"…" || n.Chat != "c1" {
+		t.Errorf("mensaje: %+v %v", n, ok)
 	}
-	if _, _, ok := s.Notification(ctx, chat.Event{Type: chat.MessageDelivered, Message: msg}); ok {
+	if _, ok := s.Notification(ctx, chat.Event{Type: chat.MessageDelivered, Message: msg}); ok {
 		t.Error("una entrega no se notifica")
 	}
 
 	// En una sala: título = sala, cuerpo = "Autor: texto"; los avisos no.
 	b.CreateRoom(ctx, "Proyecto", []string{"c1"})
 	inRoom := store.Message{ID: "m2", PeerID: "c1", RoomID: "r1", Body: "hola"}
-	if title, body, ok := s.Notification(ctx, received(inRoom)); !ok || title != "Proyecto" ||
-		body != testContact.DisplayName()+": hola" {
-		t.Errorf("sala: %q %q %v", title, body, ok)
+	if n, ok := s.Notification(ctx, received(inRoom)); !ok || n.Title != "Proyecto" ||
+		n.Body != testContact.DisplayName()+": hola" || n.Chat != "room:r1" {
+		t.Errorf("sala: %+v %v", n, ok)
 	}
 	inRoom.Kind = store.KindRoomEvent
-	if _, _, ok := s.Notification(ctx, received(inRoom)); ok {
+	if _, ok := s.Notification(ctx, received(inRoom)); ok {
 		t.Error("un aviso de sala no se notifica")
 	}
 
@@ -953,12 +953,12 @@ func TestNotification(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	s.setPresence(true, "c1")
-	if _, _, ok := s.Notification(ctx, received(msg)); ok {
+	if _, ok := s.Notification(ctx, received(msg)); ok {
 		t.Error("conversación abierta: no se notifica")
 	}
 	s.setPresence(false, "")
 	b.SetStatus(protocol.StatusBusy, "")
-	if _, _, ok := s.Notification(ctx, received(msg)); ok {
+	if _, ok := s.Notification(ctx, received(msg)); ok {
 		t.Error("Ocupado: no se notifica")
 	}
 }

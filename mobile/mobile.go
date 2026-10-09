@@ -37,8 +37,9 @@ const (
 // Host es lo que la app de Android ofrece al núcleo; lo implementa Kotlin.
 // Sus métodos se llaman desde hilos de Go: no deben bloquear.
 type Host interface {
-	// Notify muestra una notificación de mensaje nuevo.
-	Notify(title, body string)
+	// Notify muestra una notificación de mensaje nuevo; chat es la
+	// conversación (ui.Notice.Chat), para abrirla al tocar la notificación.
+	Notify(title, body, chat string)
 	// UnreadChanged informa el total de mensajes sin leer.
 	UnreadChanged(total int)
 	// OpenFile abre un archivo recibido con la app que corresponda.
@@ -123,8 +124,8 @@ func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
 		defer close(in.events)
 		for ev := range a.Events() {
 			srv.Publish(ctx, ev)
-			if title, body, ok := srv.Notification(ctx, ev); ok {
-				host.Notify(title, body)
+			if n, ok := srv.Notification(ctx, ev); ok {
+				host.Notify(n.Title, n.Body, n.Chat)
 			}
 		}
 	}()

@@ -62,11 +62,15 @@ object Notifications {
         if (LanChatService.running && allowed(context)) {
             NotificationManagerCompat.from(context).notify(SERVICE_ID, service(context, unread))
         }
+        if (unread == 0) clearMessages(context) // todo leído: sobran los avisos
     }
 
-    /** Aviso de mensaje nuevo; uno por conversación (el título es el remitente o la sala). */
+    /**
+     * Aviso de mensaje nuevo; uno por conversación (chat: la clave de la página,
+     * ui.Notice.Chat). Tocarlo abre esa conversación.
+     */
     @SuppressLint("MissingPermission") // allowed() revisa POST_NOTIFICATIONS
-    fun message(context: Context, title: String, body: String) {
+    fun message(context: Context, title: String, body: String, chat: String) {
         if (!allowed(context)) return
         val n = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_stat_lanchat)
@@ -76,10 +80,20 @@ object Notifications {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(openApp(context))
+            .setContentIntent(openApp(context, chat))
             .setAutoCancel(true)
             .build()
-        NotificationManagerCompat.from(context).notify(title, MESSAGE_ID, n)
+        NotificationManagerCompat.from(context).notify(chat, MESSAGE_ID, n)
+    }
+
+    /** Quita el aviso de una conversación (se abrió en la app). */
+    fun clearMessage(context: Context, chat: String) {
+        NotificationManagerCompat.from(context).cancel(chat, MESSAGE_ID)
+    }
+
+    private fun clearMessages(context: Context) {
+        val nm = NotificationManagerCompat.from(context)
+        nm.activeNotifications.filter { it.id == MESSAGE_ID }.forEach { nm.cancel(it.tag, it.id) }
     }
 
     private fun allowed(context: Context) =
@@ -94,10 +108,13 @@ object Notifications {
         PendingIntent.FLAG_IMMUTABLE,
     )
 
-    private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
+    /** Abre la app; con chat, en esa conversación (MainActivity.EXTRA_CHAT). */
+    private fun openApp(context: Context, chat: String? = null): PendingIntent = PendingIntent.getActivity(
         context,
-        0,
-        Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        PendingIntent.FLAG_IMMUTABLE,
+        chat?.hashCode() ?: 0, // un PendingIntent distinto por conversación
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .apply { if (chat != null) putExtra(MainActivity.EXTRA_CHAT, chat) },
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 }

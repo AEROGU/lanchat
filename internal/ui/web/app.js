@@ -156,7 +156,25 @@ async function loadState() {
     state.messages.clear(); // pudieron llegar mensajes mientras no había conexión
     await loadHistory(state.current);
   }
+  state.loaded = true;
+  if (pendingOpen) {
+    const id = pendingOpen;
+    pendingOpen = null;
+    window.lanchatOpen(id);
+  }
 }
+
+// lanchatOpen lo llama la app de Android al tocar el aviso de un mensaje: abre
+// esa conversación (id del contacto o ROOM + id de la sala), en cuanto la
+// lista esté cargada.
+let pendingOpen = null;
+window.lanchatOpen = (id) => {
+  if (!state.loaded) {
+    pendingOpen = id;
+    return;
+  }
+  if (state.contacts.has(id) || state.rooms.has(roomId(id))) openChat(id);
+};
 
 function sortedContacts() {
   return [...state.contacts.values()].sort(
@@ -885,6 +903,7 @@ window.lanchatBack = () => {
 
 async function openChat(id) {
   setMenu(false);
+  window.LanChatAndroid?.chatOpened(id); // en el teléfono, quita su aviso
   state.current = id;
   $("app").classList.add("chatting");
   $("empty").hidden = true;
