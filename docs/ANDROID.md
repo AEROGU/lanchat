@@ -284,17 +284,59 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
 
 ### 6. Distribución
 
-- [ ] Clave de firma (`.jks`): crearla una vez, **guardar copia segura y
-  nunca subirla al repositorio**. Sin ella no se pueden publicar
-  actualizaciones de la app.
-- [ ] Publicar la APK firmada en GitHub Releases junto al zip de Windows.
-- [ ] GitHub Actions: un job en Ubuntu con Java, el SDK y el NDK, gomobile,
-  `go tool mage android` y `./gradlew assembleRelease`, con la clave en
-  *secrets*.
+- [ ] Clave de firma: crearla (ver abajo). **Guardar copia segura y nunca
+  subirla al repositorio**: sin ella no se pueden publicar actualizaciones.
+- [x] `go tool mage apkRelease` compila el APK firmado (`dist/LanChat-<versión>.apk`).
+  Probado con una clave desechable: firma v2 válida (`apksigner verify`).
+- [x] GitHub Actions: `ci.yml` compila el APK de prueba en Ubuntu en cada
+  cambio (`.github/actions/android`: Java, NDK y gomobile); `release.yml`, al
+  subir una etiqueta, compila el firmado con la clave de los *secrets* y lo
+  publica en la Release junto al zip, con su hash en `SHA256SUMS.txt` e
+  instrucciones de instalación. Validado con `actionlint`; falta la primera
+  corrida real en GitHub.
 - [ ] Más adelante, si se quiere: Google Play (cuenta de 25 USD, revisión
-  del servicio en primer plano).
-- [ ] Documentar en README y LEEME la instalación en Android ("instalar
-  apps desconocidas").
+  del servicio en primer plano y del permiso de batería).
+- [x] Instalación en Android documentada en README, LEEME y el texto de la
+  Release.
+
+#### Clave de firma
+
+Una sola clave sirve para todas las apps propias; vive **fuera de cualquier
+proyecto**. Se crea una vez, en una terminal (pide la contraseña: usar una
+larga y guardarla en un gestor de contraseñas):
+
+```bash
+keytool -genkeypair -v -keystore "$USERPROFILE/.keystores/aerogu-release.jks" -storetype PKCS12 -keyalg RSA -keysize 4096 -validity 36500 -alias aerogu -dname "CN=Arturo Enrique Rosas Gutiérrez, O=AEROGU, C=MX"
+```
+
+(`keytool` viene con el JDK de Android Studio, en `%JAVA_HOME%\bin`; crear
+antes la carpeta `.keystores`.) Copia de seguridad del `.jks` y de su
+contraseña fuera de la PC. Si se pierde, una app instalada no puede
+actualizarse: hay que desinstalarla (y las PCs verán "la identidad cambió").
+
+Para que `mage apkRelease` (y cualquier otra app) la use, en
+`%USERPROFILE%\.gradle\gradle.properties` (fuera del proyecto; con PKCS12 las
+dos contraseñas son la misma):
+
+```properties
+aerogu.signing.storeFile=C:/Users/artur/.keystores/aerogu-release.jks
+aerogu.signing.storePassword=LA_CONTRASEÑA
+aerogu.signing.keyAlias=aerogu
+aerogu.signing.keyPassword=LA_CONTRASEÑA
+```
+
+Para GitHub Actions, los *secrets* del repositorio (con `gh`, en PowerShell;
+los de contraseña la piden sin mostrarla):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\.keystores\aerogu-release.jks")) | gh secret set SIGNING_KEYSTORE_BASE64
+gh secret set SIGNING_STORE_PASSWORD
+gh secret set SIGNING_KEY_PASSWORD
+gh secret set SIGNING_KEY_ALIAS --body aerogu
+```
+
+Un teléfono con el APK de prueba (`-debug`, otra firma) debe desinstalarlo
+antes de instalar el firmado: Android no deja cambiar la firma de una app.
 
 ## Notas
 
