@@ -13,6 +13,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +24,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/version"
 )
 
 // fakeBackend simula la aplicación con un solo contacto.
@@ -157,12 +160,16 @@ func (f *fakeBackend) TransfersByID(_ context.Context, ids []string) (map[string
 func (f *fakeBackend) DownloadDir() string         { return `C:\Descargas\LanChat` }
 func (f *fakeBackend) SetDownloadDir(string) error { return nil }
 
-func startServer(t *testing.T) (*Server, *fakeBackend) {
+// startServer arranca el servidor; setup lo ajusta antes de Serve.
+func startServer(t *testing.T, setup ...func(*Server)) (*Server, *fakeBackend) {
 	t.Helper()
 	b := &fakeBackend{}
 	s, err := Listen(b, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, f := range setup {
+		f(s)
 	}
 	go s.Serve()
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
@@ -438,6 +445,68 @@ func TestFileRoutes(t *testing.T) {
 	want := []string{"accept:t1", "reject:t1", "cancel:t1", "nota.txt=hola", "Obra/planos/p.txt=plano"}
 	if strings.Join(b.sent, ",") != strings.Join(want, ",") {
 		t.Errorf("acciones = %v", b.sent)
+	}
+}
+
+// Sin escritorio (Android) los archivos y enlaces los abre Shell, y no hay
+// carpetas ni selectores de Windows.
+func TestShell(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "foto.jpg")
+	if err := os.WriteFile(path, []byte("jpeg"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testTransfers["t3"] = store.Transfer{ID: "t3", PeerID: "c1", State: store.TransferCompleted,
+		Files: []store.TransferFile{{Index: 0, Name: "foto.jpg", Size: 4, Done: true, Path: path}}}
+	t.Cleanup(func() { delete(testTransfers, "t3") })
+
+	var mu sync.Mutex
+	var opened []string
+	record := func(p string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		opened = append(opened, p)
+		return nil
+	}
+	s, _ := startServer(t, func(s *Server) { s.Shell = &Shell{OpenFile: record, OpenURL: record} })
+	c := loggedClient(t, s)
+
+	resp, err := c.Get(base(s) + "/api/state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st stateJSON
+	json.NewDecoder(resp.Body).Decode(&st)
+	resp.Body.Close()
+	if !st.Mobile {
+		t.Error("state.mobile debía ser true")
+	}
+
+	cases := []struct {
+		route, body string
+		want        int
+	}{
+		{"/api/files/open", `{"id":"t3","index":0}`, http.StatusNoContent},
+		{"/api/files/open", `{"id":"t3","index":0,"reveal":true}`, http.StatusBadRequest},
+		{"/api/download-dir/open", `{}`, http.StatusBadRequest},
+		{"/api/download-dir", `{"dir":"C:\\otra"}`, http.StatusBadRequest},
+		{"/api/files/pick", `{"peer":"c1"}`, http.StatusBadRequest},
+		{"/api/files/pick-folder", `{"peer":"c1"}`, http.StatusBadRequest},
+		{"/api/open-repository", `{}`, http.StatusNoContent},
+	}
+	for _, tc := range cases {
+		resp, err := postJSON(c, base(s)+tc.route, tc.body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != tc.want {
+			t.Errorf("%s %s: %d, quería %d", tc.route, tc.body, resp.StatusCode, tc.want)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{path, version.Repository}; !slices.Equal(opened, want) {
+		t.Errorf("abiertos = %v, quería %v", opened, want)
 	}
 }
 

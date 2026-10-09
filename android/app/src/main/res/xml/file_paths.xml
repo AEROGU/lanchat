@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lo que LanChatHost.openFile puede pasar a otras apps: solo los archivos
+     recibidos, en getExternalFilesDir(DIRECTORY_DOWNLOADS). -->
+<paths>
+    <external-files-path name="recibidos" path="Download/" />
+</paths>

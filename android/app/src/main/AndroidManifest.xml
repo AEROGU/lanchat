@@ -42,5 +42,16 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Chat en la red local: mantiene el puerto abierto para recibir mensajes y archivos de los otros equipos de la oficina, sin servidor ni internet." />
         </service>
+
+        <!-- Abre los archivos recibidos con otras apps (LanChatHost.openFile). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

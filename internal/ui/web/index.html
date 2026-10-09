@@ -48,13 +48,18 @@
           <strong id="peer-name"></strong>
           <small id="peer-detail"></small>
         </div>
-        <button id="identity-btn" class="text-btn contact-only" title="Ver la huella de seguridad de este contacto">Identidad</button>
-        <button id="group-btn" class="text-btn contact-only" title="Poner a este contacto en un grupo">Grupo</button>
-        <button id="alias-btn" class="text-btn contact-only" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
-        <button id="room-add-btn" class="text-btn room-only" title="Agregar contactos a la sala">Agregar</button>
-        <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
-        <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
-        <button id="delete-chat-btn" class="text-btn danger-btn" title="Borrar esta conversación de esta PC">Borrar</button>
+        <!-- En ventana angosta las acciones van en el menú ⋯. -->
+        <button id="more-btn" class="icon-btn" title="Más opciones" aria-label="Más opciones"
+          aria-haspopup="menu" aria-expanded="false" aria-controls="chat-actions">⋯</button>
+        <div id="chat-actions" class="chat-actions">
+          <button id="identity-btn" class="text-btn contact-only" title="Ver la huella de seguridad de este contacto">Identidad</button>
+          <button id="group-btn" class="text-btn contact-only" title="Poner a este contacto en un grupo">Grupo</button>
+          <button id="alias-btn" class="text-btn contact-only" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
+          <button id="room-add-btn" class="text-btn room-only" title="Agregar contactos a la sala">Agregar</button>
+          <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
+          <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
+          <button id="delete-chat-btn" class="text-btn danger-btn" title="Borrar esta conversación de este equipo">Borrar</button>
+        </div>
       </header>
 
       <div id="identity-note" class="note danger" hidden>
@@ -68,7 +73,9 @@
 
       <form id="composer" hidden>
         <button type="button" id="attach-btn" class="icon-btn contact-only" title="Enviar archivos (también puedes arrastrarlos aquí)" aria-label="Enviar archivos">📎</button>
-        <button type="button" id="folder-btn" class="icon-btn contact-only" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
+        <button type="button" id="folder-btn" class="icon-btn contact-only desktop-only" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
+        <!-- Sin escritorio (Android) el 📎 usa el selector del sistema. -->
+        <input type="file" id="file-input" multiple hidden>
         <textarea id="input" rows="1" placeholder="Escribe un mensaje (Enter envía, Shift+Enter nueva línea)"></textarea>
         <button type="submit" class="primary">Enviar</button>
       </form>
@@ -89,12 +96,14 @@
       <textarea id="peers-input" rows="4" spellcheck="false"></textarea>
       <small class="help">Uno por línea: IP o nombre del equipo, con <code>:puerto</code> opcional. Ej.: <code>10.0.5.20</code> o <code>PC-VENTAS</code>.</small>
 
-      <label for="download-input">Carpeta para archivos recibidos</label>
-      <div class="input-row">
-        <input id="download-input" autocomplete="off" spellcheck="false">
-        <button type="button" id="open-downloads" class="text-btn">Abrir</button>
+      <div class="desktop-only">
+        <label for="download-input">Carpeta para archivos recibidos</label>
+        <div class="input-row">
+          <input id="download-input" autocomplete="off" spellcheck="false">
+          <button type="button" id="open-downloads" class="text-btn">Abrir</button>
+        </div>
+        <small class="help">Vacío = la carpeta Descargas\LanChat.</small>
       </div>
-      <small class="help">Vacío = la carpeta Descargas\LanChat.</small>
 
       <label class="check">
         <input type="checkbox" id="receipts-input">

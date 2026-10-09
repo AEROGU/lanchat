@@ -184,29 +184,33 @@ Versión mínima hecha para la prueba de red; falta pulir:
 
 ### 5. Ajustes a la interfaz web y al núcleo
 
-Hoy algunas acciones usan funciones de Windows; en Android devuelven error.
+En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
+(selectores de Windows, `openPath`); `mobile.Start` lo arma con el `Host`, y
+`/api/state` lo informa a la página como `mobile: true` (clase `mobile` en
+`<body>`; lo marcado `desktop-only` se oculta).
 
-- [ ] **📎 Enviar archivos**: usa el selector de Windows (`/api/files/pick`).
-  Agregar a `/api/state` un indicador (p. ej. `nativeDialogs`). Si es
-  `false`, el 📎 abre un `<input type="file" multiple>` y sube por
-  `/api/files/upload`, que ya existe para arrastrar y soltar.
-- [ ] **📁 Enviar carpeta**: ocultarlo en Android; la WebView no permite
-  elegir carpetas.
-- [ ] **Abrir archivo recibido / Mostrar en carpeta / Abrir carpeta / enlace
-  del proyecto**: hoy llaman a `openPath` (ShellExecute). Agregar a `Host`
-  `openFile(path)` (Intent `ACTION_VIEW` con `FileProvider`) y
-  `openUrl(url)`, y que `Server` use un gancho en lugar de la función del
-  paquete. En Android "Mostrar en carpeta" puede omitirse.
+- [x] **📎 Enviar archivos**: con `mobile`, el 📎 abre un
+  `<input type="file" multiple>` (en Kotlin, `onShowFileChooser` con el
+  selector de Android) y sube por `/api/files/upload`, como al arrastrar.
+- [x] **📁 Enviar carpeta**: oculto en Android (la WebView no elige carpetas).
+- [x] **Abrir archivo recibido / enlace del proyecto**: `Host.openFile`
+  (`ACTION_VIEW` con `FileProvider`, solo la carpeta de recibidos) y
+  `Host.openURL`. "Mostrar en carpeta" y "Abrir carpeta" se ocultan; una
+  carpeta recibida se lista archivo por archivo, cada uno con "Abrir".
+  - [ ] Probar enviar un archivo desde el teléfono, y recibir y abrir uno.
 - [ ] **Descargar mis datos**: en la WebView las descargas necesitan un
   `DownloadListener`; o exponer la copia por `Host`. Además, `handleExport`
   usa `os.MkdirTemp("")`, y en Android `os.TempDir()` es `/data/local/tmp`
   (sin permiso de escritura): gomobile solo define `TMPDIR` en modo app, no
   en `bind`. Hacer que `mobile.Start` lo apunte a una carpeta de la app.
-- [ ] **Ajustes**: la sección Sistema ya se oculta fuera de Windows. Ocultar
-  o hacer de solo lectura la carpeta de descargas.
-- [ ] **Táctil**: botones más grandes. Los botones del encabezado de la
-  conversación (Identidad, Grupo, Renombrar, Borrar) no caben en un
-  teléfono: pasarlos a un menú "⋯".
+- [x] **Ajustes**: la sección Sistema ya se oculta fuera de Windows; la
+  carpeta de descargas también se oculta en Android (y el servidor no deja
+  cambiarla).
+- [x] **Pantalla angosta**: la columna usa `minmax(0, 1fr)` (antes el texto
+  ensanchaba la página y se cortaban ℹ y ⚙); las acciones de la
+  conversación (Identidad, Grupo, Renombrar, Borrar) van en un menú "⋯".
+  En el teléfono abrir una conversación ya no despliega el teclado.
+- [ ] **Táctil**: revisar el tamaño de los botones con uso real.
 - [ ] **Ausente automático**: en Android no hay tiempo de inactividad;
   opcionalmente usar pantalla apagada = ausente (`app.Options.IdleTime`).
 

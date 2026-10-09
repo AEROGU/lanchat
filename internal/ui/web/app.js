@@ -123,6 +123,9 @@ async function loadState() {
   state.limits = s.limits;
   state.manualPeers = s.manualPeers;
   state.downloadDir = s.downloadDir;
+  state.mobile = s.mobile;
+  document.body.classList.toggle("mobile", s.mobile);
+  if (s.mobile) $("input").placeholder = "Escribe un mensaje";
   state.contacts = new Map(s.contacts.map((c) => [c.id, c]));
   state.rooms = new Map(s.rooms.map((r) => [r.id, r]));
   renderSelf();
@@ -563,13 +566,14 @@ function transferCard(m) {
 const MAX_FILE_ROWS = 10;
 
 // fileList muestra los archivos sueltos y, de cada carpeta, una sola fila.
+// Sin escritorio no se pueden abrir carpetas: se lista cada archivo.
 function fileList(t) {
   const ul = document.createElement("ul");
   ul.className = "file-list";
   const rows = [];
   const folders = new Map(); // carpeta raíz -> { count, size, done }
   for (const f of t.files) {
-    if (!f.dir) {
+    if (!f.dir || state.mobile) {
       rows.push({ file: f });
       continue;
     }
@@ -595,19 +599,19 @@ function fileList(t) {
       name.textContent = `📁 ${row.folder}`;
       size.textContent = `${info.count} archivos · ${fmtSize(info.size)}`;
       li.append(name, size);
-      if (!t.outgoing && info.done > 0) {
+      if (!t.outgoing && info.done > 0 && !state.mobile) {
         li.append(textButton("Abrir carpeta", () =>
           api.openDir(t.id, row.folder).catch((e) => showBanner(e.message, 5000))));
       }
     } else {
       const f = row.file;
-      name.textContent = f.savedName || f.name;
+      name.textContent = (f.dir ? `${f.dir}/` : "") + (f.savedName || f.name);
       name.title = f.savedName && f.savedName !== f.name ? `Original: ${f.name}` : f.name;
       size.textContent = fmtSize(f.size) + (f.done && t.state !== "completed" ? " ✓" : "");
       li.append(name, size);
       if (!t.outgoing && f.done) {
-        li.append(textButton("Abrir", () => openReceived(t, f, false)),
-          textButton("Mostrar en carpeta", () => openReceived(t, f, true)));
+        li.append(textButton("Abrir", () => openReceived(t, f, false)));
+        if (!state.mobile) li.append(textButton("Mostrar en carpeta", () => openReceived(t, f, true)));
       }
     }
     ul.append(li);
@@ -718,6 +722,19 @@ async function uploadDropped(dt) {
   } catch (e) {
     return showBanner(`No se pudieron leer los archivos: ${e.message}`, 5000);
   }
+  await uploadItems(items);
+}
+
+// uploadPicked envía lo elegido con el selector del sistema (sin escritorio).
+function uploadPicked(input) {
+  const items = [...input.files].map((file) => ({ file, dir: "" }));
+  input.value = ""; // para poder elegir otra vez el mismo archivo
+  if (state.current && items.length > 0) uploadItems(items);
+}
+
+// uploadItems copia los archivos ([{file, dir}]) a este equipo y los ofrece
+// en la conversación abierta.
+async function uploadItems(items) {
   if (items.length === 0) return showBanner("No hay archivos para enviar (¿carpetas vacías?).", 5000);
   if (items.length > MAX_OFFER_FILES) {
     return showBanner(`Son más de ${MAX_OFFER_FILES} archivos; comprímelos en un .zip o envíalos en partes.`, 6000);
@@ -761,7 +778,14 @@ function renderMessages({ keepScroll = false, toBottom = false } = {}) {
 
 // ---------- Acciones ----------
 
+// setMenu abre o cierra el menú ⋯ de la conversación (ventana angosta).
+function setMenu(open) {
+  $("chat-actions").classList.toggle("open", open);
+  $("more-btn").setAttribute("aria-expanded", open);
+}
+
 async function openChat(id) {
+  setMenu(false);
   state.current = id;
   $("app").classList.add("chatting");
   $("empty").hidden = true;
@@ -773,10 +797,12 @@ async function openChat(id) {
   reportPresence();
   if (!state.messages.has(id)) await loadHistory(id);
   markReadIfVisible();
-  $("input").focus();
+  // En el teléfono el foco abriría el teclado y taparía los mensajes.
+  if (!state.mobile) $("input").focus();
 }
 
 function closeChat() {
+  setMenu(false);
   state.current = null;
   $("app").classList.remove("chatting");
   reportPresence();
@@ -1378,6 +1404,18 @@ function bind() {
   $("group-form").addEventListener("submit", saveGroup);
   $("alias-form").addEventListener("submit", saveAlias);
   $("back-btn").addEventListener("click", closeChat);
+  $("more-btn").addEventListener("click", (e) => {
+    e.stopPropagation(); // que no lo cierre el clic en el documento
+    setMenu(!$("chat-actions").classList.contains("open"));
+  });
+  // Elegir una acción, tocar fuera o Escape cierran el menú.
+  $("chat-actions").addEventListener("click", () => setMenu(false));
+  document.addEventListener("click", (e) => {
+    if (!$("chat-actions").contains(e.target)) setMenu(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setMenu(false);
+  });
 
   $("composer").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -1390,7 +1428,9 @@ function bind() {
     }
   });
   $("input").addEventListener("input", autoGrow);
-  $("attach-btn").addEventListener("click", (e) => pickAndSend(e.currentTarget, api.pickFiles));
+  $("attach-btn").addEventListener("click", (e) =>
+    state.mobile ? $("file-input").click() : pickAndSend(e.currentTarget, api.pickFiles));
+  $("file-input").addEventListener("change", (e) => uploadPicked(e.currentTarget));
   $("folder-btn").addEventListener("click", (e) => pickAndSend(e.currentTarget, api.pickFolder));
   $("autostart-input").addEventListener("change", toggleAutostart);
   $("receipts-input").addEventListener("change", toggleReceipts);

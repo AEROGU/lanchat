@@ -19,7 +19,10 @@ type stateJSON struct {
 	Rooms       []roomJSON    `json:"rooms"`
 	ManualPeers []string      `json:"manualPeers"`
 	DownloadDir string        `json:"downloadDir"`
-	Limits      limitsJSON    `json:"limits"`
+	// Mobile: sin escritorio (Android, ver Server.Shell): se eligen archivos
+	// con <input type="file"> y no hay carpetas que abrir.
+	Mobile bool       `json:"mobile"`
+	Limits limitsJSON `json:"limits"`
 }
 
 type limitsJSON struct {

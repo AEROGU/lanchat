@@ -189,9 +189,15 @@ button, input, textarea { font: inherit; color: inherit; }
   min-height: 0;
 }
 
-#chat-header { background: var(--panel); }
+#chat-header { background: var(--panel); position: relative; }
 
 #back-btn { display: none; font-size: 22px; }
+
+.chat-actions { display: flex; align-items: center; gap: 10px; }
+#more-btn { display: none; font-size: 20px; line-height: 1; }
+
+/* Sin escritorio (Android): no hay carpetas ni selector de carpetas. */
+body.mobile .desktop-only { display: none !important; }
 
 .hint {
   color: var(--muted);
@@ -453,10 +459,33 @@ dialog input, dialog textarea {
 /* ---------- Ventana angosta: una columna ---------- */
 
 @media (max-width: 640px) {
-  #app { grid-template-columns: 1fr; }
+  /* minmax(0, …): sin él, el texto que no se parte ensancha la página más
+     que la pantalla y se cortan los botones de la derecha. */
+  #app { grid-template-columns: minmax(0, 1fr); }
   #app.chatting #sidebar { display: none; }
   #app:not(.chatting) #chat { display: none; }
   #back-btn { display: block; }
+
+  #more-btn { display: block; }
+  .chat-actions {
+    display: none;
+    position: absolute;
+    top: calc(100% - 6px);
+    right: 8px;
+    z-index: 10;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    min-width: 160px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+  }
+  .chat-actions.open { display: flex; }
+  .chat-actions .text-btn { padding: 10px 14px; text-align: left; color: var(--text); }
+  .chat-actions .text-btn.danger-btn { color: var(--danger); }
 }
 
 /* ---------- Mensaje a varios ---------- */

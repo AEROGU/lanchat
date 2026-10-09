@@ -20,6 +20,8 @@ type fakeHost struct {
 }
 
 func (h *fakeHost) Notify(title, body string) {}
+func (h *fakeHost) OpenFile(string) error     { return nil }
+func (h *fakeHost) OpenURL(string) error      { return nil }
 func (h *fakeHost) UnreadChanged(total int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -72,10 +74,11 @@ func TestStartStop(t *testing.T) {
 		var st struct {
 			Self        struct{ Hostname string }
 			DownloadDir string
+			Mobile      bool
 		}
 		json.NewDecoder(resp.Body).Decode(&st)
 		resp.Body.Close()
-		if st.Self.Hostname != "Galaxy de prueba" || st.DownloadDir != downloads {
+		if st.Self.Hostname != "Galaxy de prueba" || st.DownloadDir != downloads || !st.Mobile {
 			t.Errorf("estado: %+v", st)
 		}
 

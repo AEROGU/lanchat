@@ -41,6 +41,10 @@ type Host interface {
 	Notify(title, body string)
 	// UnreadChanged informa el total de mensajes sin leer.
 	UnreadChanged(total int)
+	// OpenFile abre un archivo recibido con la app que corresponda.
+	OpenFile(path string) error
+	// OpenURL abre un enlace en el navegador (la página del proyecto).
+	OpenURL(url string) error
 }
 
 var (
@@ -103,6 +107,7 @@ func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
 		return "", err
 	}
 	srv.OnUnreadChanged = host.UnreadChanged
+	srv.Shell = &ui.Shell{OpenFile: host.OpenFile, OpenURL: host.OpenURL}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	in := &instance{app: a, cancel: cancel, srv: srv, done: make(chan error, 1), events: make(chan struct{}), logFile: logFile}
