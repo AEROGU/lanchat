@@ -312,8 +312,10 @@ func (s *Service) sendAll(t packetType) {
 	}
 }
 
-// targets: broadcast por cada interfaz, equipos manuales y equipos conocidos
-// de otras subredes (a esos no les llega el broadcast).
+// targets: broadcast por cada interfaz, equipos manuales y, por unicast, todos
+// los equipos conocidos: a los de otras subredes no les llega el broadcast, y
+// a un teléfono con la pantalla apagada tampoco (el Wi-Fi en ahorro de energía
+// se salta los broadcast; el unicast, en cambio, el módem se lo guarda).
 func (s *Service) targets() []netip.AddrPort {
 	seen := map[netip.AddrPort]bool{}
 	var out []netip.AddrPort
@@ -351,7 +353,7 @@ func (s *Service) targets() []netip.AddrPort {
 	}
 
 	for _, p := range s.reg.snapshot() {
-		if p.udp.IsValid() && !inAnyNet(p.IP, nets) {
+		if p.udp.IsValid() {
 			add(p.udp)
 		}
 	}

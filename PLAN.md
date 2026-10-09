@@ -36,7 +36,7 @@ Paquetes JSON: `{"m":"lanchat","v":1,"t":"hello|announce|bye","id":"…","name":
 - Al salir: `bye`.
 - Destinos: broadcast dirigido por cada interfaz + `255.255.255.255` + unicast a:
   - equipos manuales (`manual_peers` en config: `ip`, `ip:puerto` u `hostname`),
-  - equipos conocidos de otras subredes (basta con que **un** lado tenga al otro configurado).
+  - todos los equipos conocidos: los de otras subredes (basta con que **un** lado tenga al otro configurado) y los de la misma, porque un teléfono con la pantalla apagada no recibe los broadcast (el Wi-Fi en ahorro de energía se los salta; el unicast el módem lo guarda hasta que despierta).
 - Si llega un paquete con nuestro ID desde otra IP → aviso de ID duplicado (config copiada entre PCs).
 
 ### Comunicación — HTTP :50001 (entre equipos)

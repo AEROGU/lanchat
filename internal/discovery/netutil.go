@@ -57,15 +57,6 @@ func broadcastAddr(p netip.Prefix) (netip.Addr, bool) {
 	return netip.AddrFrom4(a), true
 }
 
-func inAnyNet(ip netip.Addr, nets []netip.Prefix) bool {
-	for _, n := range nets {
-		if n.Contains(ip) {
-			return true
-		}
-	}
-	return false
-}
-
 // isLocalIP indica si ip pertenece a este equipo (incluye loopback).
 func isLocalIP(ip netip.Addr) bool {
 	if ip.IsLoopback() {

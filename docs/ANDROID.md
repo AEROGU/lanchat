@@ -198,15 +198,27 @@ Versión mínima hecha para la prueba de red; falta pulir:
   si existe `window.LanChatAndroid`, el puente de `MainActivity`) da el
   estado, el botón "Permitir" y el enlace a la información de la app, donde
   OPPO, Xiaomi, Huawei… tienen sus propios ajustes de batería.
-  - [ ] **Confirmado en el OPPO (ColorOS, Android 16)**: con solo "Sin
-    restricción" de Android, al apagar la pantalla ColorOS congela todo
-    LanChat (`/sys/fs/cgroup/apps/uid_<uid>/cgroup.freeze` = 1; en logcat,
+  - [x] **OPPO (ColorOS, Android 16)**: con solo "Sin restricción" de
+    Android, al apagar la pantalla ColorOS congela todo LanChat
+    (`/sys/fs/cgroup/apps/uid_<uid>/cgroup.freeze` = 1; en logcat,
     `OplusHansManager … unfreeze … scene: LcdOff` al encenderla), aunque
-    tenga servicio en primer plano. Congelado no se anuncia ni recibe: las
-    PCs lo ven desconectado y los mensajes esperan a que se encienda.
-    Probar con "Permitir actividad en segundo plano" de ColorOS
-    (información de la app > Uso de la batería) y repetir 10 min con la
-    pantalla apagada, vigilando ese `cgroup.freeze`.
+    tenga servicio en primer plano: no se anuncia ni recibe. Con
+    **"Permitir actividad en segundo plano"** (información de la app > Uso
+    de la batería; venía en "inteligente") ya no lo congeló en 11 minutos.
+    Hay que indicarlo en las instrucciones de instalación (punto 6).
+  - [x] **Con la pantalla apagada no llegan los broadcast**: el Wi-Fi del
+    teléfono en ahorro de energía no escucha todos los beacons y el módem
+    no guarda los broadcast (sí guarda el unicast hasta que despierta). Con
+    la pantalla apagada el teléfono dejaba de ver la laptop (ni un anuncio
+    en 12 min), aunque LanChat seguía despierto y el filtro de paquetes
+    (APF) no descartaba nada. Resuelto en el núcleo: cada equipo manda su
+    anuncio además por unicast a todos los que conoce (antes solo a los de
+    otras subredes). Probado: 4 min con la pantalla apagada, anuncios cada
+    10 s. **Las PCs necesitan la versión nueva** para que esto funcione.
+  - [ ] Probar con el teléfono **desconectado del USB** (por USB el sistema
+    no se suspendió: 99 % despierto). Con batería podría suspenderse; el
+    unicast debería despertarlo. Prueba: pantalla apagada 10 min, mandar un
+    mensaje desde la PC y ver si suena al momento.
 - [x] Detener LanChat: botón "Detener" en el aviso fijo (`ACTION_STOP` al
   servicio) y "Detener LanChat" en Ajustes (puente `stop()`). El núcleo se
   despide de la red, la ventana se cierra y el aviso fijo desaparece; al

@@ -160,6 +160,14 @@ func TestLocalNets(t *testing.T) {
 	if got := s.targets(); !slices.Contains(got, want) {
 		t.Errorf("targets = %v, falta %v", got, want)
 	}
+
+	// Un equipo conocido de la misma red también recibe el anuncio por
+	// unicast: un teléfono con la pantalla apagada no recibe los broadcast.
+	phone := netip.MustParseAddrPort("192.168.77.20:50000")
+	s.reg.seen(packet{ID: "B", Name: "Teléfono", HTTPPort: 50001}, phone, time.Now())
+	if got := s.targets(); !slices.Contains(got, phone) {
+		t.Errorf("targets = %v, falta el unicast a %v", got, phone)
+	}
 }
 
 func TestBroadcastAddr(t *testing.T) {
