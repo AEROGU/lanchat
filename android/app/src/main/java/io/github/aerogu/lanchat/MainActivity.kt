@@ -45,6 +45,9 @@ class MainActivity : ComponentActivity() {
         r.onSuccess { web.loadUrl(it) }.onFailure { showError(it) }
     }
 
+    // Al detener LanChat (aviso fijo o Ajustes) se cierra también la ventana.
+    private val onStopped: () -> Unit = { finishAndRemoveTask() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -93,6 +96,7 @@ class MainActivity : ComponentActivity() {
         }
         ContextCompat.startForegroundService(this, Intent(this, LanChatService::class.java))
         LanChatService.whenStarted(onStarted)
+        LanChatService.whenStopped(onStopped)
     }
 
     /**
@@ -118,6 +122,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         LanChatService.cancel(onStarted)
+        LanChatService.cancelStopped(onStopped)
         web.destroy()
         super.onDestroy()
     }
@@ -128,8 +133,11 @@ class MainActivity : ComponentActivity() {
         web.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
     }
 
-    /** Lo que la página puede pedir a Android: Ajustes > Segundo plano. */
+    /** Lo que la página puede pedir a Android (sección del teléfono en Ajustes). */
     private inner class Bridge {
+        @JavascriptInterface
+        fun stop() = runOnUiThread { LanChatService.stop(this@MainActivity) }
+
         @JavascriptInterface
         fun backgroundRestricted() = BatteryOptimization.restricted(this@MainActivity)
 

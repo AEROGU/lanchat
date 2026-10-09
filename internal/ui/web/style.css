@@ -335,6 +335,7 @@ body.mobile .desktop-only { display: none !important; }
 #attach-btn, #folder-btn { font-size: 18px; align-self: center; }
 
 .input-row { display: flex; gap: 6px; align-items: center; }
+.stop-row { margin-top: 16px; }
 .status-text { flex: 1; }
 
 dialog label.check {

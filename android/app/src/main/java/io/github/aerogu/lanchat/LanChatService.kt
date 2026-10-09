@@ -1,6 +1,7 @@
 package io.github.aerogu.lanchat
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
@@ -10,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import io.github.aerogu.lanchat.mobile.Mobile
 import java.io.File
@@ -26,6 +28,7 @@ class LanChatService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = true
         Notifications.createChannels(this)
         ServiceCompat.startForeground(
             this,
@@ -59,17 +62,30 @@ class LanChatService : Service() {
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) { // "Detener" en el aviso fijo
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        return START_STICKY
+    }
 
     override fun onBind(intent: Intent?) = null
 
     override fun onDestroy() {
+        running = false
         destroyed = true
         result = null
         networks?.stop()
         multicastLock?.release()
+        val context = applicationContext
         // Stop espera a que el núcleo se despida de la red: fuera del hilo principal.
-        core.execute { runCatching { Mobile.stop() }.onFailure { Log.w(TAG, "al detener", it) } }
+        core.execute {
+            runCatching { Mobile.stop() }.onFailure { Log.w(TAG, "al detener", it) }
+            // Por si un aviso de no leídos volvió a poner el aviso fijo mientras se detenía.
+            if (!running) NotificationManagerCompat.from(context).cancel(Notifications.SERVICE_ID)
+        }
+        stopped.toList().forEach { it() }
         super.onDestroy()
     }
 
@@ -101,6 +117,31 @@ class LanChatService : Service() {
 
     companion object {
         private const val TAG = "LanChat"
+        const val ACTION_STOP = "io.github.aerogu.lanchat.STOP"
+
+        /** El servicio está en marcha (entre onCreate y onDestroy). */
+        @Volatile
+        var running = false
+            private set
+
+        /**
+         * Detiene LanChat: se despide de la red y deja de recibir mensajes hasta
+         * que se vuelva a abrir la app.
+         */
+        fun stop(context: Context) {
+            context.stopService(Intent(context, LanChatService::class.java))
+        }
+
+        // Se llaman en el hilo principal cuando el servicio se detiene.
+        private val stopped = mutableListOf<() -> Unit>()
+
+        fun whenStopped(callback: () -> Unit) {
+            stopped += callback
+        }
+
+        fun cancelStopped(callback: () -> Unit) {
+            stopped -= callback
+        }
 
         /** Arranca y detiene el núcleo en orden, sin bloquear el hilo principal. */
         private val core = Executors.newSingleThreadExecutor()

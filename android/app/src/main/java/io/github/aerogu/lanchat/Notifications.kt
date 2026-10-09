@@ -50,6 +50,7 @@ object Notifications {
             .setContentText(text)
             .setNumber(unread)
             .setContentIntent(openApp(context))
+            .addAction(R.drawable.ic_stat_lanchat, context.getString(R.string.stop), stopService(context))
             .setOngoing(true)
             .setShowWhen(false)
             .build()
@@ -57,7 +58,8 @@ object Notifications {
 
     @SuppressLint("MissingPermission") // allowed() revisa POST_NOTIFICATIONS
     fun updateService(context: Context, unread: Int) {
-        if (allowed(context)) {
+        // Detenido, el aviso fijo ya no debe volver a aparecer.
+        if (LanChatService.running && allowed(context)) {
             NotificationManagerCompat.from(context).notify(SERVICE_ID, service(context, unread))
         }
     }
@@ -84,6 +86,13 @@ object Notifications {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
+
+    private fun stopService(context: Context): PendingIntent = PendingIntent.getService(
+        context,
+        0,
+        Intent(context, LanChatService::class.java).setAction(LanChatService.ACTION_STOP),
+        PendingIntent.FLAG_IMMUTABLE,
+    )
 
     private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
         context,

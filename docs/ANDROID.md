@@ -201,8 +201,12 @@ Versión mínima hecha para la prueba de red; falta pulir:
   - [ ] Confirmar en el OPPO que, con la pantalla apagada un rato, los
     mensajes llegan al momento (si no, revisar los ajustes propios de
     ColorOS: "Permitir actividad en segundo plano").
-- [ ] Opción para detener LanChat (hoy el servicio sigue hasta que Android
-  lo detenga o se fuerce el cierre).
+- [x] Detener LanChat: botón "Detener" en el aviso fijo (`ACTION_STOP` al
+  servicio) y "Detener LanChat" en Ajustes (puente `stop()`). El núcleo se
+  despide de la red, la ventana se cierra y el aviso fijo desaparece; al
+  abrir la app arranca de nuevo. `LanChatService.running` evita que un aviso
+  de no leídos tardío vuelva a poner el aviso fijo.
+  - [ ] Probar el botón "Detener" de la notificación.
 
 ### 5. Ajustes a la interfaz web y al núcleo
 

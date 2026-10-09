@@ -1481,6 +1481,7 @@ function bind() {
   $("firewall-btn").addEventListener("click", allowFirewall);
   $("battery-btn").addEventListener("click", () => window.LanChatAndroid?.allowBackground());
   $("app-settings-btn").addEventListener("click", () => window.LanChatAndroid?.openAppSettings());
+  $("stop-btn").addEventListener("click", () => window.LanChatAndroid?.stop());
   $("open-downloads").addEventListener("click", () =>
     api.openDownloadDir().catch((e) => showBanner(e.message, 5000)));
 
