@@ -71,12 +71,21 @@ a los clientes o pone los teléfonos en otra red.
 
 - [x] App mínima: servicio + `Mobile.start` + WebView (puntos 3 y 4 sin
   pulir).
-- [ ] **En un teléfono real** (el emulador no sirve, ver abajo), con
-  LanChat abierto en una PC de la oficina, comprobar que:
-  - [ ] el núcleo arranca (si falla, la app muestra el error; ver también
+- [x] **En un teléfono real** (el emulador no sirve, ver abajo). Probado en
+  casa con un OPPO Reno11 (Android 16, arm64) y la laptop con Windows:
+  - [x] el núcleo arranca (si falla, la app muestra el error; ver también
     `adb logcat` y `lanchat.log`);
-  - [ ] el teléfono aparece en la PC y la PC en el teléfono;
-  - [ ] llegan mensajes en ambos sentidos.
+  - [x] el teléfono aparece en la PC y la PC en el teléfono, también con el
+    teléfono detrás de un repetidor Wi-Fi;
+  - [x] llegan mensajes en ambos sentidos, con confirmación de lectura; el
+    cambio de IP del teléfono (al pasar del repetidor al módem) no afectó.
+  - [x] Notificación de mensaje nuevo con la app en segundo plano, y el
+    aviso fijo cuenta los no leídos.
+  - [ ] Repetir en la oficina, con su Wi-Fi.
+- Si la PC no acepta conexiones (el teléfono la ve pero los mensajes quedan
+  "pendiente"), es el Firewall de Windows: hay que aceptar su aviso la
+  primera vez que se abre LanChat. La regla queda solo para el tipo de red
+  de ese momento (Pública o Privada).
 
   Para instalarla: activar *Depuración USB* en el teléfono, conectarlo y
 
@@ -89,12 +98,14 @@ a los clientes o pone los teléfonos en otra red.
 - [ ] Si no se ven: revisar `lanchat.log` (en `filesDir`), probar con la IP
   de la PC en Ajustes > "Equipos de otras subredes", y preguntar si el Wi-Fi
   tiene aislamiento de clientes o es una red aparte.
-- [ ] Verificar en el log si Go pudo leer las interfaces de red: en
-  Android 11+ `net.Interfaces()` puede fallar por permisos. El descubrimiento
-  sigue funcionando con `255.255.255.255` y unicast, pero sin el broadcast
-  dirigido por red. Si hiciera falta, pasar las redes desde Kotlin
-  (`ConnectivityManager` / `LinkProperties`) con una opción nueva en
-  `discovery.Config`.
+- [ ] **Confirmado**: en Android 16 Go no puede leer las interfaces de red
+  (`net.Interfaces` y `net.InterfaceAddrs` fallan por permisos de netlink).
+  Efectos: el log avisa por error "otro equipo usa el mismo ID" con la IP
+  del propio teléfono (`isLocalIP` no la reconoce), y no se envía el
+  broadcast dirigido (p. ej. 192.168.1.255). El descubrimiento funciona con
+  `255.255.255.255` y unicast. Corregirlo pasando las redes desde Kotlin
+  (`ConnectivityManager` / `LinkProperties`, y actualizarlas al cambiar de
+  red) con una opción nueva en `discovery.Config`.
 
 #### El emulador no sirve para probar el núcleo
 
