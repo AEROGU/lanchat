@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lo que LanChatHost.openFile puede pasar a otras apps: solo los archivos
+     recibidos (ver LanChatService.downloadDir). -->
+<paths>
+    <!-- Android 11+: Descargas/LanChat. -->
+    <external-path name="descargas" path="Download/LanChat/" />
+    <!-- Antes de Android 11, y lo recibido con versiones anteriores de la app. -->
+    <external-files-path name="recibidos" path="Download/" />
+</paths>

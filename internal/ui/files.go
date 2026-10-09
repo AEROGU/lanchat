@@ -31,7 +31,7 @@ func (s *Server) handlePickFiles(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &req) {
 		return
 	}
-	paths, err := pickFiles()
+	paths, err := s.pickFiles()
 	if err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
@@ -122,9 +122,9 @@ func (s *Server) handleOpenFile(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, errors.New("el archivo ya no está ahí: se movió o se borró"))
 		return
 	}
-	open := openPath
+	open := s.openFile
 	if req.Reveal {
-		open = revealPath
+		open = s.revealFile
 	}
 	if err := open(path); err != nil {
 		s.fail(w, http.StatusBadRequest, err)
@@ -140,6 +140,10 @@ func (s *Server) handleDownloadDir(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &req) {
 		return
 	}
+	if s.Shell != nil {
+		s.fail(w, http.StatusBadRequest, errFixedDir)
+		return
+	}
 	if err := s.b.SetDownloadDir(req.Dir); err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
@@ -148,12 +152,16 @@ func (s *Server) handleDownloadDir(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOpenDownloadDir(w http.ResponseWriter, r *http.Request) {
+	if s.Shell != nil { // antes de crear la carpeta: no se abrirá
+		s.fail(w, http.StatusBadRequest, errNoFolders)
+		return
+	}
 	dir := s.b.DownloadDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := openPath(dir); err != nil {
+	if err := s.openFolder(dir); err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
@@ -222,7 +230,7 @@ func (s *Server) handlePickFolder(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &req) {
 		return
 	}
-	dir, err := pickFolder()
+	dir, err := s.pickFolder()
 	if err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
@@ -259,7 +267,7 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, errors.New("la carpeta no está disponible"))
 		return
 	}
-	if err := openPath(filepath.Join(t.Dir, req.Dir)); err != nil {
+	if err := s.openFolder(filepath.Join(t.Dir, req.Dir)); err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}

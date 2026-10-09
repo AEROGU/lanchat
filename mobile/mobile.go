@@ -12,9 +12,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/app"
@@ -34,18 +37,30 @@ const (
 // Host es lo que la app de Android ofrece al núcleo; lo implementa Kotlin.
 // Sus métodos se llaman desde hilos de Go: no deben bloquear.
 type Host interface {
-	// Notify muestra una notificación de mensaje nuevo.
-	Notify(title, body string)
+	// Notify muestra una notificación de mensaje nuevo; chat es la
+	// conversación (ui.Notice.Chat), para abrirla al tocar la notificación.
+	Notify(title, body, chat string)
 	// UnreadChanged informa el total de mensajes sin leer.
 	UnreadChanged(total int)
+	// OpenFile abre un archivo recibido con la app que corresponda.
+	OpenFile(path string) error
+	// OpenURL abre un enlace en el navegador (la página del proyecto).
+	OpenURL(url string) error
+	// IdleSeconds: cuánto lleva la pantalla apagada, en segundos (0 si está
+	// encendida). Es la inactividad del ausente automático.
+	IdleSeconds() int
 }
 
 var (
 	mu      sync.Mutex
 	running *instance
+
+	// networks son las redes que informó la app con SetNetworks.
+	networks atomic.Pointer[[]netip.Prefix]
 )
 
 type instance struct {
+	app     *app.App
 	cancel  context.CancelFunc
 	srv     *ui.Server
 	done    chan error // resultado de app.Run
@@ -78,9 +93,12 @@ func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
 		return "", err
 	}
 	log := slog.New(slog.NewTextHandler(logFile, nil))
-	log.Info("iniciando", "version", version.App, "plataforma", "android")
+	log.Info("iniciando", "version", version.App, "plataforma", "android", "redes", currentNetworks())
 
-	a, err := app.New(app.Options{Dir: dataDir, Hostname: deviceName, Log: log})
+	a, err := app.New(app.Options{
+		Dir: dataDir, Hostname: deviceName, Log: log, LocalNets: currentNetworks,
+		IdleTime: func() (time.Duration, error) { return time.Duration(host.IdleSeconds()) * time.Second, nil },
+	})
 	if err != nil {
 		logFile.Close()
 		return "", err
@@ -96,17 +114,18 @@ func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
 		return "", err
 	}
 	srv.OnUnreadChanged = host.UnreadChanged
+	srv.Shell = &ui.Shell{OpenFile: host.OpenFile, OpenURL: host.OpenURL}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	in := &instance{cancel: cancel, srv: srv, done: make(chan error, 1), events: make(chan struct{}), logFile: logFile}
+	in := &instance{app: a, cancel: cancel, srv: srv, done: make(chan error, 1), events: make(chan struct{}), logFile: logFile}
 	go srv.Serve()
 	go func() { in.done <- a.Run(ctx) }()
 	go func() {
 		defer close(in.events)
 		for ev := range a.Events() {
 			srv.Publish(ctx, ev)
-			if title, body, ok := srv.Notification(ctx, ev); ok {
-				host.Notify(title, body)
+			if n, ok := srv.Notification(ctx, ev); ok {
+				host.Notify(n.Title, n.Body, n.Chat)
 			}
 		}
 	}()
@@ -132,6 +151,38 @@ func Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), stopTimeout)
 	defer cancel()
 	return errors.Join(err, in.srv.Shutdown(ctx), in.logFile.Close())
+}
+
+// SetNetworks informa las redes IPv4 del teléfono, separadas por espacios
+// (p. ej. "192.168.1.20/24"); las de IPv6 se ignoran. Android no deja a Go
+// leer las interfaces de red: la app las toma de ConnectivityManager y las
+// vuelve a enviar cada vez que cambian. Puede llamarse antes de Start.
+func SetNetworks(cidrs string) error {
+	nets := []netip.Prefix{}
+	for _, f := range strings.Fields(cidrs) {
+		p, err := netip.ParsePrefix(f)
+		if err != nil {
+			return fmt.Errorf("red inválida %q: %w", f, err)
+		}
+		if p.Addr().Is4() {
+			nets = append(nets, p)
+		}
+	}
+	networks.Store(&nets)
+	mu.Lock()
+	in := running
+	mu.Unlock()
+	if in != nil {
+		in.app.NetworksChanged()
+	}
+	return nil
+}
+
+func currentNetworks() []netip.Prefix {
+	if p := networks.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // Running indica si LanChat está iniciado.

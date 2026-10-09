@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -13,6 +15,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +26,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/version"
 )
 
 // fakeBackend simula la aplicación con un solo contacto.
@@ -33,6 +38,8 @@ type fakeBackend struct {
 	manual []string
 	status string
 	room   *app.Room
+	// downloadDir vacío = una ruta de Windows que no se usa.
+	downloadDir string
 }
 
 var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", Online: true}
@@ -145,6 +152,16 @@ func (f *fakeBackend) Transfer(_ context.Context, id string) (store.Transfer, bo
 	t, ok := testTransfers[id]
 	return t, ok, nil
 }
+
+// testThumb es la miniatura del archivo 0 de la transferencia "t1".
+var testThumb = []byte("\xff\xd8 miniatura")
+
+func (f *fakeBackend) Thumb(_ context.Context, id string, idx int) ([]byte, bool, error) {
+	if id == "t1" && idx == 0 {
+		return testThumb, true, nil
+	}
+	return nil, false, nil
+}
 func (f *fakeBackend) TransfersByID(_ context.Context, ids []string) (map[string]store.Transfer, error) {
 	out := map[string]store.Transfer{}
 	for _, id := range ids {
@@ -154,15 +171,24 @@ func (f *fakeBackend) TransfersByID(_ context.Context, ids []string) (map[string
 	}
 	return out, nil
 }
-func (f *fakeBackend) DownloadDir() string         { return `C:\Descargas\LanChat` }
+func (f *fakeBackend) DownloadDir() string {
+	if f.downloadDir != "" {
+		return f.downloadDir
+	}
+	return `C:\Descargas\LanChat`
+}
 func (f *fakeBackend) SetDownloadDir(string) error { return nil }
 
-func startServer(t *testing.T) (*Server, *fakeBackend) {
+// startServer arranca el servidor; setup lo ajusta antes de Serve.
+func startServer(t *testing.T, setup ...func(*Server)) (*Server, *fakeBackend) {
 	t.Helper()
 	b := &fakeBackend{}
 	s, err := Listen(b, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, f := range setup {
+		f(s)
 	}
 	go s.Serve()
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
@@ -441,6 +467,129 @@ func TestFileRoutes(t *testing.T) {
 	}
 }
 
+// Sin escritorio (Android) los archivos y enlaces los abre Shell, y no hay
+// carpetas ni selectores de Windows.
+func TestShell(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "foto.jpg")
+	if err := os.WriteFile(path, []byte("jpeg"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testTransfers["t3"] = store.Transfer{ID: "t3", PeerID: "c1", State: store.TransferCompleted,
+		Files: []store.TransferFile{{Index: 0, Name: "foto.jpg", Size: 4, Done: true, Path: path}}}
+	t.Cleanup(func() { delete(testTransfers, "t3") })
+
+	var mu sync.Mutex
+	var opened []string
+	record := func(p string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		opened = append(opened, p)
+		return nil
+	}
+	s, _ := startServer(t, func(s *Server) { s.Shell = &Shell{OpenFile: record, OpenURL: record} })
+	c := loggedClient(t, s)
+
+	resp, err := c.Get(base(s) + "/api/state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st stateJSON
+	json.NewDecoder(resp.Body).Decode(&st)
+	resp.Body.Close()
+	if !st.Mobile {
+		t.Error("state.mobile debía ser true")
+	}
+
+	cases := []struct {
+		route, body string
+		want        int
+	}{
+		{"/api/files/open", `{"id":"t3","index":0}`, http.StatusNoContent},
+		{"/api/files/open", `{"id":"t3","index":0,"reveal":true}`, http.StatusBadRequest},
+		{"/api/download-dir/open", `{}`, http.StatusBadRequest},
+		{"/api/download-dir", `{"dir":"C:\\otra"}`, http.StatusBadRequest},
+		{"/api/files/pick", `{"peer":"c1"}`, http.StatusBadRequest},
+		{"/api/files/pick-folder", `{"peer":"c1"}`, http.StatusBadRequest},
+		{"/api/open-repository", `{}`, http.StatusNoContent},
+	}
+	for _, tc := range cases {
+		resp, err := postJSON(c, base(s)+tc.route, tc.body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != tc.want {
+			t.Errorf("%s %s: %d, quería %d", tc.route, tc.body, resp.StatusCode, tc.want)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{path, version.Repository}; !slices.Equal(opened, want) {
+		t.Errorf("abiertos = %v, quería %v", opened, want)
+	}
+}
+
+// Vista previa: la miniatura sale de la base y la imagen completa del archivo,
+// solo si de verdad es una imagen y la transferencia lo permite.
+func TestPreviewRoutes(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, data []byte) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	var img bytes.Buffer
+	png.Encode(&img, image.NewRGBA(image.Rect(0, 0, 4, 4)))
+	received := store.TransferFile{Index: 0, Name: "foto.png", Size: int64(img.Len()), Done: true,
+		Path: write("foto.png", img.Bytes())}
+	testTransfers["p1"] = store.Transfer{ID: "p1", PeerID: "c1", State: store.TransferCompleted, Files: []store.TransferFile{
+		received,
+		{Index: 1, Name: "pendiente.png", Path: received.Path},                                // sin terminar
+		{Index: 2, Name: "falsa.png", Done: true, Path: write("falsa.png", []byte("<html>"))}, // no es imagen
+		{Index: 3, Name: "notas.txt", Done: true, Path: write("notas.txt", []byte("hola"))},
+	}}
+	t.Cleanup(func() { delete(testTransfers, "p1") })
+
+	s, _ := startServer(t)
+	c := loggedClient(t, s)
+	get := func(path string) (*http.Response, []byte) {
+		resp, err := c.Get(base(s) + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return resp, b
+	}
+
+	resp, b := get("/api/files/thumb?id=t1&index=0")
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" || !bytes.Equal(b, testThumb) {
+		t.Errorf("miniatura: %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	if resp, _ := get("/api/files/thumb?id=t1&index=1"); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("sin miniatura: %d", resp.StatusCode)
+	}
+
+	resp, b = get("/api/files/view?id=p1&index=0")
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" ||
+		!strings.Contains(resp.Header.Get("Content-Security-Policy"), "sandbox") || !bytes.Equal(b, img.Bytes()) {
+		t.Errorf("imagen: %d %q %q", resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Security-Policy"))
+	}
+	for path, want := range map[string]int{
+		"/api/files/view?id=p1&index=1":   http.StatusNotFound,             // sin terminar
+		"/api/files/view?id=p1&index=2":   http.StatusUnsupportedMediaType, // HTML con nombre de imagen
+		"/api/files/view?id=p1&index=3":   http.StatusNotFound,             // no es imagen
+		"/api/files/view?id=nada&index=0": http.StatusNotFound,
+		"/api/files/view?id=p1":           http.StatusBadRequest,
+	} {
+		if resp, _ := get(path); resp.StatusCode != want {
+			t.Errorf("%s: %d, quería %d", path, resp.StatusCode, want)
+		}
+	}
+}
+
 func TestTransferJSON(t *testing.T) {
 	tj := toTransferJSON(testTransfers["t1"])
 	if tj.State != "completed" || tj.Files[0].SavedName != "a (1).pdf" || tj.Total != 3 {
@@ -654,6 +803,49 @@ func (f *fakeBackend) DeleteRoomConversation(_ context.Context, room string) err
 }
 func (f *fakeBackend) WipeData(context.Context) error { return f.record("wipe", "") }
 
+// Sin escritorio (Android) la copia se guarda directo en la carpeta de
+// recibidos, sin pisar otra con el mismo nombre; en el escritorio se descarga.
+func TestSaveExport(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "LanChat")
+	s, _ := startServer(t, func(s *Server) {
+		s.b.(*fakeBackend).downloadDir = dir
+		s.Shell = &Shell{OpenFile: func(string) error { return nil }, OpenURL: func(string) error { return nil }}
+	})
+	c := loggedClient(t, s)
+	var names []string
+	for range 2 {
+		resp, err := postJSON(c, base(s)+"/api/data/export", `{}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out struct{ Name, Dir string }
+		json.NewDecoder(resp.Body).Decode(&out)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || out.Dir != dir {
+			t.Fatalf("guardar copia: %d %+v", resp.StatusCode, out)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, out.Name))
+		if err != nil || !strings.HasPrefix(string(b), "SQLite format 3") {
+			t.Errorf("%s: %v %q", out.Name, err, b)
+		}
+		names = append(names, out.Name)
+	}
+	date := time.Now().Format("2006-01-02")
+	if want := []string{"LanChat-PC-YO-" + date + ".db", "LanChat-PC-YO-" + date + " (1).db"}; !slices.Equal(names, want) {
+		t.Errorf("nombres = %v, quería %v", names, want)
+	}
+
+	desk, _ := startServer(t)
+	resp, err := postJSON(loggedClient(t, desk), base(desk)+"/api/data/export", `{}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("en el escritorio: %d, quería 404", resp.StatusCode)
+	}
+}
+
 func TestPrivacy(t *testing.T) {
 	s, b := startServer(t)
 	c := loggedClient(t, s)
@@ -731,23 +923,23 @@ func TestNotification(t *testing.T) {
 	received := func(m store.Message) chat.Event { return chat.Event{Type: chat.MessageReceived, Message: m} }
 	msg := store.Message{ID: "m1", PeerID: "c1", Body: strings.Repeat("a", notifyPreview+5)}
 
-	title, body, ok := s.Notification(ctx, received(msg))
-	if !ok || title != testContact.DisplayName() || body != strings.Repeat("a", notifyPreview)+"…" {
-		t.Errorf("mensaje: %q %q %v", title, body, ok)
+	n, ok := s.Notification(ctx, received(msg))
+	if !ok || n.Title != testContact.DisplayName() || n.Body != strings.Repeat("a", notifyPreview)+"…" || n.Chat != "c1" {
+		t.Errorf("mensaje: %+v %v", n, ok)
 	}
-	if _, _, ok := s.Notification(ctx, chat.Event{Type: chat.MessageDelivered, Message: msg}); ok {
+	if _, ok := s.Notification(ctx, chat.Event{Type: chat.MessageDelivered, Message: msg}); ok {
 		t.Error("una entrega no se notifica")
 	}
 
 	// En una sala: título = sala, cuerpo = "Autor: texto"; los avisos no.
 	b.CreateRoom(ctx, "Proyecto", []string{"c1"})
 	inRoom := store.Message{ID: "m2", PeerID: "c1", RoomID: "r1", Body: "hola"}
-	if title, body, ok := s.Notification(ctx, received(inRoom)); !ok || title != "Proyecto" ||
-		body != testContact.DisplayName()+": hola" {
-		t.Errorf("sala: %q %q %v", title, body, ok)
+	if n, ok := s.Notification(ctx, received(inRoom)); !ok || n.Title != "Proyecto" ||
+		n.Body != testContact.DisplayName()+": hola" || n.Chat != "room:r1" {
+		t.Errorf("sala: %+v %v", n, ok)
 	}
 	inRoom.Kind = store.KindRoomEvent
-	if _, _, ok := s.Notification(ctx, received(inRoom)); ok {
+	if _, ok := s.Notification(ctx, received(inRoom)); ok {
 		t.Error("un aviso de sala no se notifica")
 	}
 
@@ -761,12 +953,12 @@ func TestNotification(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	s.setPresence(true, "c1")
-	if _, _, ok := s.Notification(ctx, received(msg)); ok {
+	if _, ok := s.Notification(ctx, received(msg)); ok {
 		t.Error("conversación abierta: no se notifica")
 	}
 	s.setPresence(false, "")
 	b.SetStatus(protocol.StatusBusy, "")
-	if _, _, ok := s.Notification(ctx, received(msg)); ok {
+	if _, ok := s.Notification(ctx, received(msg)); ok {
 		t.Error("Ocupado: no se notifica")
 	}
 }

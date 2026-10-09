@@ -5,6 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"os"
@@ -19,6 +22,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/testutil"
+	"github.com/AEROGU/lanchat/internal/thumb"
 	"github.com/AEROGU/lanchat/internal/transfer"
 )
 
@@ -110,6 +114,34 @@ func TestFileTransferEndToEnd(t *testing.T) {
 	}
 	if err := b.app.AcceptTransfer(ctx, m.ID); err == nil {
 		t.Error("aceptar otra vez una oferta completada debía fallar")
+	}
+}
+
+// Una imagen llega con su miniatura antes de aceptarla (vista previa); un
+// archivo que no es imagen, sin ella.
+func TestImagePreview(t *testing.T) {
+	a, b, _ := pair(t)
+	src := testutil.TempDir(t)
+	photo := filepath.Join(src, "foto.png")
+	var buf bytes.Buffer
+	png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 800, 600)))
+	if err := os.WriteFile(photo, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := writeRandom(t, src, "notas.txt", 10)
+
+	m := offer(t, a, b, photo, doc)
+	ctx := context.Background()
+	tr, _, _ := b.app.Transfer(ctx, m.ID)
+	if !tr.Files[0].HasThumb || tr.Files[1].HasThumb {
+		t.Fatalf("HasThumb = %v, %v; quería true, false", tr.Files[0].HasThumb, tr.Files[1].HasThumb)
+	}
+	got, ok, err := b.app.Thumb(ctx, m.ID, 0)
+	if err != nil || !ok || !thumb.Valid(got) {
+		t.Fatalf("miniatura recibida: %d bytes, %v, %v", len(got), ok, err)
+	}
+	if cfg, _ := jpeg.DecodeConfig(bytes.NewReader(got)); cfg.Width != thumb.MaxSide || cfg.Height != 240 {
+		t.Errorf("miniatura de %d×%d, quería 320×240", cfg.Width, cfg.Height)
 	}
 }
 

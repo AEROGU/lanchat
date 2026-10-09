@@ -189,9 +189,15 @@ button, input, textarea { font: inherit; color: inherit; }
   min-height: 0;
 }
 
-#chat-header { background: var(--panel); }
+#chat-header { background: var(--panel); position: relative; }
 
 #back-btn { display: none; font-size: 22px; }
+
+.chat-actions { display: flex; align-items: center; gap: 10px; }
+#more-btn { display: none; font-size: 20px; line-height: 1; }
+
+/* Sin escritorio (Android): no hay carpetas ni selector de carpetas. */
+body.mobile .desktop-only { display: none !important; }
 
 .hint {
   color: var(--muted);
@@ -283,6 +289,84 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 
 .file-size { color: var(--muted); font-size: 12px; flex: none; }
+
+/* ---------- Vista previa de imágenes ---------- */
+
+.previews {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  max-width: 300px;
+  margin: 6px 0 4px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.previews.n1 { grid-template-columns: 1fr; }
+.previews.n3 .preview:first-child { grid-column: span 2; aspect-ratio: 2 / 1; }
+
+.preview {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: none;
+  background: var(--border);
+  aspect-ratio: 1;
+  cursor: zoom-in;
+}
+
+.preview:disabled { cursor: default; }
+.previews.n1 .preview { aspect-ratio: auto; }
+
+.preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Una sola imagen: completa, sin recortar, como en WhatsApp. */
+.previews.n1 .preview img { height: auto; max-height: 320px; object-fit: contain; }
+
+.preview-more {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 45%);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+#viewer {
+  width: auto;
+  max-width: 96vw;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: #000;
+  cursor: zoom-out;
+}
+
+#viewer::backdrop { background: rgb(0 0 0 / 80%); }
+
+#viewer img {
+  display: block;
+  max-width: 96vw;
+  max-height: 86vh;
+  margin: auto;
+}
+
+#viewer p {
+  margin: 0;
+  padding: 6px 12px;
+  color: #ddd;
+  font-size: 13px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
 .file-list .text-btn { padding: 2px 6px; font-size: 12px; color: var(--brand); flex: none; }
 
 .msg.files .status { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
@@ -329,6 +413,7 @@ button, input, textarea { font: inherit; color: inherit; }
 #attach-btn, #folder-btn { font-size: 18px; align-self: center; }
 
 .input-row { display: flex; gap: 6px; align-items: center; }
+.stop-row { margin-top: 16px; }
 .status-text { flex: 1; }
 
 dialog label.check {
@@ -398,9 +483,11 @@ button { cursor: pointer; }
 
 #banner {
   position: fixed;
-  left: 50%;
-  bottom: 18px;
+  inset: auto auto 18px 50%; /* anula el centrado de [popover] */
+  margin: 0;
+  border: none;
   transform: translateX(-50%);
+  width: max-content; /* con left: 50%, fit-content usaría solo media pantalla */
   max-width: calc(100% - 32px);
   padding: 10px 16px;
   border-radius: var(--radius);
@@ -423,6 +510,7 @@ dialog {
 
 dialog::backdrop { background: rgb(0 0 0 / 35%); }
 dialog h2 { margin: 0 0 14px; font-size: 18px; }
+dialog h2:focus { outline: none; }
 dialog label { display: block; font-weight: 600; margin: 12px 0 4px; }
 
 dialog input, dialog textarea {
@@ -453,10 +541,33 @@ dialog input, dialog textarea {
 /* ---------- Ventana angosta: una columna ---------- */
 
 @media (max-width: 640px) {
-  #app { grid-template-columns: 1fr; }
+  /* minmax(0, …): sin él, el texto que no se parte ensancha la página más
+     que la pantalla y se cortan los botones de la derecha. */
+  #app { grid-template-columns: minmax(0, 1fr); }
   #app.chatting #sidebar { display: none; }
   #app:not(.chatting) #chat { display: none; }
   #back-btn { display: block; }
+
+  #more-btn { display: block; }
+  .chat-actions {
+    display: none;
+    position: absolute;
+    top: calc(100% - 6px);
+    right: 8px;
+    z-index: 10;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    min-width: 160px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+  }
+  .chat-actions.open { display: flex; }
+  .chat-actions .text-btn { padding: 10px 14px; text-align: left; color: var(--text); }
+  .chat-actions .text-btn.danger-btn { color: var(--danger); }
 }
 
 /* ---------- Mensaje a varios ---------- */
@@ -511,7 +622,8 @@ dialog input, dialog textarea {
 
 .about-list {
   display: grid;
-  grid-template-columns: auto 1fr;
+  /* minmax(0, …): la URL no debe ensanchar el diálogo en el teléfono. */
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 6px 12px;
   text-align: left;
   margin: 0 auto 12px;
@@ -519,7 +631,9 @@ dialog input, dialog textarea {
 }
 
 .about-list dt { color: var(--muted); }
-.about-list dd { margin: 0; }
+/* La URL se parte después de "/" (<wbr>); anywhere solo si aún no cabe. */
+.about-list dd { margin: 0; overflow-wrap: anywhere; }
+.about-list .link-btn { text-align: left; }
 .about-box .actions { justify-content: center; }
 
 .link-btn {

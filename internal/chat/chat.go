@@ -25,15 +25,18 @@ import (
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/thumb"
 )
 
 const (
 	// retryInterval: cada cuánto se reintentan los pendientes a equipos en línea.
 	retryInterval = 30 * time.Second
 	// maxRequestBytes acota el JSON recibido: el texto (con margen por el
-	// escapado JSON) más una oferta con el máximo de archivos.
+	// escapado JSON) más una oferta con el máximo de archivos y de miniaturas
+	// (en base64: 4/3 de su tamaño).
 	maxRequestBytes = 2*protocol.MaxMessageBytes +
-		protocol.MaxOfferFiles*(2*protocol.MaxFileNameLen+2*protocol.MaxRelDirLen+64)
+		protocol.MaxOfferFiles*(2*protocol.MaxFileNameLen+2*protocol.MaxRelDirLen+64) +
+		thumb.MaxPerOffer*(thumb.MaxBytes*4/3+32)
 	// maxResponseDrain: cuánto se lee de una respuesta que no nos interesa.
 	maxResponseDrain = 4 << 10
 	eventBuffer      = 256
@@ -104,6 +107,9 @@ type wireFile struct {
 	// Dir es la subcarpeta relativa ("Proyecto/planos"). Las versiones que no
 	// lo conocen reciben los archivos sueltos.
 	Dir string `json:"dir,omitempty"`
+	// Thumb es la miniatura JPEG de una imagen (vista previa antes de
+	// aceptar). Las versiones que no la conocen la ignoran.
+	Thumb []byte `json:"thumb,omitempty"`
 }
 
 func (m wireMessage) validate() error {
@@ -131,10 +137,10 @@ func (m wireMessage) validate() error {
 	return errors.Join(errs...)
 }
 
-func toWireOffer(t store.Transfer) *wireOffer {
+func toWireOffer(t store.Transfer, thumbs map[int][]byte) *wireOffer {
 	o := &wireOffer{Token: t.Token, ExpiresAt: t.ExpiresAt.UnixMilli(), Files: make([]wireFile, len(t.Files))}
 	for i, f := range t.Files {
-		o.Files[i] = wireFile{Name: f.Name, Size: f.Size, Dir: f.Dir}
+		o.Files[i] = wireFile{Name: f.Name, Size: f.Size, Dir: f.Dir, Thumb: thumbs[f.Index]}
 	}
 	return o
 }
@@ -152,8 +158,14 @@ func (m wireMessage) incomingTransfer(now time.Time) store.Transfer {
 	if !now.Before(t.ExpiresAt) {
 		t.State = store.TransferExpired
 	}
+	thumbs := 0
 	for i, f := range m.Offer.Files {
 		t.Files[i] = store.TransferFile{Index: i, Name: f.Name, Size: f.Size, Dir: f.Dir}
+		// Una miniatura que no sea un JPEG pequeño se descarta (no el mensaje).
+		if thumbs < thumb.MaxPerOffer && thumb.Valid(f.Thumb) {
+			t.Files[i].Thumb = f.Thumb
+			thumbs++
+		}
 	}
 	return t
 }
@@ -328,7 +340,11 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 		if !ok {
 			return fmt.Errorf("oferta %s sin transferencia", m.ID)
 		}
-		wm.Offer = toWireOffer(t)
+		thumbs, err := s.store.Thumbs(s.ctx, m.ID)
+		if err != nil {
+			return err
+		}
+		wm.Offer = toWireOffer(t, thumbs)
 	}
 	status, err := s.post(p, protocol.RouteMessage, wm)
 	if err == nil && status != http.StatusNoContent {

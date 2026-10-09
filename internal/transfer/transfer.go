@@ -40,6 +40,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/thumb"
 )
 
 const (
@@ -225,6 +226,7 @@ func (s *Service) Offer(ctx context.Context, peerID string, items []Item) (store
 			Index: i, Name: fi.Name(), Size: fi.Size(), ModTime: fi.ModTime(), Path: it.Path, Dir: it.Dir,
 		})
 	}
+	addThumbs(t.Files)
 	return s.sender.SendOffer(ctx, peerID, offerSummary(t.Files, t.TotalSize()), t)
 }
 
@@ -607,6 +609,12 @@ var errStalled = errors.New("la descarga se detuvo: no llegan datos del remitent
 
 func (s *Service) download(ctx context.Context, t store.Transfer) {
 	prog := s.newProgress(t, 0)
+	thumbs := 0 // miniaturas que ya hay (las manda el remitente)
+	for _, f := range t.Files {
+		if f.HasThumb {
+			thumbs++
+		}
+	}
 	for _, f := range t.Files {
 		if f.Done {
 			prog.add(f.Size)
@@ -628,6 +636,12 @@ func (s *Service) download(ctx context.Context, t store.Transfer) {
 		if err := s.store.MarkFileDone(s.ctx, t.ID, f.Index, path); err != nil {
 			s.fail(t, err)
 			return
+		}
+		// Si el remitente no mandó miniatura (versión anterior), se genera aquí.
+		if !f.HasThumb && thumbs < thumb.MaxPerOffer && thumb.Supported(f.Name) {
+			if b := safeThumb(path); b != nil && s.store.SetThumb(s.ctx, t.ID, f.Index, b) == nil {
+				thumbs++
+			}
 		}
 		s.notify(t, protocol.PathFileDone(t.ID, f.Index), nil)
 		if tr, ok, err := s.store.Transfer(s.ctx, t.ID); err == nil && ok {

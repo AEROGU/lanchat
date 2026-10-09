@@ -107,12 +107,25 @@ function showBanner(text, ms) {
   const b = $("banner");
   b.textContent = text;
   b.hidden = false;
+  // Como popover queda en la capa superior, encima de un diálogo abierto
+  // (p. ej. "Descargar mis datos" en Ajustes). Se reabre para quedar arriba
+  // de un diálogo abierto después.
+  if (b.showPopover) {
+    if (b.matches(":popover-open")) b.hidePopover();
+    b.showPopover();
+  }
   clearTimeout(bannerTimer);
-  if (ms) bannerTimer = setTimeout(() => (b.hidden = true), ms);
+  if (ms) bannerTimer = setTimeout(closeBanner, ms);
+}
+
+function closeBanner() {
+  const b = $("banner");
+  b.hidden = true;
+  if (b.hidePopover && b.matches(":popover-open")) b.hidePopover();
 }
 
 function hideBanner() {
-  if (!state.expired) $("banner").hidden = true;
+  if (!state.expired) closeBanner();
 }
 
 // ---------- Estado ----------
@@ -123,6 +136,17 @@ async function loadState() {
   state.limits = s.limits;
   state.manualPeers = s.manualPeers;
   state.downloadDir = s.downloadDir;
+  state.mobile = s.mobile;
+  document.body.classList.toggle("mobile", s.mobile);
+  if (s.mobile) {
+    $("input").placeholder = "Escribe un mensaje";
+    $("autoaway-text").textContent = "Ponerme Ausente tras 10 minutos con la pantalla apagada";
+    // Que abrir Ajustes no despliegue el teclado: el foco va al título y no
+    // al campo del nombre.
+    const title = $("settings").querySelector("h2");
+    title.tabIndex = -1;
+    title.autofocus = true;
+  }
   state.contacts = new Map(s.contacts.map((c) => [c.id, c]));
   state.rooms = new Map(s.rooms.map((r) => [r.id, r]));
   renderSelf();
@@ -132,7 +156,25 @@ async function loadState() {
     state.messages.clear(); // pudieron llegar mensajes mientras no había conexión
     await loadHistory(state.current);
   }
+  state.loaded = true;
+  if (pendingOpen) {
+    const id = pendingOpen;
+    pendingOpen = null;
+    window.lanchatOpen(id);
+  }
 }
+
+// lanchatOpen lo llama la app de Android al tocar el aviso de un mensaje: abre
+// esa conversación (id del contacto o ROOM + id de la sala), en cuanto la
+// lista esté cargada.
+let pendingOpen = null;
+window.lanchatOpen = (id) => {
+  if (!state.loaded) {
+    pendingOpen = id;
+    return;
+  }
+  if (state.contacts.has(id) || state.rooms.has(roomId(id))) openChat(id);
+};
 
 function sortedContacts() {
   return [...state.contacts.values()].sort(
@@ -405,7 +447,7 @@ function renderHeader() {
   note.hidden = c.online;
   note.textContent = `${c.displayName} está desconectado. Los mensajes que envíes se entregarán cuando se conecte.`;
   $("identity-note").hidden = !c.identityChanged;
-  $("identity-note-text").textContent = `La identidad de ${c.displayName} cambió. Si reinstaló LanChat es normal; si no, alguien podría estar haciéndose pasar por esa PC. Hasta que confíes en la nueva identidad no se le envía nada.`;
+  $("identity-note-text").textContent = `La identidad de ${c.displayName} cambió. Si reinstaló LanChat es normal; si no, alguien podría estar haciéndose pasar por ese equipo. Hasta que confíes en la nueva identidad no se le envía nada.`;
 }
 
 function dayLabel(ts) {
@@ -523,6 +565,8 @@ function transferCard(m) {
   title.textContent = `📎 ${t.files.length === 1 ? "1 archivo" : `${t.files.length} archivos`} · ${fmtSize(t.total)}`;
   div.append(title);
 
+  const shown = previews(t);
+  if (shown) div.append(shown);
   div.append(fileList(t));
 
   if (t.state === "downloading") {
@@ -559,17 +603,72 @@ function transferCard(m) {
   return div;
 }
 
+// MAX_PREVIEWS: miniaturas que muestra una tarjeta; con más, "+N" en la última.
+const MAX_PREVIEWS = 4;
+
+// previews muestra las miniaturas de las imágenes de una oferta, como en
+// WhatsApp: una sola, grande; varias, en cuadrícula. Llegan con la oferta, así
+// que se ven antes de aceptar. Tocar abre la imagen completa si ya se puede
+// (enviada, o recibida y terminada).
+function previews(t) {
+  const withThumb = t.files.filter((f) => f.thumb);
+  if (withThumb.length === 0) return null;
+  const shown = withThumb.slice(0, MAX_PREVIEWS);
+  const box = document.createElement("div");
+  box.className = `previews n${shown.length}`;
+  shown.forEach((f, i) => {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "preview";
+    const img = document.createElement("img");
+    img.src = `/api/files/thumb?${new URLSearchParams({ id: t.id, index: f.index })}`;
+    img.alt = f.name;
+    img.loading = "lazy";
+    cell.append(img);
+    const extra = withThumb.length - shown.length;
+    if (i === shown.length - 1 && extra > 0) {
+      const more = document.createElement("span");
+      more.className = "preview-more";
+      more.textContent = `+${extra}`;
+      cell.append(more);
+    }
+    if (f.view) {
+      cell.title = `Ver ${f.name}`;
+      cell.addEventListener("click", () => openViewer(t, f));
+    } else {
+      cell.title = t.outgoing ? f.name : "Acepta para descargarla y verla completa";
+      cell.disabled = true;
+    }
+    box.append(cell);
+  });
+  return box;
+}
+
+// openViewer muestra la imagen completa, leída directo del archivo.
+function openViewer(t, f) {
+  const img = $("viewer-img");
+  img.onerror = () => {
+    $("viewer").close();
+    showBanner("No se pudo abrir la imagen: el archivo ya no está o no es una imagen.", 5000);
+  };
+  img.src = `/api/files/view?${new URLSearchParams({ id: t.id, index: f.index })}`;
+  img.alt = f.name;
+  $("viewer-name").textContent = f.savedName || f.name;
+  $("viewer").showModal();
+}
+
 // MAX_FILE_ROWS: filas que muestra una tarjeta antes de resumir "y N más".
 const MAX_FILE_ROWS = 10;
 
 // fileList muestra los archivos sueltos y, de cada carpeta, una sola fila.
+// Sin escritorio no se pueden abrir carpetas: se lista cada archivo.
 function fileList(t) {
   const ul = document.createElement("ul");
   ul.className = "file-list";
   const rows = [];
   const folders = new Map(); // carpeta raíz -> { count, size, done }
   for (const f of t.files) {
-    if (!f.dir) {
+    if (!f.dir || state.mobile) {
       rows.push({ file: f });
       continue;
     }
@@ -595,19 +694,19 @@ function fileList(t) {
       name.textContent = `📁 ${row.folder}`;
       size.textContent = `${info.count} archivos · ${fmtSize(info.size)}`;
       li.append(name, size);
-      if (!t.outgoing && info.done > 0) {
+      if (!t.outgoing && info.done > 0 && !state.mobile) {
         li.append(textButton("Abrir carpeta", () =>
           api.openDir(t.id, row.folder).catch((e) => showBanner(e.message, 5000))));
       }
     } else {
       const f = row.file;
-      name.textContent = f.savedName || f.name;
+      name.textContent = (f.dir ? `${f.dir}/` : "") + (f.savedName || f.name);
       name.title = f.savedName && f.savedName !== f.name ? `Original: ${f.name}` : f.name;
       size.textContent = fmtSize(f.size) + (f.done && t.state !== "completed" ? " ✓" : "");
       li.append(name, size);
       if (!t.outgoing && f.done) {
-        li.append(textButton("Abrir", () => openReceived(t, f, false)),
-          textButton("Mostrar en carpeta", () => openReceived(t, f, true)));
+        li.append(textButton("Abrir", () => openReceived(t, f, false)));
+        if (!state.mobile) li.append(textButton("Mostrar en carpeta", () => openReceived(t, f, true)));
       }
     }
     ul.append(li);
@@ -718,6 +817,19 @@ async function uploadDropped(dt) {
   } catch (e) {
     return showBanner(`No se pudieron leer los archivos: ${e.message}`, 5000);
   }
+  await uploadItems(items);
+}
+
+// uploadPicked envía lo elegido con el selector del sistema (sin escritorio).
+function uploadPicked(input) {
+  const items = [...input.files].map((file) => ({ file, dir: "" }));
+  input.value = ""; // para poder elegir otra vez el mismo archivo
+  if (state.current && items.length > 0) uploadItems(items);
+}
+
+// uploadItems copia los archivos ([{file, dir}]) a este equipo y los ofrece
+// en la conversación abierta.
+async function uploadItems(items) {
   if (items.length === 0) return showBanner("No hay archivos para enviar (¿carpetas vacías?).", 5000);
   if (items.length > MAX_OFFER_FILES) {
     return showBanner(`Son más de ${MAX_OFFER_FILES} archivos; comprímelos en un .zip o envíalos en partes.`, 6000);
@@ -761,7 +873,37 @@ function renderMessages({ keepScroll = false, toBottom = false } = {}) {
 
 // ---------- Acciones ----------
 
+// setMenu abre o cierra el menú ⋯ de la conversación (ventana angosta).
+function setMenu(open) {
+  $("chat-actions").classList.toggle("open", open);
+  $("more-btn").setAttribute("aria-expanded", open);
+}
+
+// NARROW coincide con la ventana angosta de style.css (una columna).
+const NARROW = window.matchMedia("(max-width: 640px)");
+
+// lanchatBack lo llama el botón Atrás de Android (MainActivity): cierra lo
+// que esté abierto encima y devuelve true; con false la app pasa a segundo plano.
+window.lanchatBack = () => {
+  const dialog = document.querySelector("dialog[open]");
+  if (dialog) {
+    dialog.close();
+    return true;
+  }
+  if ($("chat-actions").classList.contains("open")) {
+    setMenu(false);
+    return true;
+  }
+  if (state.current && NARROW.matches) {
+    closeChat();
+    return true;
+  }
+  return false;
+};
+
 async function openChat(id) {
+  setMenu(false);
+  window.LanChatAndroid?.chatOpened(id); // en el teléfono, quita su aviso
   state.current = id;
   $("app").classList.add("chatting");
   $("empty").hidden = true;
@@ -773,10 +915,12 @@ async function openChat(id) {
   reportPresence();
   if (!state.messages.has(id)) await loadHistory(id);
   markReadIfVisible();
-  $("input").focus();
+  // En el teléfono el foco abriría el teclado y taparía los mensajes.
+  if (!state.mobile) $("input").focus();
 }
 
 function closeChat() {
+  setMenu(false);
   state.current = null;
   $("app").classList.remove("chatting");
   reportPresence();
@@ -896,6 +1040,7 @@ function openSettings() {
   $("receipts-input").checked = state.self.readReceipts;
   $("about").textContent = [`LanChat ${s.version} · ${s.hostname}`, s.copyright, s.license].join("\n");
   $("settings-error").hidden = true;
+  renderAndroid();
   $("settings").showModal();
   api.system().then(renderSystem).catch(() => {});
 }
@@ -905,6 +1050,19 @@ function renderSystem(sys) {
   $("autostart-input").checked = sys.autostart;
   $("firewall-status").textContent = sys.firewall ? "Permitido ✓" : "Sin configurar";
   $("firewall-btn").hidden = sys.firewall;
+}
+
+// renderAndroid muestra si Android puede pausar LanChat. LanChatAndroid lo
+// pone la app de Android (MainActivity.Bridge); en el escritorio no existe.
+function renderAndroid() {
+  const android = window.LanChatAndroid;
+  $("android-section").hidden = !android;
+  if (!android) return;
+  $("android-autostart").checked = android.autostart();
+  $("android-downloads").textContent = friendlyDir(state.downloadDir);
+  const restricted = android.backgroundRestricted();
+  $("battery-status").textContent = restricted ? "Android puede pausarlo para ahorrar batería" : "Sin restricción ✓";
+  $("battery-btn").hidden = !restricted;
 }
 
 function settingsError(e) {
@@ -968,9 +1126,15 @@ function openAbout() {
   $("about-name").textContent = s.appName;
   $("about-version").textContent = `Versión ${s.version}`;
   $("about-license").textContent = s.licenseName;
-  $("about-repo").textContent = s.repository;
+  $("about-repo").replaceChildren(...breakAfterSlashes(s.repository));
   $("about-copyright").textContent = s.copyright;
   $("about-dialog").showModal();
+}
+
+// breakAfterSlashes permite partir una URL después de cada "/" (<wbr>), para
+// que en pantallas angostas no se corte a media palabra ni haya que deslizar.
+function breakAfterSlashes(url) {
+  return url.split(/(?<=\/)/).flatMap((part) => [part, document.createElement("wbr")]);
 }
 
 // ---------- Mensaje a varios ----------
@@ -1187,6 +1351,7 @@ const WIPE_WORD = "BORRAR";
 
 // exportData descarga la copia de la base (el navegador la guarda en Descargas).
 function exportData() {
+  if (state.mobile) return saveExport();
   const a = document.createElement("a");
   a.href = "/api/data/export";
   a.download = "";
@@ -1196,16 +1361,33 @@ function exportData() {
   showBanner("Descargando la copia de tus datos…", 4000);
 }
 
+// saveExport: sin escritorio (la WebView no descarga), el núcleo guarda la
+// copia directamente en la carpeta de archivos recibidos.
+async function saveExport() {
+  showBanner("Guardando la copia de tus datos…");
+  try {
+    const { name, dir } = await request("POST", "/api/data/export", {});
+    showBanner(`Copia guardada en ${friendlyDir(dir)} › ${name}`, 8000);
+  } catch (e) {
+    showBanner(e.message, 6000);
+  }
+}
+
+// friendlyDir muestra la carpeta como el explorador de archivos de Android.
+function friendlyDir(dir) {
+  return dir.endsWith("/Download/LanChat") ? "Descargas › LanChat" : dir;
+}
+
 async function deleteChat() {
   const room = currentRoom();
   const c = state.contacts.get(state.current);
   let question;
   if (room) {
     question = room.left
-      ? `¿Borrar la sala «${room.name}» y todos sus mensajes de esta PC?`
-      : `¿Borrar todos los mensajes de «${room.name}» de esta PC? Sigues en la sala; los demás conservan sus mensajes.`;
+      ? `¿Borrar la sala «${room.name}» y todos sus mensajes de este equipo?`
+      : `¿Borrar todos los mensajes de «${room.name}» de este equipo? Sigues en la sala; los demás conservan sus mensajes.`;
   } else if (c) {
-    question = `¿Borrar toda la conversación con ${c.displayName} de esta PC? Se cancelan los archivos pendientes con este contacto. ${c.displayName} conserva su copia.`;
+    question = `¿Borrar toda la conversación con ${c.displayName} de este equipo? Se cancelan los archivos pendientes con este contacto. ${c.displayName} conserva su copia.`;
   } else {
     return;
   }
@@ -1259,7 +1441,7 @@ async function reloadAll() {
   state.progress.clear();
   showEmpty();
   await loadState().catch((e) => showBanner(e.message));
-  showBanner("Se borraron todos tus datos de esta PC.", 5000);
+  showBanner("Se borraron todos tus datos de este equipo.", 5000);
 }
 
 // ---------- Eventos en vivo ----------
@@ -1378,6 +1560,22 @@ function bind() {
   $("group-form").addEventListener("submit", saveGroup);
   $("alias-form").addEventListener("submit", saveAlias);
   $("back-btn").addEventListener("click", closeChat);
+  // Visor de imágenes: tocar en cualquier parte lo cierra; al cerrar se suelta
+  // la imagen (puede ser grande).
+  $("viewer").addEventListener("click", () => $("viewer").close());
+  $("viewer").addEventListener("close", () => $("viewer-img").removeAttribute("src"));
+  $("more-btn").addEventListener("click", (e) => {
+    e.stopPropagation(); // que no lo cierre el clic en el documento
+    setMenu(!$("chat-actions").classList.contains("open"));
+  });
+  // Elegir una acción, tocar fuera o Escape cierran el menú.
+  $("chat-actions").addEventListener("click", () => setMenu(false));
+  document.addEventListener("click", (e) => {
+    if (!$("chat-actions").contains(e.target)) setMenu(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setMenu(false);
+  });
 
   $("composer").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -1390,11 +1588,18 @@ function bind() {
     }
   });
   $("input").addEventListener("input", autoGrow);
-  $("attach-btn").addEventListener("click", (e) => pickAndSend(e.currentTarget, api.pickFiles));
+  $("attach-btn").addEventListener("click", (e) =>
+    state.mobile ? $("file-input").click() : pickAndSend(e.currentTarget, api.pickFiles));
+  $("file-input").addEventListener("change", (e) => uploadPicked(e.currentTarget));
   $("folder-btn").addEventListener("click", (e) => pickAndSend(e.currentTarget, api.pickFolder));
   $("autostart-input").addEventListener("change", toggleAutostart);
   $("receipts-input").addEventListener("change", toggleReceipts);
   $("firewall-btn").addEventListener("click", allowFirewall);
+  $("battery-btn").addEventListener("click", () => window.LanChatAndroid?.allowBackground());
+  $("app-settings-btn").addEventListener("click", () => window.LanChatAndroid?.openAppSettings());
+  $("stop-btn").addEventListener("click", () => window.LanChatAndroid?.stop());
+  $("android-autostart").addEventListener("change", (e) =>
+    window.LanChatAndroid?.setAutostart(e.currentTarget.checked));
   $("open-downloads").addEventListener("click", () =>
     api.openDownloadDir().catch((e) => showBanner(e.message, 5000)));
 
@@ -1439,6 +1644,12 @@ function bind() {
     markReadIfVisible();
   });
 }
+
+// lanchatResume lo llama la app de Android al volver a primer plano (p. ej.
+// desde el diálogo de batería): el estado de Ajustes pudo cambiar.
+window.lanchatResume = () => {
+  if ($("settings").open) renderAndroid();
+};
 
 bind();
 loadState()

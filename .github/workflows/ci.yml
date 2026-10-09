@@ -1,11 +1,11 @@
 # Verificación de cada cambio: formato, análisis, pruebas (también con el
-# detector de carreras) y vulnerabilidades conocidas. Corre en Windows porque
-# LanChat usa APIs de Windows.
+# detector de carreras) y vulnerabilidades conocidas, en Windows porque LanChat
+# usa APIs de Windows; y la app de Android (núcleo + Kotlin), en Ubuntu.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
   workflow_dispatch:
 
@@ -39,3 +39,32 @@ jobs:
 
       - name: Compilación del ejecutable
         run: go tool mage build
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # la versión de la app sale de git describe
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: ./.github/actions/android
+
+      - name: Compilación de la app (APK de prueba)
+        run: go tool mage apk
+
+      # Falla con errores (p. ej. una API que no existe en Android 7); los
+      # avisos quedan en el reporte.
+      - name: Lint de Android
+        working-directory: android
+        run: ./gradlew lintDebug --console=plain
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: apk-debug
+          path: dist/*-debug.apk
+          retention-days: 7

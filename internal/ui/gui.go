@@ -216,8 +216,8 @@ func (g *gui) applyTray(unread int) {
 }
 
 func (g *gui) maybeNotify(ctx context.Context, ev any) {
-	if title, body, ok := g.srv.Notification(ctx, ev); ok {
-		go g.notifier.notify(title, body)
+	if n, ok := g.srv.Notification(ctx, ev); ok {
+		go g.notifier.notify(n.Title, n.Body)
 	}
 }
 

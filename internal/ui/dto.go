@@ -7,6 +7,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/identity"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/thumb"
 	"github.com/AEROGU/lanchat/internal/transfer"
 	"github.com/AEROGU/lanchat/internal/version"
 )
@@ -19,7 +20,10 @@ type stateJSON struct {
 	Rooms       []roomJSON    `json:"rooms"`
 	ManualPeers []string      `json:"manualPeers"`
 	DownloadDir string        `json:"downloadDir"`
-	Limits      limitsJSON    `json:"limits"`
+	// Mobile: sin escritorio (Android, ver Server.Shell): se eligen archivos
+	// con <input type="file"> y no hay carpetas que abrir.
+	Mobile bool       `json:"mobile"`
+	Limits limitsJSON `json:"limits"`
 }
 
 type limitsJSON struct {
@@ -182,6 +186,11 @@ type fileJSON struct {
 	Dir string `json:"dir"`
 	// SavedName es el nombre con el que quedó guardado (puede ser "x (1).pdf").
 	SavedName string `json:"savedName,omitempty"`
+	// Thumb: hay miniatura (GET /api/files/thumb) para la vista previa.
+	Thumb bool `json:"thumb,omitempty"`
+	// View: se puede abrir la imagen completa (GET /api/files/view): una
+	// imagen enviada, o recibida y terminada.
+	View bool `json:"view,omitempty"`
 }
 
 func toTransferJSON(t store.Transfer) transferJSON {
@@ -197,7 +206,8 @@ func toTransferJSON(t store.Transfer) transferJSON {
 		Files:     make([]fileJSON, len(t.Files)),
 	}
 	for i, f := range t.Files {
-		out.Files[i] = fileJSON{Index: f.Index, Name: f.Name, Size: f.Size, Done: f.Done, Dir: f.Dir}
+		out.Files[i] = fileJSON{Index: f.Index, Name: f.Name, Size: f.Size, Done: f.Done, Dir: f.Dir,
+			Thumb: f.HasThumb, View: thumb.Supported(f.Name) && (t.Outgoing || f.Done)}
 		if !t.Outgoing && f.Done {
 			out.Files[i].SavedName = filepath.Base(f.Path)
 		}

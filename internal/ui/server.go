@@ -89,6 +89,7 @@ type Backend interface {
 	CancelTransfer(ctx context.Context, id string) error
 	Transfer(ctx context.Context, id string) (store.Transfer, bool, error)
 	TransfersByID(ctx context.Context, ids []string) (map[string]store.Transfer, error)
+	Thumb(ctx context.Context, id string, idx int) ([]byte, bool, error)
 	DownloadDir() string
 	SetDownloadDir(dir string) error
 
@@ -123,6 +124,9 @@ type Server struct {
 	OnUnreadChanged func(total int)
 	// AutostartArgs se agregan al inicio con Windows (p. ej. -dir).
 	AutostartArgs []string
+	// Shell, si no es nil, reemplaza las funciones del escritorio (Android);
+	// la página lo sabe por stateJSON.Mobile. Debe asignarse antes de Serve.
+	Shell *Shell
 
 	mu sync.Mutex
 	// focused y viewing los informa la página: si la ventana tiene el foco y
@@ -268,9 +272,12 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST "+uploadPath, s.handleUpload)
 	mux.HandleFunc("POST /api/transfers/{action}", s.handleTransferAction)
 	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
+	mux.HandleFunc("GET /api/files/thumb", s.handleThumb)
+	mux.HandleFunc("GET /api/files/view", s.handleView)
 	mux.HandleFunc("POST /api/download-dir", s.handleDownloadDir)
 	mux.HandleFunc("POST /api/download-dir/open", s.handleOpenDownloadDir)
 	mux.HandleFunc("GET /api/data/export", s.handleExport)
+	mux.HandleFunc("POST /api/data/export", s.handleSaveExport)
 	mux.HandleFunc("POST /api/data/wipe", s.handleWipe)
 	mux.HandleFunc("POST /api/conversation/delete", s.handleDeleteConversation)
 	mux.HandleFunc("POST /api/rooms", s.handleCreateRoom)
@@ -373,6 +380,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		Contacts:    make([]contactJSON, len(contacts)),
 		ManualPeers: s.b.ManualPeers(),
 		DownloadDir: s.b.DownloadDir(),
+		Mobile:      s.Shell != nil,
 		Limits: limitsJSON{MaxName: protocol.MaxNameLen, MaxMessageBytes: protocol.MaxMessageBytes,
 			MaxStatusText: protocol.MaxStatusTextLen},
 	}
@@ -659,7 +667,7 @@ func (s *Server) handleGroup(w http.ResponseWriter, r *http.Request) {
 // handleOpenRepository abre la página del proyecto en el navegador del
 // usuario (solo esa dirección fija, nunca una que mande la página).
 func (s *Server) handleOpenRepository(w http.ResponseWriter, r *http.Request) {
-	if err := openPath(version.Repository); err != nil {
+	if err := s.openURL(version.Repository); err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}

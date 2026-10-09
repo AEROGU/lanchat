@@ -1,0 +1,33 @@
+# Prepara lo que necesita "go tool mage apk" en un runner de Ubuntu: Java, el
+# NDK de Android (para gomobile) y gomobile. La plataforma y las build-tools
+# las descarga Gradle solo. Debe ir después de actions/setup-go.
+name: Android
+description: Java, NDK de Android y gomobile para compilar la app
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: "21"
+
+    - name: NDK de Android
+      shell: bash
+      run: |
+        ndk=30.0.16248370 # el mismo que en la PC de desarrollo (docs/ANDROID.md)
+        sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+        # Con pipefail, "yes" termina por tubería rota (141) al cerrar
+        # sdkmanager: no es un error. Si faltara una licencia, falla --install.
+        set +o pipefail
+        yes | "$sdkmanager" --licenses > /dev/null
+        set -o pipefail
+        "$sdkmanager" --install "ndk;$ndk" > /dev/null
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ndk" >> "$GITHUB_ENV"
+
+    # gomobile en la misma versión de golang.org/x/mobile que fija go.mod.
+    - name: gomobile
+      shell: bash
+      run: |
+        go install "golang.org/x/mobile/cmd/gomobile@$(go list -m -f '{{.Version}}' golang.org/x/mobile)"
+        gomobile init

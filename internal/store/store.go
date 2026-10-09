@@ -118,6 +118,10 @@ var migrations = [][]string{
 		// para ignorar los mensajes de quienes aún no saben que salió.
 		`ALTER TABLE rooms ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0`,
 	},
+	{
+		// thumb: miniatura JPEG de una imagen (vista previa); NULL si no hay.
+		`ALTER TABLE transfer_files ADD COLUMN thumb BLOB`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.

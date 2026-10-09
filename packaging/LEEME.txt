@@ -41,10 +41,27 @@ USO
 - Archivos: botón 📎 (archivos), 📁 (carpeta) o arrastrarlos a la
   conversación. El otro debe aceptarlos; una vez recibidos no se pueden
   volver a descargar (hay que reenviarlos). Se guardan en
-  Descargas\LanChat (se cambia en Ajustes).
+  Descargas\LanChat (se cambia en Ajustes). Las imágenes llegan con vista
+  previa antes de aceptarlas; un clic sobre ella la muestra completa.
 - Privacidad: el botón "Borrar" de una conversación la borra de esta PC
   (los demás conservan su copia). En Ajustes > Privacidad puedes descargar
   una copia de tus datos o borrarlos todos, p. ej. al dejar la empresa.
+
+TELÉFONOS ANDROID (7 o posterior)
+---------------------------------
+1. Descarga LanChat-<versión>.apk de la página del proyecto
+   (https://github.com/AEROGU/lanchat/releases) en el teléfono y ábrelo.
+   Android pedirá permitir "instalar apps desconocidas" a la app con que lo
+   abriste (navegador, Archivos...).
+2. Al abrir LanChat, permite las notificaciones y, en el aviso de batería,
+   elige "Continuar" y luego "Permitir".
+3. OPPO, Xiaomi, Huawei, Vivo y similares congelan las apps con la pantalla
+   apagada: en LanChat, Ajustes > "la información de la app" > Uso de la
+   batería, activa "Permitir actividad en segundo plano".
+4. El teléfono debe estar en el Wi-Fi de la oficina (no en datos móviles).
+LanChat arranca solo al encender el teléfono (se desactiva en Ajustes) y
+sigue recibiendo con la ventana cerrada; se detiene desde su notificación.
+Los archivos recibidos quedan en Descargas > LanChat.
 
 ACTUALIZAR
 ----------
@@ -52,6 +69,8 @@ Desde la versión 0.10 la comunicación va cifrada y no es compatible con
 las versiones anteriores: actualiza todas las PCs a la vez.
 Cierra LanChat (clic derecho en la bandeja > Salir) y reemplaza
 lanchat.exe por el nuevo. Los mensajes y ajustes se conservan.
+Con teléfonos Android, actualiza también las PCs a esta versión: así los
+teléfonos las ven aunque tengan la pantalla apagada.
 
 DATOS
 -----

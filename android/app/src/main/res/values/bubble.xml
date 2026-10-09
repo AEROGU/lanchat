@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Globo de diálogo de internal/icon en coordenadas 0..24: rectángulo
+         redondeado con cola abajo a la izquierda y tres puntos calados
+         (fillType evenOdd). Lo usan el ícono de la app y el de notificación. -->
+    <string name="bubble_path" translatable="false">M7.44,5.28 H16.56 A3.12,3.12 0 0 1 19.68,8.4 V12.72 A3.12,3.12 0 0 1 16.56,15.84 H10.21 L6.72,19.68 V15.76 A3.12,3.12 0 0 1 4.32,12.72 V8.4 A3.12,3.12 0 0 1 7.44,5.28 Z M6.84,10.56 a1.32,1.32 0 1 0 2.64,0 a1.32,1.32 0 1 0 -2.64,0 Z M10.68,10.56 a1.32,1.32 0 1 0 2.64,0 a1.32,1.32 0 1 0 -2.64,0 Z M14.52,10.56 a1.32,1.32 0 1 0 2.64,0 a1.32,1.32 0 1 0 -2.64,0 Z</string>
+</resources>

@@ -48,13 +48,18 @@
           <strong id="peer-name"></strong>
           <small id="peer-detail"></small>
         </div>
-        <button id="identity-btn" class="text-btn contact-only" title="Ver la huella de seguridad de este contacto">Identidad</button>
-        <button id="group-btn" class="text-btn contact-only" title="Poner a este contacto en un grupo">Grupo</button>
-        <button id="alias-btn" class="text-btn contact-only" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
-        <button id="room-add-btn" class="text-btn room-only" title="Agregar contactos a la sala">Agregar</button>
-        <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
-        <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
-        <button id="delete-chat-btn" class="text-btn danger-btn" title="Borrar esta conversación de esta PC">Borrar</button>
+        <!-- En ventana angosta las acciones van en el menú ⋯. -->
+        <button id="more-btn" class="icon-btn" title="Más opciones" aria-label="Más opciones"
+          aria-haspopup="menu" aria-expanded="false" aria-controls="chat-actions">⋯</button>
+        <div id="chat-actions" class="chat-actions">
+          <button id="identity-btn" class="text-btn contact-only" title="Ver la huella de seguridad de este contacto">Identidad</button>
+          <button id="group-btn" class="text-btn contact-only" title="Poner a este contacto en un grupo">Grupo</button>
+          <button id="alias-btn" class="text-btn contact-only" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
+          <button id="room-add-btn" class="text-btn room-only" title="Agregar contactos a la sala">Agregar</button>
+          <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
+          <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
+          <button id="delete-chat-btn" class="text-btn danger-btn" title="Borrar esta conversación de este equipo">Borrar</button>
+        </div>
       </header>
 
       <div id="identity-note" class="note danger" hidden>
@@ -68,7 +73,9 @@
 
       <form id="composer" hidden>
         <button type="button" id="attach-btn" class="icon-btn contact-only" title="Enviar archivos (también puedes arrastrarlos aquí)" aria-label="Enviar archivos">📎</button>
-        <button type="button" id="folder-btn" class="icon-btn contact-only" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
+        <button type="button" id="folder-btn" class="icon-btn contact-only desktop-only" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
+        <!-- Sin escritorio (Android) el 📎 usa el selector del sistema. -->
+        <input type="file" id="file-input" multiple hidden>
         <textarea id="input" rows="1" placeholder="Escribe un mensaje (Enter envía, Shift+Enter nueva línea)"></textarea>
         <button type="submit" class="primary">Enviar</button>
       </form>
@@ -76,7 +83,7 @@
     </main>
   </div>
 
-  <div id="banner" hidden></div>
+  <div id="banner" popover="manual" hidden></div>
 
   <dialog id="settings">
     <form method="dialog" id="settings-form">
@@ -89,12 +96,14 @@
       <textarea id="peers-input" rows="4" spellcheck="false"></textarea>
       <small class="help">Uno por línea: IP o nombre del equipo, con <code>:puerto</code> opcional. Ej.: <code>10.0.5.20</code> o <code>PC-VENTAS</code>.</small>
 
-      <label for="download-input">Carpeta para archivos recibidos</label>
-      <div class="input-row">
-        <input id="download-input" autocomplete="off" spellcheck="false">
-        <button type="button" id="open-downloads" class="text-btn">Abrir</button>
+      <div class="desktop-only">
+        <label for="download-input">Carpeta para archivos recibidos</label>
+        <div class="input-row">
+          <input id="download-input" autocomplete="off" spellcheck="false">
+          <button type="button" id="open-downloads" class="text-btn">Abrir</button>
+        </div>
+        <small class="help">Vacío = la carpeta Descargas\LanChat.</small>
       </div>
-      <small class="help">Vacío = la carpeta Descargas\LanChat.</small>
 
       <label class="check">
         <input type="checkbox" id="receipts-input">
@@ -112,6 +121,28 @@
           <button type="button" id="firewall-btn" class="text-btn">Permitir</button>
         </div>
         <small class="help">Hace falta para recibir mensajes y archivos en redes privadas. Pide permiso de administrador.</small>
+      </div>
+
+      <div id="android-section" hidden>
+        <label class="check">
+          <input type="checkbox" id="android-autostart">
+          Iniciar LanChat al encender el teléfono
+        </label>
+
+        <label>Archivos recibidos</label>
+        <span id="android-downloads" class="status-text"></span>
+
+        <label>Segundo plano</label>
+        <div class="input-row">
+          <span id="battery-status" class="status-text"></span>
+          <button type="button" id="battery-btn" class="text-btn">Permitir</button>
+        </div>
+        <small class="help">Si Android pausa LanChat para ahorrar batería, los mensajes llegan con retraso. En algunos teléfonos (OPPO, Xiaomi, Huawei…) hay que permitir además la actividad en segundo plano en <button type="button" id="app-settings-btn" class="link-btn">la información de la app</button>.</small>
+
+        <div class="input-row stop-row">
+          <button type="button" id="stop-btn" class="text-btn danger-btn">Detener LanChat</button>
+        </div>
+        <small class="help">Dejas de recibir mensajes hasta que vuelvas a abrir la app. También se detiene desde su notificación.</small>
       </div>
 
       <label>Privacidad</label>
@@ -134,7 +165,7 @@
   <dialog id="identity-dialog">
     <form method="dialog">
       <h2>Identidad de <span id="identity-who"></span></h2>
-      <p class="help">La comunicación con cada equipo va cifrada. Para asegurarte de que hablas con la PC correcta, compara estas huellas con la otra persona (por teléfono o en persona): deben coincidir con lo que ve ella en su LanChat.</p>
+      <p class="help">La comunicación con cada equipo va cifrada. Para asegurarte de que hablas con el equipo correcto, compara estas huellas con la otra persona (por teléfono o en persona): deben coincidir con lo que ve ella en su LanChat.</p>
       <label>Huella de este contacto</label>
       <code id="identity-theirs" class="fingerprint"></code>
       <div id="identity-new-box" hidden>
@@ -213,7 +244,7 @@
   <dialog id="wipe-dialog">
     <form method="dialog" id="wipe-form">
       <h2>Borrar todos mis datos</h2>
-      <p class="help">Por ejemplo, cuando dejas de usar esta PC o de trabajar en la empresa. Se borra de esta PC:</p>
+      <p class="help">Por ejemplo, cuando dejas de usar este equipo o de trabajar en la empresa. Se borra de este equipo:</p>
       <ul class="help-list">
         <li>todas las conversaciones y salas (sales de ellas y se avisa a los demás),</li>
         <li>las ofertas de archivos (las pendientes se cancelan),</li>
@@ -244,7 +275,7 @@
       <input id="status-text" autocomplete="off" placeholder="p. ej. En junta hasta las 12">
       <label class="check">
         <input type="checkbox" id="autoaway-input">
-        Ponerme Ausente tras 10 minutos sin usar la PC
+        <span id="autoaway-text">Ponerme Ausente tras 10 minutos sin usar la PC</span>
       </label>
       <p id="status-error" class="error" hidden></p>
       <div class="actions">
@@ -281,6 +312,12 @@
         <button value="save" class="primary">Guardar</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Visor de imágenes (vista previa): la imagen completa, sin copias. -->
+  <dialog id="viewer" aria-label="Imagen">
+    <img id="viewer-img" alt="">
+    <p id="viewer-name"></p>
   </dialog>
 
   <script type="module" src="/app.js"></script>

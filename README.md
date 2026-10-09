@@ -6,7 +6,7 @@
 
 <p align="center">
   Mensajería y envío de archivos para la red local de la oficina.<br>
-  Sin servidor, sin cuentas, sin Internet: se instala en cada PC y listo.
+  Sin servidor, sin cuentas, sin Internet: se instala en cada PC y teléfono Android, y listo.
 </p>
 
 <p align="center">
@@ -14,6 +14,7 @@
   <a href="https://github.com/AEROGU/lanchat/actions/workflows/ci.yml"><img alt="Pruebas" src="https://github.com/AEROGU/lanchat/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="Licencia GPL v3" src="https://img.shields.io/badge/licencia-GPL%20v3-blue"></a>
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4">
+  <img alt="Android 7 o posterior" src="https://img.shields.io/badge/Android-7%2B-3DDC84">
 </p>
 
 <p align="center">
@@ -34,7 +35,8 @@
 - **Salas** de chat grupales y **mensajes a varios** contactos o a un grupo.
 - **Archivos y carpetas** (botón o arrastrar y soltar): el otro debe
   aceptarlos, se descargan una sola vez, se reanudan si se corta la red y se
-  verifican con SHA-256.
+  verifican con SHA-256. Las imágenes (JPG, PNG, GIF, WebP) llegan con
+  **vista previa** antes de aceptarlas y se abren completas con un clic.
 - **Estados** Disponible, Ausente y Ocupado, con mensaje y ausente automático.
 - **Cifrado** TLS 1.3 entre PCs, con aviso si la identidad de un equipo cambia.
 - **Privacidad**: descargar una copia de tus datos o borrarlos (todos, o una
@@ -57,6 +59,24 @@
 Requisitos: Windows 10 u 11 de 64 bits con Microsoft Edge (viene con
 Windows). La red debe estar marcada como **privada** en Windows y permitir
 UDP 50000 y TCP 50001 entre las PCs.
+
+### En Android
+
+1. Descarga `LanChat-<versión>.apk` de la [última versión](https://github.com/AEROGU/lanchat/releases/latest)
+   en el teléfono y ábrelo. Android pedirá permitir "instalar apps
+   desconocidas" a la app con que lo abriste (navegador, Archivos…).
+2. Al abrir LanChat, permite las **notificaciones** y, en el aviso de
+   batería, elige **Continuar** y luego **Permitir**.
+3. En **OPPO, Xiaomi, Huawei, Vivo** y similares: en LanChat, Ajustes > "la
+   información de la app" > Uso de la batería, activa **Permitir actividad
+   en segundo plano**. Si no, el teléfono congela LanChat con la pantalla
+   apagada y los mensajes llegan tarde.
+
+Requisitos: Android 7 o posterior, conectado al Wi-Fi de la oficina. Es la
+misma interfaz que en la PC; LanChat arranca solo al encender el teléfono
+(se desactiva en Ajustes) y se detiene desde su notificación. Para que los
+teléfonos vean a las PCs con la pantalla apagada, las PCs deben tener la
+misma versión o una posterior.
 
 ### Aviso de Windows SmartScreen
 
@@ -179,6 +199,8 @@ go tool mage vuln         # vulnerabilidades conocidas en el código y sus libre
 go tool mage dist         # dist/LanChat-<versión>.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
 go tool mage screenshots  # regenera docs/screenshots y docs/logo.png (requiere Edge)
 go tool mage android      # android/app/libs/lanchat.aar para la app de Android (en desarrollo, ver docs/ANDROID.md)
+go tool mage apk          # dist/LanChat-<versión>-debug.apk para probar en el teléfono (firma de depuración)
+go tool mage apkRelease   # dist/LanChat-<versión>.apk firmado con la clave propia (ver docs/ANDROID.md)
 ```
 
 `build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y
@@ -195,19 +217,26 @@ en [PLAN.md](PLAN.md).
 
 ### GitHub Actions
 
-- `.github/workflows/ci.yml`: en cada push a `main` y en cada pull request
-  corre `check`, `race`, `vuln` y `build` en Windows.
+- `.github/workflows/ci.yml`: en cada push a `main` o `develop` y en cada
+  pull request corre `check`, `race`, `vuln` y `build` en Windows, y compila
+  el APK de prueba en Ubuntu.
 - `.github/workflows/release.yml`: al subir una etiqueta `vX.Y.Z` verifica
-  todo, arma el zip y crea la Release con el zip y `SHA256SUMS.txt`. El texto
-  de la Release es el mensaje de la etiqueta:
+  todo, arma el zip, compila el APK firmado (con la clave de los *secrets*,
+  ver [docs/ANDROID.md](docs/ANDROID.md#clave-de-firma)) y crea la Release
+  con los dos y `SHA256SUMS.txt`. El texto de la Release es el mensaje de la
+  etiqueta:
 
   ```bash
   git tag -a v1.0.0 -m "LanChat 1.0.0: lo nuevo de esta versión"
   git push origin v1.0.0
   ```
 
+  Una etiqueta con guion (`v1.1.0-rc.1`) se publica como versión
+  preliminar: no pasa a ser la "última versión". Lanzado a mano
+  (`gh workflow run release.yml`), solo compila y firma el APK, sin publicar.
+
 - `.github/dependabot.yml`: pull requests semanales con las versiones nuevas
-  de las librerías de Go y de las acciones.
+  de las librerías de Go, de las acciones y de la app de Android.
 
 ## Licencia
 
@@ -231,14 +260,16 @@ en el zip.
 
 ## English
 
-LanChat is a serverless LAN messenger and file-sharing app for Windows 10/11,
-similar to classic office LAN messengers. PCs discover each other
-automatically (UDP broadcast, plus manually added peers for other subnets),
-with no accounts and no Internet connection. Features: one-to-one chat with
-offline delivery and read receipts, group rooms, broadcast messages, file
-and folder transfers that must be accepted (one-time download, resumable,
-SHA-256 verified), presence status, mutual TLS 1.3 with trust-on-first-use
-identity pinning, and options to export or securely wipe your data. It is a
-single executable written in Go, with a local web UI shown in an Edge app
-window and a system tray icon. The interface is in Spanish.
+LanChat is a serverless LAN messenger and file-sharing app for Windows 10/11
+and Android 7+, similar to classic office LAN messengers. Devices discover
+each other automatically (UDP broadcast and unicast, plus manually added
+peers for other subnets), with no accounts and no Internet connection.
+Features: one-to-one chat with offline delivery and read receipts, group
+rooms, broadcast messages, file and folder transfers that must be accepted
+(one-time download, resumable, SHA-256 verified) with image previews,
+presence status, mutual TLS 1.3 with trust-on-first-use identity pinning,
+and options to export or securely wipe your data. On Windows it is a single
+executable written in Go, with a local web UI shown in an Edge app window
+and a system tray icon; on Android the same Go core (via gomobile) runs in a
+foreground service and the same UI in a WebView. The interface is in Spanish.
 Licensed under the GPL v3.

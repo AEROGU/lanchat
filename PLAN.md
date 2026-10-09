@@ -36,7 +36,7 @@ Paquetes JSON: `{"m":"lanchat","v":1,"t":"hello|announce|bye","id":"…","name":
 - Al salir: `bye`.
 - Destinos: broadcast dirigido por cada interfaz + `255.255.255.255` + unicast a:
   - equipos manuales (`manual_peers` en config: `ip`, `ip:puerto` u `hostname`),
-  - equipos conocidos de otras subredes (basta con que **un** lado tenga al otro configurado).
+  - todos los equipos conocidos: los de otras subredes (basta con que **un** lado tenga al otro configurado) y los de la misma, porque un teléfono con la pantalla apagada no recibe los broadcast (el Wi-Fi en ahorro de energía se los salta; el unicast el módem lo guarda hasta que despierta).
 - Si llega un paquete con nuestro ID desde otra IP → aviso de ID duplicado (config copiada entre PCs).
 
 ### Comunicación — HTTP :50001 (entre equipos)
@@ -125,3 +125,21 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 ### Fase 4: Android
 - [x] Núcleo portable (`mage portable` en `check`) y API `mobile/` para gomobile.
 - [ ] App Android (Kotlin + WebView + servicio en primer plano): ver [docs/ANDROID.md](docs/ANDROID.md).
+
+### Fase 5
+- [x] **Vista previa de imágenes**, como en WhatsApp, en PC y en teléfono,
+  con la condición de no dejar basura ni archivos temporales:
+  - El remitente genera en memoria (`internal/thumb`, Go puro) una miniatura
+    JPEG (lado mayor 320 px, ≤ 32 KB, girada según EXIF) de las primeras 10
+    imágenes de la oferta y la manda en ella (`thumb`, campo opcional: las
+    versiones anteriores lo ignoran). Se ve **antes de aceptar**. Si el
+    remitente es de una versión anterior, la genera quien recibe al terminar
+    la descarga.
+  - Se guarda en la base con la oferta (`transfer_files.thumb`) y se borra con
+    la conversación. Quien recibe solo acepta JPEG pequeños válidos.
+  - Tocarla abre la imagen completa leída directo del archivo
+    (`GET /api/files/view`: solo transferencias propias, solo si el contenido
+    es JPEG/PNG/GIF/WebP, nunca SVG, con CSP sandbox).
+  - Formatos: JPG, PNG, GIF y WebP. Video, PDF y HEIC se muestran como antes
+    (Go no los decodifica sin cgo). Imágenes de más de 50 Mpx, sin miniatura.
+  - Lo recibido con versiones anteriores no tiene miniatura.

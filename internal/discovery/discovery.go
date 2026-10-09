@@ -53,6 +53,10 @@ type Config struct {
 	TTL      time.Duration
 	// NoBroadcast desactiva el broadcast y deja solo unicast (pruebas).
 	NoBroadcast bool
+	// LocalNets, si no es nil, reemplaza la lectura de las interfaces de red:
+	// devuelve las redes IPv4 de este equipo con su IP (p. ej. 192.168.1.20/24).
+	// En Android las apps no pueden leer las interfaces; las da la app.
+	LocalNets func() []netip.Prefix
 }
 
 type Service struct {
@@ -243,7 +247,7 @@ func (s *Service) recvLoop() {
 
 func (s *Service) handle(p packet, src netip.AddrPort) {
 	if p.ID == s.cfg.ID {
-		if !isLocalIP(src.Addr()) {
+		if !s.isLocal(src.Addr()) {
 			s.mu.Lock()
 			warn := !s.dupWarned
 			s.dupWarned = true
@@ -308,8 +312,10 @@ func (s *Service) sendAll(t packetType) {
 	}
 }
 
-// targets: broadcast por cada interfaz, equipos manuales y equipos conocidos
-// de otras subredes (a esos no les llega el broadcast).
+// targets: broadcast por cada interfaz, equipos manuales y, por unicast, todos
+// los equipos conocidos: a los de otras subredes no les llega el broadcast, y
+// a un teléfono con la pantalla apagada tampoco (el Wi-Fi en ahorro de energía
+// se salta los broadcast; el unicast, en cambio, el módem se lo guarda).
 func (s *Service) targets() []netip.AddrPort {
 	seen := map[netip.AddrPort]bool{}
 	var out []netip.AddrPort
@@ -320,7 +326,7 @@ func (s *Service) targets() []netip.AddrPort {
 		}
 	}
 
-	nets := localNets()
+	nets := s.nets()
 	port := uint16(s.cfg.UDPPort)
 	if !s.cfg.NoBroadcast {
 		add(netip.AddrPortFrom(limitedBroadcast, port))
@@ -347,7 +353,7 @@ func (s *Service) targets() []netip.AddrPort {
 	}
 
 	for _, p := range s.reg.snapshot() {
-		if p.udp.IsValid() && !inAnyNet(p.IP, nets) {
+		if p.udp.IsValid() {
 			add(p.udp)
 		}
 	}
@@ -381,11 +387,47 @@ func (s *Service) SetManualPeers(list []string) error {
 	s.mu.Lock()
 	s.manual = manual
 	s.mu.Unlock()
+	s.requestRefresh()
+	return nil
+}
+
+// NetworksChanged saluda de nuevo (p. ej. el equipo se pasó a otro Wi-Fi):
+// los equipos de la red nueva lo ven sin esperar al siguiente anuncio.
+func (s *Service) NetworksChanged() {
+	s.log.Info("redes locales", "redes", s.nets())
+	s.requestRefresh()
+}
+
+// requestRefresh pide a Run resolver los equipos manuales y saludar a todos.
+func (s *Service) requestRefresh() {
 	select {
 	case s.refresh <- struct{}{}:
 	default: // ya hay una actualización pendiente
 	}
-	return nil
+}
+
+// nets son las redes IPv4 de este equipo (ver Config.LocalNets).
+func (s *Service) nets() []netip.Prefix {
+	if s.cfg.LocalNets != nil {
+		return s.cfg.LocalNets()
+	}
+	return localNets()
+}
+
+// isLocal indica si ip es de este equipo (incluye loopback).
+func (s *Service) isLocal(ip netip.Addr) bool {
+	if s.cfg.LocalNets == nil {
+		return isLocalIP(ip)
+	}
+	if ip.IsLoopback() {
+		return true
+	}
+	for _, n := range s.cfg.LocalNets() {
+		if n.Addr() == ip {
+			return true
+		}
+	}
+	return false
 }
 
 // hintTTL: cuánto se saluda a un equipo que nos contó otro equipo; si
@@ -410,10 +452,7 @@ func (s *Service) AddHints(addrs []netip.AddrPort) {
 	}
 	s.mu.Unlock()
 	if added {
-		select {
-		case s.refresh <- struct{}{}:
-		default:
-		}
+		s.requestRefresh()
 	}
 }
 
