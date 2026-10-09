@@ -6,6 +6,8 @@
 #   git tag -a v0.12.0 -m "LanChat 0.12.0: lo nuevo de esta versión"
 #   git push origin v0.12.0
 #
+# Con guion (v0.12.0-rc.1) se publica como versión preliminar (pre-release).
+#
 # El APK necesita la clave de firma en los secrets del repositorio
 # (docs/ANDROID.md, "Clave de firma"): SIGNING_KEYSTORE_BASE64,
 # SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS y SIGNING_KEY_PASSWORD.
@@ -157,8 +159,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Una etiqueta con guion (v0.12.0-rc.1) es una versión preliminar: no
+          # pasa a ser la "última versión" que enlaza el README.
+          extra=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            extra+=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" \
             "dist/LanChat-$VERSION.zip" "dist/LanChat-$VERSION.apk" dist/SHA256SUMS.txt \
             --title "LanChat $VERSION" \
             --notes-file release-notes.md \
-            --verify-tag
+            --verify-tag "${extra[@]}"

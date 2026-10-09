@@ -231,6 +231,10 @@ en [PLAN.md](PLAN.md).
   git push origin v1.0.0
   ```
 
+  Una etiqueta con guion (`v1.1.0-rc.1`) se publica como versión
+  preliminar: no pasa a ser la "última versión". Lanzado a mano
+  (`gh workflow run release.yml`), solo compila y firma el APK, sin publicar.
+
 - `.github/dependabot.yml`: pull requests semanales con las versiones nuevas
   de las librerías de Go, de las acciones y de la app de Android.
 
