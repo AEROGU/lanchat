@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -57,6 +58,9 @@ type Options struct {
 	IdleCheckInterval time.Duration
 	// GossipInterval: cada cuánto se piden las listas de equipos (0 = gossipInterval).
 	GossipInterval time.Duration
+	// LocalNets: las redes de este equipo cuando el sistema no deja leer las
+	// interfaces (Android); ver discovery.Config.LocalNets.
+	LocalNets func() []netip.Prefix
 }
 
 type App struct {
@@ -143,6 +147,7 @@ func New(o Options) (a *App, err error) {
 		Fingerprint: id.Fingerprint,
 		Status:      cfg.Status,
 		StatusText:  cfg.StatusText,
+		LocalNets:   o.LocalNets,
 	}
 	if o.Tune != nil {
 		o.Tune(&dcfg)
@@ -519,6 +524,10 @@ func (a *App) SetManualPeers(peers []string) error {
 	a.cfg.ManualPeers = clean
 	return a.cfg.Save(a.dir)
 }
+
+// NetworksChanged avisa que cambiaron las redes de este equipo (Options.LocalNets):
+// se saluda de nuevo para que la red nueva lo vea de inmediato.
+func (a *App) NetworksChanged() { a.disc.NetworksChanged() }
 
 func cleanName(s string) (string, error) {
 	s = strings.TrimSpace(s)

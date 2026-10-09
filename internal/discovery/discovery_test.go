@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -137,6 +138,27 @@ func TestRegistryExpire(t *testing.T) {
 	}
 	if ev, online := r.seen(p, src, now.Add(2*ttl)); ev == nil || ev.Type != PeerOnline || !online {
 		t.Fatalf("al volver debe estar online: %+v", ev)
+	}
+}
+
+// Con LocalNets (Android) se reconocen las IP propias y se envía el broadcast
+// dirigido de cada red sin leer las interfaces.
+func TestLocalNets(t *testing.T) {
+	nets := []netip.Prefix{netip.MustParsePrefix("192.168.77.5/24")}
+	s, err := New(Config{ID: "A", BindIP: loopback, LocalNets: func() []netip.Prefix { return nets }},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.conn.Close()
+	for ip, want := range map[string]bool{"192.168.77.5": true, "192.168.77.6": false, "127.0.0.1": true} {
+		if got := s.isLocal(netip.MustParseAddr(ip)); got != want {
+			t.Errorf("isLocal(%s) = %v", ip, got)
+		}
+	}
+	want := netip.AddrPortFrom(netip.MustParseAddr("192.168.77.255"), uint16(s.LocalPort()))
+	if got := s.targets(); !slices.Contains(got, want) {
+		t.Errorf("targets = %v, falta %v", got, want)
 	}
 }
 

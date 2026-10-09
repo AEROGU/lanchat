@@ -98,14 +98,18 @@ a los clientes o pone los teléfonos en otra red.
 - [ ] Si no se ven: revisar `lanchat.log` (en `filesDir`), probar con la IP
   de la PC en Ajustes > "Equipos de otras subredes", y preguntar si el Wi-Fi
   tiene aislamiento de clientes o es una red aparte.
-- [ ] **Confirmado**: en Android 16 Go no puede leer las interfaces de red
-  (`net.Interfaces` y `net.InterfaceAddrs` fallan por permisos de netlink).
-  Efectos: el log avisa por error "otro equipo usa el mismo ID" con la IP
-  del propio teléfono (`isLocalIP` no la reconoce), y no se envía el
-  broadcast dirigido (p. ej. 192.168.1.255). El descubrimiento funciona con
-  `255.255.255.255` y unicast. Corregirlo pasando las redes desde Kotlin
-  (`ConnectivityManager` / `LinkProperties`, y actualizarlas al cambiar de
-  red) con una opción nueva en `discovery.Config`.
+- [x] En Android 16 Go no puede leer las interfaces de red
+  (`net.Interfaces` y `net.InterfaceAddrs` fallan por permisos de netlink):
+  el log avisaba por error "otro equipo usa el mismo ID" con la IP del
+  propio teléfono y no se enviaba el broadcast dirigido (p. ej.
+  192.168.1.255). Resuelto: `LocalNetworks` (Kotlin) toma las redes Wi-Fi y
+  Ethernet de `ConnectivityManager` y las pasa con `Mobile.setNetworks`; la
+  red activa se entrega antes de `Mobile.start` y los cambios después (el
+  núcleo vuelve a saludar). En el núcleo es `discovery.Config.LocalNets`.
+  `lanchat.log` muestra las redes al arrancar (`redes=[...]`) y al cambiar
+  ("redes locales").
+  - [ ] Probar el cambio de red en vivo (pasar el teléfono del módem al
+    repetidor con LanChat abierto).
 
 #### El emulador no sirve para probar el núcleo
 

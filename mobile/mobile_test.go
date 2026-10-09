@@ -37,6 +37,7 @@ func TestStartStop(t *testing.T) {
 	}
 	downloads := filepath.Join(testutil.TempDir(t), "Recibidos")
 	host := &fakeHost{}
+	t.Cleanup(func() { networks.Store(nil) })
 
 	for round := range 2 {
 		url, err := Start(dir, "Galaxy de prueba", downloads, host)
@@ -48,6 +49,10 @@ func TestStartStop(t *testing.T) {
 		}
 		if !Running() {
 			t.Error("debía estar iniciado")
+		}
+		// Ya iniciado, avisa al descubrimiento para saludar de nuevo.
+		if err := SetNetworks("10.9.8.7/24"); err != nil {
+			t.Fatal(err)
 		}
 
 		jar, _ := cookiejar.New(nil)
@@ -91,5 +96,25 @@ func TestStartStop(t *testing.T) {
 	}
 	if !strings.Contains(Version(), "protocolo v") {
 		t.Errorf("Version = %q", Version())
+	}
+}
+
+func TestSetNetworks(t *testing.T) {
+	t.Cleanup(func() { networks.Store(nil) })
+	if err := SetNetworks("192.168.1.20/24 fe80::1/64  10.0.0.7/8"); err != nil {
+		t.Fatal(err)
+	}
+	got := currentNetworks()
+	if len(got) != 2 || got[0].String() != "192.168.1.20/24" || got[1].String() != "10.0.0.7/8" {
+		t.Errorf("redes = %v (IPv6 debía ignorarse)", got)
+	}
+	if err := SetNetworks("192.168.1.20"); err == nil {
+		t.Error("sin máscara debía fallar")
+	}
+	if len(currentNetworks()) != 2 {
+		t.Error("un error no debía cambiar las redes")
+	}
+	if err := SetNetworks(""); err != nil || len(currentNetworks()) != 0 {
+		t.Errorf("sin redes: %v %v", err, currentNetworks())
 	}
 }

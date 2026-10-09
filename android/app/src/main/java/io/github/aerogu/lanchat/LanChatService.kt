@@ -21,6 +21,7 @@ import java.util.concurrent.Executors
  */
 class LanChatService : Service() {
     private var multicastLock: WifiManager.MulticastLock? = null
+    private var networks: LocalNetworks? = null
     private var destroyed = false
 
     override fun onCreate() {
@@ -43,6 +44,8 @@ class LanChatService : Service() {
                 setReferenceCounted(false)
                 acquire()
             }
+        // Antes de Mobile.start, para que el primer saludo ya use las redes.
+        networks = LocalNetworks(applicationContext).also { it.start() }
 
         result = null
         val host = LanChatHost(applicationContext)
@@ -63,6 +66,7 @@ class LanChatService : Service() {
     override fun onDestroy() {
         destroyed = true
         result = null
+        networks?.stop()
         multicastLock?.release()
         // Stop espera a que el núcleo se despida de la red: fuera del hilo principal.
         core.execute { runCatching { Mobile.stop() }.onFailure { Log.w(TAG, "al detener", it) } }
