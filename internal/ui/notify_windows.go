@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"errors"
 	"log/slog"
 
 	"git.sr.ht/~jackmordaunt/go-toast/v2"
+	"golang.org/x/sys/windows/registry"
 )
 
 const (
@@ -23,6 +25,7 @@ type notifier struct {
 
 // newNotifier prepara las notificaciones; onClick se llama al hacer clic en una.
 func newNotifier(iconPath string, onClick func(), log *slog.Logger) *notifier {
+	forgetStaleIcon(iconPath)
 	if err := toast.SetAppData(toast.AppData{
 		AppID:    appUserModelID,
 		GUID:     activatorGUID,
@@ -44,5 +47,30 @@ func (n *notifier) notify(title, body string) {
 	}
 	if err := t.Push(); err != nil {
 		n.log.Warn("mostrando notificación", "err", err)
+	}
+}
+
+// UnregisterNotifications borra el registro de LanChat como emisor de
+// notificaciones (HKCU\Software\Classes\AppUserModelId\LanChat).
+func UnregisterNotifications() error {
+	err := registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\AppUserModelId\`+appUserModelID)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// forgetStaleIcon borra del registro el ícono de las notificaciones si apunta
+// a otra ruta: go-toast no reemplaza un valor que ya existe, así que tras
+// cambiar la carpeta de datos las notificaciones saldrían sin ícono.
+func forgetStaleIcon(iconPath string) {
+	k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Classes\AppUserModelId\`+appUserModelID,
+		registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+	if cur, _, err := k.GetStringValue("IconUri"); err == nil && cur != iconPath {
+		k.DeleteValue("IconUri")
 	}
 }

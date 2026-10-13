@@ -57,6 +57,8 @@ const (
 	shutdownGrace = time.Second
 	// faviconSize es el tamaño del ícono de la página.
 	faviconSize = 64
+	// quitDelay da tiempo a que las ventanas reciban el aviso de cierre.
+	quitDelay = 300 * time.Millisecond
 )
 
 //go:embed web
@@ -122,6 +124,8 @@ type Server struct {
 
 	// OnOpen se llama cuando otra instancia pide mostrar la ventana.
 	OnOpen func()
+	// OnQuit se llama cuando el desinstalador pide cerrar LanChat.
+	OnQuit func()
 	// OnUnreadChanged recibe el total de mensajes sin leer cada vez que cambia.
 	OnUnreadChanged func(total int)
 	// AutostartArgs se agregan al inicio con Windows (p. ej. -dir).
@@ -270,6 +274,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/manual-peers", s.handleManualPeers)
 	mux.HandleFunc("POST /api/presence", s.handlePresence)
 	mux.HandleFunc("POST /api/open", s.handleOpen)
+	mux.HandleFunc("POST /api/quit", s.handleQuit)
 	mux.HandleFunc("POST /api/open-repository", s.handleOpenRepository)
 	mux.HandleFunc("POST /api/files/pick", s.handlePickFiles)
 	mux.HandleFunc("POST /api/files/pick-folder", s.handlePickFolder)
@@ -292,6 +297,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/system", s.handleSystem)
 	mux.HandleFunc("POST /api/system/autostart", s.handleAutostart)
 	mux.HandleFunc("POST /api/system/firewall", s.handleFirewall)
+	mux.HandleFunc("POST /api/system/uninstall", s.handleUninstall)
 	return s.guard(mux)
 }
 
@@ -556,6 +562,21 @@ func (s *Server) setPresence(focused bool, viewing string) {
 	s.mu.Lock()
 	s.focused, s.viewing = focused, viewing
 	s.mu.Unlock()
+}
+
+// handleQuit lo usa el desinstalador para cerrar LanChat: las ventanas se
+// cierran solas (evento "quit") para soltar el perfil de Edge.
+func (s *Server) handleQuit(w http.ResponseWriter, r *http.Request) {
+	if s.OnQuit == nil {
+		s.fail(w, http.StatusNotImplemented, errors.New("esta instancia no se puede cerrar desde fuera"))
+		return
+	}
+	s.hub.broadcast("quit", struct{}{})
+	w.WriteHeader(http.StatusNoContent)
+	go func() {
+		time.Sleep(quitDelay)
+		s.OnQuit()
+	}()
 }
 
 // handleOpen lo usa una segunda instancia para pedir que se muestre la ventana.

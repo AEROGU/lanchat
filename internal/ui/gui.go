@@ -104,6 +104,7 @@ func RunGUI(o Options) error {
 
 	g := &gui{app: a, srv: srv, log: o.Log, profileDir: filepath.Join(o.Dir, edgeProfileDir)}
 	srv.OnOpen = g.show
+	srv.OnQuit = systray.Quit
 	srv.OnUnreadChanged = g.setUnread
 	g.notifier = newNotifier(iconPath, g.show, o.Log)
 	if total, err := a.TotalUnread(context.Background()); err == nil {

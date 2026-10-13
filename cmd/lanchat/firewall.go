@@ -53,5 +53,6 @@ func applyFirewall(op, exe string) error {
 	if op == "add" {
 		return platform.AllowFirewall(exe)
 	}
-	return platform.RemoveFirewall()
+	platform.RemoveFirewallFor(exe)
+	return nil
 }

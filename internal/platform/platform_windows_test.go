@@ -9,6 +9,17 @@ func TestFirewallAllowedUnknownProgram(t *testing.T) {
 	}
 }
 
+func TestFirewallRuleExistsUnknownProgram(t *testing.T) {
+	if _, err := netsh(`advfirewall firewall show rule name="` + appName + `"`); err == nil {
+		t.Skip("esta PC tiene una regla llamada LanChat")
+	}
+	// Sin regla con nuestro nombre, decide la ruta del programa.
+	if FirewallRuleExists(`C:
+o\existe\lanchat.exe`) {
+		t.Error("no debía haber reglas para un programa inexistente")
+	}
+}
+
 func TestAutostartCommand(t *testing.T) {
 	got := autostartCommand(`C:\Program Files\LanChat\lanchat.exe`, []string{"-dir", `D:\Datos LanChat`})
 	want := `"C:\Program Files\LanChat\lanchat.exe" -tray -dir "D:\Datos LanChat"`

@@ -72,6 +72,33 @@ lanchat.exe por el nuevo. Los mensajes y ajustes se conservan.
 Con teléfonos Android, actualiza también las PCs a esta versión: así los
 teléfonos las ven aunque tengan la pantalla apagada.
 
+DESINSTALAR
+-----------
+En Windows: doble clic en "Desinstalar LanChat.cmd" (o Ajustes >
+"Desinstalar LanChat de esta PC"). Pregunta antes de borrar nada. Quita el
+inicio con Windows, las notificaciones, las reglas del firewall (pide
+permiso de administrador) y tus datos (conversaciones, contactos,
+identidad), y pregunta si también borra los archivos recibidos. Al final
+abre la carpeta del programa para que la borres: es lo único que queda.
+Si estás en salas y quieres avisar a los demás que sales, usa antes
+Ajustes > Privacidad > "Borrar todos mis datos".
+
+A mano, sin dejar rastros:
+1. Cierra LanChat (clic derecho en la bandeja > Salir).
+2. En una ventana de comandos (si dice que no encuentra la clave, no
+   existía):
+      reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v LanChat /f
+      reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" /v LanChat /f
+      reg delete "HKCU\Software\Classes\AppUserModelId\LanChat" /f
+3. Firewall: lanchat.exe -firewall remove
+4. Borra la carpeta %APPDATA%\LanChat (base de datos, identidad, ajustes).
+5. Borra los archivos recibidos: Descargas\LanChat o la carpeta que hayas
+   elegido en Ajustes.
+6. Borra la carpeta del programa.
+
+En Android: desinstala la app como cualquier otra; eso borra sus datos.
+Los archivos recibidos quedan en Descargas > LanChat.
+
 DATOS
 -----
 %APPDATA%\LanChat contiene la configuración, el historial (lanchat.db) y el
@@ -85,7 +112,7 @@ PARA EL ADMINISTRADOR
   Quitarla:
       lanchat.exe -firewall remove
 - Opciones: -tray (arrancar en la bandeja), -dir carpeta (otros datos),
-  -version.
+  -uninstall (desinstalar), -version.
 
 LICENCIA
 --------

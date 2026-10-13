@@ -18,6 +18,9 @@ const (
 	// LegacyTrayFlag es el nombre anterior de TrayFlag: se sigue aceptando
 	// porque está en las entradas de inicio que crearon versiones anteriores.
 	LegacyTrayFlag = "hidden"
+	// UninstallFlag es la opción (-uninstall) que desinstala LanChat; la
+	// define cmd/lanchat y la usa el botón de Ajustes.
+	UninstallFlag = "uninstall"
 )
 
 // AutostartState es la situación del inicio con Windows.

@@ -32,6 +32,7 @@ func main() {
 	firewallOp := flag.String("firewall", "", "add o remove: regla del Firewall de Windows (pide permiso de administrador)")
 	elevated := flag.Bool(elevatedFlag, false, "uso interno: proceso relanzado como administrador")
 	showVersion := flag.Bool("version", false, "mostrar la versión y salir")
+	uninstallOp := flag.Bool(platform.UninstallFlag, false, "desinstalar LanChat de este equipo (pregunta antes de borrar)")
 	flag.Parse()
 
 	if *showVersion {
@@ -50,6 +51,10 @@ func main() {
 			os.Exit(1)
 		}
 		*dir = d
+	}
+
+	if *uninstallOp {
+		os.Exit(runUninstall(*dir, customDir))
 	}
 
 	level := slog.LevelInfo

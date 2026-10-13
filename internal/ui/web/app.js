@@ -87,6 +87,7 @@ const api = {
   system: () => request("GET", "/api/system"),
   autostart: (enabled) => request("POST", "/api/system/autostart", { enabled }),
   firewall: () => request("POST", "/api/system/firewall", {}),
+  uninstall: () => request("POST", "/api/system/uninstall", {}),
   createRoom: (name, members) => request("POST", "/api/rooms", { name, members }),
   roomHistory: (room, before) =>
     request("GET", `/api/rooms/messages?${new URLSearchParams({ room, before: before ?? "" })}`),
@@ -1062,6 +1063,7 @@ async function askAutostart() {
 
 function renderSystem(sys) {
   $("system-section").hidden = !sys.supported;
+  $("uninstall-row").hidden = !sys.supported;
   $("autostart-input").checked = sys.autostart;
   $("firewall-status").textContent = sys.firewall ? "Permitido ✓" : "Sin configurar";
   $("firewall-btn").hidden = sys.firewall;
@@ -1534,6 +1536,13 @@ function connectEvents() {
   es.addEventListener("reload", reloadAll);
 
   es.addEventListener("focus", () => window.focus());
+
+  // El desinstalador cerró LanChat: la ventana se cierra para soltar su perfil.
+  es.addEventListener("quit", () => {
+    es.close();
+    window.close();
+    showBanner("LanChat se cerró. Puedes cerrar esta ventana.");
+  });
 }
 
 // ---------- Inicio ----------
@@ -1608,6 +1617,11 @@ function bind() {
   $("file-input").addEventListener("change", (e) => uploadPicked(e.currentTarget));
   $("folder-btn").addEventListener("click", (e) => pickAndSend(e.currentTarget, api.pickFolder));
   $("autostart-input").addEventListener("change", toggleAutostart);
+  // El desinstalador (otro proceso) pregunta antes de borrar nada.
+  $("uninstall-btn").addEventListener("click", () => {
+    $("settings").close();
+    api.uninstall().catch((e) => showBanner(e.message, 5000));
+  });
   $("receipts-input").addEventListener("change", toggleReceipts);
   $("firewall-btn").addEventListener("click", allowFirewall);
   $("battery-btn").addEventListener("click", () => window.LanChatAndroid?.allowBackground());

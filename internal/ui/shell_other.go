@@ -19,3 +19,6 @@ func revealPath(path string) error { return openPath(filepath.Dir(path)) }
 func pickFolder() (string, error) {
 	return "", errors.New("el selector de carpetas solo existe en Windows; arrastra la carpeta a la ventana")
 }
+
+// RevealFile abre la carpeta del archivo.
+func RevealFile(path string) error { return revealPath(path) }

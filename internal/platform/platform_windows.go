@@ -20,6 +20,32 @@ import (
 // (del usuario actual: no requiere administrador).
 const runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
 
+// approvedKey es donde Windows anota si el usuario (en el Administrador de
+// tareas) o un antivirus deshabilitó una entrada de runKey: el primer byte
+// impar significa deshabilitada. Sin valor, la entrada está habilitada.
+const approvedKey = `Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run`
+
+// startupDisabled indica si Windows tiene deshabilitada la entrada de inicio.
+func startupDisabled() bool {
+	k, err := registry.OpenKey(registry.CURRENT_USER, approvedKey, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+	b, _, err := k.GetBinaryValue(appName)
+	return err == nil && len(b) > 0 && b[0]&1 == 1
+}
+
+// clearStartupApproved borra la anotación de Windows sobre la entrada.
+func clearStartupApproved() {
+	k, err := registry.OpenKey(registry.CURRENT_USER, approvedKey, registry.SET_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+	k.DeleteValue(appName)
+}
+
 // autostartCommand arma la línea de comandos del inicio automático.
 func autostartCommand(exe string, args []string) string {
 	cmd := syscall.EscapeArg(exe) + " -" + TrayFlag
@@ -49,10 +75,12 @@ func Autostart(exe string) AutostartState {
 	switch {
 	case err != nil:
 		return AutostartOff
-	case commandRuns(command, exe):
-		return AutostartOn
+	case !commandRuns(command, exe):
+		return AutostartMoved
+	case startupDisabled(): // la entrada existe pero Windows no la ejecuta
+		return AutostartOff
 	}
-	return AutostartMoved
+	return AutostartOn
 }
 
 // SetAutostart activa o desactiva el inicio automático de exe (en la
@@ -65,6 +93,9 @@ func SetAutostart(enabled bool, exe string, args ...string) error {
 		return err
 	}
 	defer k.Close()
+	// En ambos casos se borra la anotación de "deshabilitada": si el usuario
+	// lo activa aquí debe funcionar, y si lo quita no debe quedar rastro.
+	clearStartupApproved()
 	if enabled {
 		return k.SetStringValue(appName, autostartCommand(exe, args))
 	}
@@ -86,6 +117,18 @@ func FirewallAllowed(exe string) bool {
 	return err == nil && strings.Contains(strings.ToLower(out), strings.ToLower(exe))
 }
 
+// FirewallRuleExists indica si hay una regla de LanChat, sea del ejecutable
+// que sea (para quitarla al desinstalar).
+// También cuenta las que Windows crea solo, con otro nombre, cuando el usuario
+// pulsa "Permitir acceso" en su aviso: se reconocen por la ruta de exe.
+func FirewallRuleExists(exe string) bool {
+	if _, err := netsh(`advfirewall firewall show rule name="` + appName + `"`); err == nil {
+		return true
+	}
+	out, err := netsh(`advfirewall firewall show rule name=all verbose`)
+	return err == nil && strings.Contains(strings.ToLower(out), strings.ToLower(exe))
+}
+
 // AllowFirewall crea (o reemplaza) la regla que deja entrar el tráfico de exe
 // en redes privadas y de dominio. Requiere administrador.
 func AllowFirewall(exe string) error {
@@ -102,6 +145,15 @@ func AllowFirewall(exe string) error {
 func RemoveFirewall() error {
 	_, err := netsh(`advfirewall firewall delete rule name="` + appName + `"`)
 	return err
+}
+
+// RemoveFirewallFor borra todas las reglas de exe, tengan el nombre que
+// tengan (las de LanChat y las que creó Windows). Requiere administrador.
+func RemoveFirewallFor(exe string) {
+	RemoveFirewall() // si no existía, no pasa nada
+	if !strings.ContainsRune(exe, '"') {
+		netsh(`advfirewall firewall delete rule name=all program="` + exe + `"`)
+	}
 }
 
 // netsh ejecuta netsh sin abrir ventana. args va tal cual en la línea de

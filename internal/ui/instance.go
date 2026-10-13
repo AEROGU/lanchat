@@ -66,3 +66,43 @@ func signalRunning(dir string) (bool, error) {
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusNoContent, nil
 }
+
+// QuitRunning pide a la instancia abierta con esa carpeta de datos que se
+// cierre (también su ventana) y espera hasta timeout. wasRunning indica si
+// había una; el error, que no terminó de cerrarse a tiempo.
+func QuitRunning(dir string, timeout time.Duration) (wasRunning bool, err error) {
+	path := filepath.Join(dir, instanceFile)
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var info instanceInfo
+	if err := json.Unmarshal(b, &info); err != nil {
+		return false, nil
+	}
+	req, err := http.NewRequest(http.MethodPost,
+		fmt.Sprintf("http://127.0.0.1:%d/api/quit", info.Port), strings.NewReader("{}"))
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+info.Token)
+	resp, err := (&http.Client{Timeout: instanceTimeout}).Do(req)
+	if err != nil {
+		return false, nil // el archivo quedó de una ejecución que no cerró bien
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return true, fmt.Errorf("LanChat no aceptó cerrarse (respondió %d)", resp.StatusCode)
+	}
+	// Al terminar, la instancia borra su archivo.
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			return true, nil
+		}
+	}
+	return true, errors.New("LanChat sigue abierto: ciérralo desde el icono de la bandeja (clic derecho > Salir)")
+}

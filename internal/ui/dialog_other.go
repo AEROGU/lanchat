@@ -16,3 +16,6 @@ func ShowError(msg string) {
 func ShowInfo(msg string) {
 	fmt.Println(msg)
 }
+
+// Confirm no puede preguntar sin interfaz: responde que no.
+func Confirm(string) bool { return false }

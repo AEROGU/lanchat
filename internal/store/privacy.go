@@ -122,3 +122,24 @@ func (s *Store) truncateWAL(ctx context.Context) error {
 	}
 	return err
 }
+
+// ReceivedFiles devuelve las rutas donde quedaron guardados los archivos
+// recibidos que la base aún recuerda (para borrarlos al desinstalar).
+func (s *Store) ReceivedFiles(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT f.path FROM transfer_files f
+		JOIN transfers t ON t.id = f.transfer_id
+		WHERE t.outgoing = 0 AND f.done = 1 AND f.path != ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}

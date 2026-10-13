@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"runtime"
 
 	"github.com/AEROGU/lanchat/internal/platform"
@@ -95,4 +96,21 @@ func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.systemState())
+}
+
+// handleUninstall abre el desinstalador (este mismo programa con -uninstall),
+// que confirma con el usuario y luego cierra esta instancia.
+func (s *Server) handleUninstall(w http.ResponseWriter, r *http.Request) {
+	exe, err := platform.Executable()
+	if err == nil && runtime.GOOS != "windows" {
+		err = platform.ErrUnsupported
+	}
+	if err == nil {
+		err = exec.Command(exe, append([]string{"-" + platform.UninstallFlag}, s.AutostartArgs...)...).Start()
+	}
+	if err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

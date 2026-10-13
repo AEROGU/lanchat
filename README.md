@@ -117,6 +117,7 @@ Opciones:
 | `-dir carpeta` | otra carpeta de datos (por defecto `%APPDATA%\LanChat`) |
 | `-version` | mostrar la versión |
 | `-firewall add` / `remove` | crear o quitar la regla del Firewall de Windows (pide administrador) |
+| `-uninstall` | desinstalar LanChat de esta PC (pregunta antes de borrar; ver [Desinstalar](#desinstalar)) |
 
 Para diagnóstico, `go tool mage debug` compila `dist/lanchat-debug.exe`, que
 tiene consola:
@@ -170,6 +171,62 @@ conserva. Borrar una sala de la que ya saliste la quita de la lista.
 Lo borrado no queda recuperable en `lanchat.db`: la base usa `secure_delete`
 (sobrescribe con ceros) y se vacía su registro (`-wal`). Borrar es solo en
 esta PC: los demás conservan su copia de las conversaciones.
+
+## Desinstalar
+
+**En Windows**, cualquiera de estas tres formas abre el desinstalador:
+
+- **Ajustes > Desinstalar LanChat de esta PC…**
+- doble clic en **`Desinstalar LanChat.cmd`**, junto a `lanchat.exe`
+- `lanchat.exe -uninstall`
+
+El desinstalador pregunta antes de borrar nada. Luego cierra LanChat y quita:
+
+- el inicio con Windows y el registro de notificaciones;
+- las reglas del Firewall de Windows (pide permiso de administrador);
+- la carpeta de datos `%APPDATA%\LanChat`: conversaciones, contactos, salas,
+  ajustes, la identidad de la PC y el registro. La carpeta solo se elimina si
+  no tiene archivos ajenos a LanChat;
+- si respondes que sí a la segunda pregunta, los **archivos recibidos**.
+  `Descargas\LanChat` se borra entera; si elegiste otra carpeta en Ajustes,
+  solo se borran los archivos que LanChat guardó ahí, no los tuyos.
+
+Al final abre la carpeta del programa para que la borres: es lo único que el
+desinstalador no puede quitar, porque `lanchat.exe` está en uso.
+
+Desinstalar borra tus datos sin avisar a los demás. Si estás en salas y
+quieres que los otros miembros sepan que saliste, usa antes **Ajustes >
+Privacidad > Borrar todos mis datos**.
+
+### A mano, sin dejar rastros
+
+1. Cierra LanChat: clic derecho en el icono de la bandeja > **Salir**.
+2. Inicio con Windows y notificaciones (en una ventana de comandos):
+
+   ```bat
+   reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v LanChat /f
+   reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" /v LanChat /f
+   reg delete "HKCU\Software\Classes\AppUserModelId\LanChat" /f
+   ```
+
+   Si alguna dice que no encuentra la clave, es que no existía.
+3. Firewall: `lanchat.exe -firewall remove` (pide administrador), o en
+   *Firewall de Windows > Configuración avanzada > Reglas de entrada* borra
+   las reglas de LanChat y `lanchat.exe`.
+4. Datos: borra la carpeta `%APPDATA%\LanChat` (pégalo tal cual en la barra
+   de direcciones del Explorador). Ahí están la base de datos `lanchat.db`,
+   la identidad, los ajustes y el registro.
+5. Archivos recibidos: borra `Descargas\LanChat`, o la carpeta que hayas
+   elegido en Ajustes.
+6. Borra la carpeta donde descomprimiste LanChat.
+
+LanChat no guarda nada en otro lugar. Windows y los antivirus pueden
+conservar por su cuenta registros de que el programa se ejecutó (por ejemplo,
+en sus historiales); eso no depende de LanChat.
+
+**En Android**: desinstala la app como cualquier otra (mantén pulsado su
+icono > Desinstalar); eso borra sus datos. Los archivos recibidos quedan en
+*Descargas > LanChat*: bórralos desde la app Archivos si no los quieres.
 
 ## Archivos en `%APPDATA%\LanChat`
 

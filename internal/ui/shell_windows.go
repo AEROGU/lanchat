@@ -204,3 +204,6 @@ func pickFolder() (string, error) {
 	}
 	return windows.UTF16ToString(buf), nil
 }
+
+// RevealFile abre el Explorador con el archivo seleccionado.
+func RevealFile(path string) error { return revealPath(path) }

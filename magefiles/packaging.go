@@ -32,6 +32,8 @@ const (
 	langSpanishMX = 0x080A
 	readmeSource  = "packaging/LEEME.txt"
 	readmeName    = "LEEME.txt"
+	// uninstallScript abre el desinstalador con doble clic.
+	uninstallScript = "packaging/Desinstalar LanChat.cmd"
 	// checksumsName lista el SHA-256 del zip (formato de sha256sum).
 	checksumsName = "SHA256SUMS.txt"
 )
@@ -100,8 +102,9 @@ func numericVersion(v string) [4]uint16 {
 	return out
 }
 
-// Dist arma dist/LanChat-<versión>.zip con el ejecutable, LEEME.txt, la
-// licencia y los avisos de terceros, y dist/SHA256SUMS.txt con su hash.
+// Dist arma dist/LanChat-<versión>.zip con el ejecutable, LEEME.txt, el
+// acceso al desinstalador, la licencia y los avisos de terceros, y
+// dist/SHA256SUMS.txt con su hash.
 func Dist() error {
 	mg.Deps(Build, Notices)
 	v := appVersion()
@@ -121,6 +124,7 @@ func Dist() error {
 	err = errors.Join(
 		addFile(zw, productName+"/"+exeName, filepath.Join(distDir, exeName)),
 		addFile(zw, productName+"/LICENSE.txt", "LICENSE"),
+		addFile(zw, productName+"/"+filepath.Base(uninstallScript), uninstallScript),
 		addFile(zw, productName+"/"+noticesName, filepath.Join(distDir, noticesName)),
 	)
 	if err == nil {
