@@ -139,6 +139,7 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 - [x] Administradores de sala: sacar miembros, nombrar y quitar administradores, eliminar la sala vacía.
 - [x] Eliminar un mensaje para todos (10 minutos).
 - [x] Reacciones con emoji.
+- [x] Selector de emojis en la caja de texto: `internal/ui/web/emoji.js` se genera con `go tool mage emoji` desde `emoji-test.txt` de Unicode (1906 emojis sin tonos de piel, como escapes para no guardar caracteres invisibles). La página prueba en un lienzo cuáles sabe dibujar el sistema y oculta el resto (el "cuadrito" de carácter inexistente, las secuencias que salen como varios emojis y las banderas sin color).
 
 ### Fase 5
 - [x] **Vista previa de imágenes**, como en WhatsApp, en PC y en teléfono,

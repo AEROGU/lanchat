@@ -1106,3 +1106,34 @@ func TestOfferedReactionsAreValid(t *testing.T) {
 		t.Errorf("solo se encontraron %d reacciones", total)
 	}
 }
+
+// El selector de emojis carga su lista como un módulo aparte.
+func TestEmojiData(t *testing.T) {
+	s, _ := startServer(t)
+	resp, err := loggedClient(t, s).Get(base(s) + "/emoji.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") {
+		t.Fatalf("emoji.js: %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	js := string(body)
+	if n := strings.Count(js, "name: "); n != 9 {
+		t.Errorf("grupos de emojis = %d, quería 9", n)
+	}
+	// Carita, familia (con uniones) y bandera: los tres como escapes.
+	for _, want := range []string{`"\u{1F600}"`, `"\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"`, `"\u{1F1F2}\u{1F1FD}"`} {
+		if !strings.Contains(js, want) {
+			t.Errorf("falta %s en emoji.js", want)
+		}
+	}
+	// Sin tonos de piel ni caracteres invisibles escritos tal cual.
+	skinTone := "1F3FB}" // el primer tono de piel, como lo escribiría el generador
+	for _, bad := range []string{skinTone, string(rune(0x200D)), string(rune(0xFE0F))} {
+		if strings.Contains(js, bad) {
+			t.Errorf("emoji.js no debía contener %q", bad)
+		}
+	}
+}

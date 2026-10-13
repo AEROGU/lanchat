@@ -71,11 +71,26 @@ func Notices() error {
 		}
 		fmt.Printf("%-45s %s\n", m.path, licenseKind(m.dir))
 	}
+	// Datos que no son módulos de Go: la lista de emojis del selector.
+	for _, d := range dataNotices {
+		text, err := os.ReadFile(d.license)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(&b, "\n\n==== %s ====\n\n%s", d.name, strings.TrimSpace(string(text)))
+		fmt.Printf("%-45s %s\n", d.name, "Unicode")
+	}
 	b.WriteString("\n")
 	if err := os.MkdirAll(distDir, 0o755); err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(distDir, noticesName), []byte(b.String()), 0o644)
+}
+
+// dataNotices son los datos de terceros incluidos en el programa que no
+// llegan como módulos de Go, con el archivo de su licencia.
+var dataNotices = []struct{ name, license string }{
+	{"Unicode Emoji " + emojiVersion + " (emoji-test.txt, lista de emojis del selector)", "packaging/licenses/unicode.txt"},
 }
 
 // licenseKind adivina el tipo de licencia para revisar la compatibilidad.

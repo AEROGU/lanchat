@@ -26,6 +26,7 @@ var scenes = []scene{
 	{"conversacion", "chat=Carlos%20Ruiz", false},
 	{"sala", "room=Cierre%20de%20mes", false},
 	{"mensaje-a-varios", "many=Contabilidad", false},
+	{"emojis", "chat=Carlos%20Ruiz&emoji", false},
 	{"tema-oscuro", "chat=Carlos%20Ruiz", true},
 }
 

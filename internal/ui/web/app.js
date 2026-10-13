@@ -5,6 +5,8 @@
 //   GET  /api/events (Server-Sent Events)  cambios en vivo
 // El texto de los usuarios siempre se inserta con textContent, nunca como HTML.
 
+import { EMOJI_GROUPS } from "/emoji.js";
+
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -494,6 +496,161 @@ function messageElement(m) {
   }
   div.append(document.createTextNode(m.body), metaElement(m));
   return withActions(div, m);
+}
+
+// ---------- Selector de emojis ----------
+
+// EMOJI_GROUPS (emoji.js) trae todos los emojis de Unicode por grupo. Cada
+// sistema sabe dibujar solo una parte (Windows 10 no tiene los más nuevos ni
+// las banderas de países): el selector muestra los que aquí sí se ven.
+
+const RECENT_KEY = "lanchat.recentEmoji";
+// MAX_RECENT: cuántos emojis recuerda la pestaña Recientes (cuatro renglones).
+const MAX_RECENT = 32;
+const RECENT_TAB = { name: "Recientes", icon: "🕒" };
+// EMOJI_FONTS: las fuentes de emoji de Windows, Android y macOS.
+const EMOJI_FONTS = '"Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif';
+// Una secuencia que el sistema no conoce se dibuja como varios emojis
+// seguidos: sale más ancha que uno solo.
+const MAX_EMOJI_WIDTH = 1.4;
+
+let emojiTab = null; // null = aún no se abrió
+const drawableCache = new Map();
+let probe = null; // lienzo para probar qué emojis se pueden dibujar
+
+function emojiProbe() {
+  if (probe) return probe;
+  const size = 28;
+  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  ctx.canvas.width = ctx.canvas.height = size;
+  ctx.font = `20px ${EMOJI_FONTS}`;
+  ctx.textBaseline = "top";
+  const draw = (text) => {
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = "#000";
+    ctx.fillText(text, 0, 2);
+    // Resume el dibujo: cuánta tinta tiene, si tiene color y una huella.
+    const d = ctx.getImageData(0, 0, size, size).data;
+    let ink = 0, color = false, hash = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      ink++;
+      if (d[i] !== d[i + 1] || d[i + 1] !== d[i + 2]) color = true;
+      hash = (hash * 31 + i + d[i] + d[i + 1] * 3 + d[i + 2] * 7 + d[i + 3] * 11) | 0;
+    }
+    return { ink, color, hash };
+  };
+  probe = {
+    draw,
+    width: (text) => ctx.measureText(text).width,
+    base: ctx.measureText("😀").width,
+    // Así se ve un carácter que ninguna fuente tiene (el "cuadrito").
+    missing: draw(String.fromCodePoint(0xFFFF)).hash,
+  };
+  return probe;
+}
+
+// needsColor: las banderas de países (dos letras indicadoras) y las de
+// regiones (con etiquetas) solo valen si salen a color; sin la fuente se ven
+// como letras sueltas o como una bandera negra.
+function needsColor(emoji) {
+  const first = emoji.codePointAt(0);
+  return (first >= 0x1F1E6 && first <= 0x1F1FF) || /[\u{E0020}-\u{E007F}]/u.test(emoji);
+}
+
+// drawable indica si este sistema sabe dibujar el emoji.
+function drawable(emoji) {
+  let ok = drawableCache.get(emoji);
+  if (ok !== undefined) return ok;
+  const p = emojiProbe();
+  const w = p.width(emoji);
+  if (w === 0 || w > p.base * MAX_EMOJI_WIDTH) {
+    ok = false;
+  } else {
+    const d = p.draw(emoji);
+    ok = d.ink > 0 && (d.color || (!needsColor(emoji) && d.hash !== p.missing));
+  }
+  drawableCache.set(emoji, ok);
+  return ok;
+}
+
+function recentEmoji() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(list) ? list.filter((e) => typeof e === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberEmoji(emoji) {
+  const list = [emoji, ...recentEmoji().filter((e) => e !== emoji)].slice(0, MAX_RECENT);
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  } catch {
+    // sin almacenamiento no hay Recientes
+  }
+}
+
+function renderEmojiPanel() {
+  const tabs = [RECENT_TAB, ...EMOJI_GROUPS];
+  $("emoji-tabs").replaceChildren(...tabs.map((g) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "emoji-tab" + (g === emojiTab ? " selected" : "");
+    b.textContent = g.icon;
+    b.title = g.name;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", g === emojiTab);
+    b.addEventListener("click", () => {
+      emojiTab = g;
+      renderEmojiPanel();
+    });
+    return b;
+  }));
+  $("emoji-title").textContent = emojiTab.name;
+  const list = (emojiTab === RECENT_TAB ? recentEmoji() : emojiTab.list).filter(drawable);
+  const grid = $("emoji-grid");
+  grid.replaceChildren(...list.map((emoji) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "emoji-cell";
+    b.textContent = emoji;
+    b.addEventListener("click", () => insertEmoji(emoji));
+    return b;
+  }));
+  if (list.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "emoji-empty";
+    empty.textContent = emojiTab === RECENT_TAB
+      ? "Aquí aparecerán los emojis que uses."
+      : "Este equipo no puede mostrar los emojis de este grupo.";
+    grid.append(empty);
+  }
+  grid.scrollTop = 0;
+}
+
+function openEmojiPanel() {
+  // La primera vez: Recientes si ya hay alguno; si no, las caritas.
+  emojiTab ??= recentEmoji().some(drawable) ? RECENT_TAB : EMOJI_GROUPS[0];
+  renderEmojiPanel();
+  $("emoji-panel").hidden = false;
+  $("emoji-btn").setAttribute("aria-expanded", "true");
+}
+
+function closeEmojiPanel() {
+  $("emoji-panel").hidden = true;
+  $("emoji-btn").setAttribute("aria-expanded", "false");
+}
+
+// insertEmoji escribe el emoji donde está el cursor y deja el panel abierto
+// para poner varios.
+function insertEmoji(emoji) {
+  const input = $("input");
+  input.setRangeText(emoji, input.selectionStart, input.selectionEnd, "end");
+  input.dispatchEvent(new Event("input")); // ajusta la altura de la caja
+  input.focus();
+  rememberEmoji(emoji);
 }
 
 // ---------- Reacciones y eliminar para todos ----------
@@ -1043,6 +1200,10 @@ window.lanchatBack = () => {
     closeMsgMenu();
     return true;
   }
+  if (!$("emoji-panel").hidden) {
+    closeEmojiPanel();
+    return true;
+  }
   if (state.current && NARROW.matches) {
     closeChat();
     return true;
@@ -1052,6 +1213,7 @@ window.lanchatBack = () => {
 
 async function openChat(id) {
   setMenu(false);
+  closeEmojiPanel();
   window.LanChatAndroid?.chatOpened(id); // en el teléfono, quita su aviso
   state.current = id;
   $("app").classList.add("chatting");
@@ -1131,6 +1293,7 @@ async function sendMessage() {
   const body = input.value;
   const err = $("send-error");
   err.hidden = true;
+  closeEmojiPanel();
   if (!body.trim() || !state.current) return;
   if (encoder.encode(body).length > state.limits.maxMessageBytes) {
     err.textContent = `El mensaje es demasiado largo (máximo ${state.limits.maxMessageBytes / 1024} KB).`;
@@ -1777,6 +1940,20 @@ function bind() {
   $("status-btn").addEventListener("click", openStatus);
   $("many-btn").addEventListener("click", openMany);
   $("new-room-btn").addEventListener("click", () => openRoomDialog("create"));
+  $("emoji-btn").addEventListener("click", () =>
+    ($("emoji-panel").hidden ? openEmojiPanel() : closeEmojiPanel()));
+  // El selector se cierra con Esc o al hacer clic fuera de él.
+  // composedPath y no contains: al cambiar de pestaña el botón pulsado se
+  // redibuja y ya no está dentro del panel cuando el clic llega aquí.
+  document.addEventListener("click", (e) => {
+    const path = e.composedPath();
+    if (!$("emoji-panel").hidden && !path.includes($("emoji-panel")) && !path.includes($("emoji-btn"))) {
+      closeEmojiPanel();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeEmojiPanel();
+  });
   $("room-members-btn").addEventListener("click", openMembers);
   $("members-add").addEventListener("click", () => {
     $("members-dialog").close();

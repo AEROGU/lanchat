@@ -34,6 +34,8 @@
   conectan, ✓ entregado y ✓✓ leído (desactivable).
 - **Reacciones** con emoji a cualquier mensaje y **eliminar para todos** un
   mensaje propio durante los 10 minutos siguientes a enviarlo.
+- **Selector de emojis** 😊 junto a la caja de texto, con todos los de
+  Unicode por categoría y los usados recientemente.
 - **Salas** de chat grupales con administradores (quien la crea puede sacar
   miembros y nombrar más administradores) y **mensajes a varios** contactos
   o a un grupo.
@@ -48,9 +50,9 @@
 - Icono en la bandeja del sistema, notificaciones de Windows, inicio con
   Windows, tema claro y oscuro. Un solo `.exe`, sin instalar nada más.
 
-| Salas de chat | Mensaje a varios | Tema oscuro |
-|---|---|---|
-| [![Sala de chat con varios miembros](docs/screenshots/sala.png)](docs/screenshots/sala.png) | [![Mensaje a varios, eligiendo un grupo](docs/screenshots/mensaje-a-varios.png)](docs/screenshots/mensaje-a-varios.png) | [![La conversación en tema oscuro](docs/screenshots/tema-oscuro.png)](docs/screenshots/tema-oscuro.png) |
+| Salas de chat | Emojis | Mensaje a varios | Tema oscuro |
+|---|---|---|---|
+| [![Sala de chat con varios miembros](docs/screenshots/sala.png)](docs/screenshots/sala.png) | [![Selector de emojis por categoría](docs/screenshots/emojis.png)](docs/screenshots/emojis.png) | [![Mensaje a varios, eligiendo un grupo](docs/screenshots/mensaje-a-varios.png)](docs/screenshots/mensaje-a-varios.png) | [![La conversación en tema oscuro](docs/screenshots/tema-oscuro.png)](docs/screenshots/tema-oscuro.png) |
 
 ## Descargar
 
@@ -259,6 +261,7 @@ go tool mage race         # pruebas con detector de carreras (requiere gcc)
 go tool mage vuln         # vulnerabilidades conocidas en el código y sus librerías
 go tool mage dist         # dist/LanChat-<versión>.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
 go tool mage screenshots  # regenera docs/screenshots y docs/logo.png (requiere Edge)
+go tool mage emoji        # regenera la lista de emojis del selector desde Unicode (requiere internet)
 go tool mage android      # android/app/libs/lanchat.aar para la app de Android (en desarrollo, ver docs/ANDROID.md)
 go tool mage apk          # dist/LanChat-<versión>-debug.apk para probar en el teléfono (firma de depuración)
 go tool mage apkRelease   # dist/LanChat-<versión>.apk firmado con la clave propia (ver docs/ANDROID.md)
@@ -314,7 +317,8 @@ Se distribuye con la esperanza de que sea útil, pero **sin ninguna
 garantía**, ni siquiera la implícita de comerciabilidad o de idoneidad para
 un propósito particular. Ver el texto completo en [LICENSE](LICENSE).
 
-Las librerías de terceros incluidas en el ejecutable (todas con licencias
+La lista de emojis del selector sale de los datos de Unicode (Unicode License
+v3). Las librerías de terceros incluidas en el ejecutable (todas con licencias
 BSD, MIT o Apache 2.0, compatibles con la GPL v3) se listan con sus avisos
 en `THIRD_PARTY_NOTICES.txt`, que genera `go tool mage notices` y se incluye
 en el zip.

@@ -331,7 +331,8 @@ func (d *demoBackend) DeleteRoomConversation(context.Context, string) error { re
 func (d *demoBackend) WipeData(context.Context) error                       { return errDemo }
 
 // demoScript abre la escena indicada en el fragmento de la dirección, para
-// capturarla sin hacer clic: #chat=ID, #room=ID o #many.
+// capturarla sin hacer clic: #chat=NOMBRE, #room=NOMBRE o #many=GRUPO (y
+// &emoji para abrir además el selector de emojis).
 const demoScript = `
 const wait = async (sel) => {
   for (let i = 0; i < 100 && !document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 50));
@@ -351,6 +352,8 @@ if (scene.has("chat")) {
   document.getElementById("many-text").value = "Hoy a las 2 se corta la luz 15 minutos por mantenimiento. Guarden su trabajo.";
 }
 await new Promise((r) => setTimeout(r, 300));
+// &emoji: además, el selector de emojis abierto.
+if (scene.has("emoji")) document.getElementById("emoji-btn").click();
 document.activeElement?.blur();
 // Sin servidor de eventos real en la captura: ocultar el aviso de reconexión.
 document.getElementById("banner").style.display = "none";

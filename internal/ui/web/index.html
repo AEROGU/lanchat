@@ -76,6 +76,14 @@
         <button type="button" id="folder-btn" class="icon-btn contact-only desktop-only" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
         <!-- Sin escritorio (Android) el 📎 usa el selector del sistema. -->
         <input type="file" id="file-input" multiple hidden>
+        <!-- En el teléfono los emojis los pone el teclado. -->
+        <button type="button" id="emoji-btn" class="icon-btn desktop-only" title="Emojis" aria-label="Emojis"
+          aria-haspopup="dialog" aria-expanded="false" aria-controls="emoji-panel">😊</button>
+        <div id="emoji-panel" class="emoji-panel" role="dialog" aria-label="Emojis" hidden>
+          <div id="emoji-tabs" class="emoji-tabs" role="tablist"></div>
+          <div id="emoji-title" class="emoji-title"></div>
+          <div id="emoji-grid" class="emoji-grid"></div>
+        </div>
         <textarea id="input" rows="1" placeholder="Escribe un mensaje (Enter envía, Shift+Enter nueva línea)"></textarea>
         <button type="submit" class="primary">Enviar</button>
       </form>

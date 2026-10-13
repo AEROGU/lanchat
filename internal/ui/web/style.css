@@ -802,3 +802,59 @@ dialog input, dialog textarea {
   font-size: 11px;
 }
 .actions button.danger-outline { margin-right: auto; color: var(--danger); border-color: var(--danger); }
+
+/* ---------- Selector de emojis ---------- */
+
+#composer { position: relative; }
+
+.emoji-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 12px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100% - 24px));
+  height: min(340px, 60vh);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+}
+
+.emoji-tabs { display: flex; gap: 2px; padding: 6px 6px 4px; border-bottom: 1px solid var(--border); }
+.emoji-tab {
+  flex: 1;
+  padding: 4px 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-size: 18px;
+  line-height: 1.2;
+  filter: grayscale(1);
+  opacity: 0.65;
+}
+.emoji-tab:hover { background: var(--bg); }
+.emoji-tab.selected { background: var(--selected); filter: none; opacity: 1; }
+
+.emoji-title { padding: 8px 12px 2px; color: var(--muted); font-size: 12px; font-weight: 600; }
+
+.emoji-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  align-content: start;
+  gap: 2px;
+  padding: 4px 8px 8px;
+  overflow-y: auto;
+}
+.emoji-cell {
+  padding: 3px 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-size: 22px;
+  line-height: 1.25;
+}
+.emoji-cell:hover, .emoji-cell:focus-visible { background: var(--selected); }
+.emoji-empty { grid-column: 1 / -1; padding: 16px 4px; color: var(--muted); font-size: 13px; }
