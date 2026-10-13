@@ -55,7 +55,7 @@
           <button id="identity-btn" class="text-btn contact-only" title="Ver la huella de seguridad de este contacto">Identidad</button>
           <button id="group-btn" class="text-btn contact-only" title="Poner a este contacto en un grupo">Grupo</button>
           <button id="alias-btn" class="text-btn contact-only" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
-          <button id="room-add-btn" class="text-btn room-only" title="Agregar contactos a la sala">Agregar</button>
+          <button id="room-members-btn" class="text-btn room-only" title="Ver los miembros, agregar o sacar">Miembros</button>
           <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
           <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
           <button id="delete-chat-btn" class="text-btn danger-btn" title="Borrar esta conversación de este equipo">Borrar</button>
@@ -265,6 +265,20 @@
     </form>
   </dialog>
 
+  <dialog id="members-dialog">
+    <form method="dialog">
+      <h2 id="members-title"></h2>
+      <ul id="members-list" class="member-list"></ul>
+      <small id="members-help" class="help"></small>
+      <p id="members-error" class="error" hidden></p>
+      <div class="actions">
+        <button type="button" id="members-destroy" class="danger-outline" hidden>Eliminar sala</button>
+        <button type="button" id="members-add">Agregar miembros…</button>
+        <button value="close" class="primary">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="autostart-dialog">
     <form method="dialog">
       <h2>¿Iniciar LanChat al encender la PC?</h2>
@@ -333,6 +347,9 @@
     <img id="viewer-img" alt="">
     <p id="viewer-name"></p>
   </dialog>
+
+  <!-- Menú de un mensaje: reacciones y "Eliminar para todos". -->
+  <div id="msg-menu" class="msg-menu" role="menu" hidden></div>
 
   <script type="module" src="/app.js"></script>
 </body>

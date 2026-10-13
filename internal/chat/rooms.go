@@ -17,13 +17,22 @@ import (
 
 // Salas: no hay servidor. Cada mensaje de sala se entrega por separado a
 // cada miembro (con la misma cola que los mensajes 1 a 1) y lleva la versión
-// actual de la sala, así los cambios de nombre o de miembros llegan a todos.
+// actual de la sala, así los cambios de nombre, de miembros o de
+// administradores llegan a todos.
+//
+// Tampoco hay quien arbitre los permisos: cada equipo comprueba, contra la
+// versión de la sala que ya tiene, que quien manda un cambio podía hacerlo
+// (authorizeRoomChange). Sacar a otro miembro o cambiar los administradores
+// solo lo puede hacer un administrador.
 
 // wireRoom es la versión de una sala que viaja con cada mensaje.
 type wireRoom struct {
 	ID      string   `json:"id"`
 	Name    string   `json:"name"`
 	Members []string `json:"members"`
+	// Admins: administradores. Las versiones que no los conocen no lo envían
+	// (nil): entonces se conservan los que ya se tenían.
+	Admins  []string `json:"admins,omitempty"`
 	Version int64    `json:"version"`
 }
 
@@ -37,6 +46,9 @@ func (r wireRoom) validate() error {
 	if len(r.Members) < 1 || len(r.Members) > protocol.MaxRoomMembers {
 		return fmt.Errorf("una sala tiene de 1 a %d miembros", protocol.MaxRoomMembers)
 	}
+	if len(r.Admins) > len(r.Members) {
+		return errors.New("más administradores que miembros")
+	}
 	errs := []error{protocol.ValidateID(r.ID), protocol.ValidateName(r.Name)}
 	seen := map[string]bool{}
 	for _, m := range r.Members {
@@ -46,17 +58,23 @@ func (r wireRoom) validate() error {
 		seen[m] = true
 		errs = append(errs, protocol.ValidateID(m))
 	}
+	for _, a := range r.Admins {
+		if !seen[a] {
+			errs = append(errs, errors.New("un administrador no es miembro de la sala"))
+		}
+	}
 	return errors.Join(errs...)
 }
 
 func toWireRoom(r store.Room) *wireRoom {
-	return &wireRoom{ID: r.ID, Name: r.Name, Members: r.Members, Version: r.Version}
+	return &wireRoom{ID: r.ID, Name: r.Name, Members: r.Members, Admins: r.Admins, Version: r.Version}
 }
 
-// SendRoom envía body a los demás miembros de la sala. Con event es un aviso
-// de la sala ("Ana agregó a Luis"); se puede enviar aunque este equipo ya
-// haya salido (para avisar que salió).
-func (s *Service) SendRoom(ctx context.Context, roomID, body string, event bool) (store.Message, error) {
+// SendRoom envía body a los demás miembros de la sala y a extra (quien acaba
+// de ser sacado de la sala también debe recibir el aviso). Con event es un
+// aviso de la sala ("Ana agregó a Luis"); se puede enviar aunque este equipo
+// ya haya salido (para avisar que salió).
+func (s *Service) SendRoom(ctx context.Context, roomID, body string, event bool, extra ...string) (store.Message, error) {
 	if err := protocol.ValidateMessage(body); err != nil {
 		return store.Message{}, err
 	}
@@ -68,11 +86,11 @@ func (s *Service) SendRoom(ctx context.Context, roomID, body string, event bool)
 		return store.Message{}, errors.New("sala inexistente")
 	}
 	if room.Left && !event {
-		return store.Message{}, errors.New("saliste de esta sala")
+		return store.Message{}, errors.New("ya no estás en esta sala")
 	}
 	var recipients []string
-	for _, m := range room.Members {
-		if m != s.self.ID {
+	for _, m := range append(slices.Clone(room.Members), extra...) {
+		if m != s.self.ID && !slices.Contains(recipients, m) {
 			recipients = append(recipients, m)
 		}
 	}
@@ -138,6 +156,30 @@ func (s *Service) flushRoom(p discovery.Peer) bool {
 	return true
 }
 
+// authorizeRoomChange comprueba que from podía cambiar la sala de local a
+// next: cualquiera puede agregar miembros, renombrar o salir, pero solo un
+// administrador saca a otros o cambia quién administra.
+func authorizeRoomChange(local, next store.Room, from string) error {
+	if !slices.Contains(local.Members, from) {
+		// Lo agregaron en una versión que aquí no llegó: no hay con qué comparar.
+		return nil
+	}
+	if local.IsAdmin(from) {
+		return nil
+	}
+	for _, m := range local.Members {
+		if m != from && !slices.Contains(next.Members, m) {
+			return errors.New("solo un administrador puede sacar a otros miembros")
+		}
+	}
+	// Con los mismos administradores de antes, ¿quedan los que dice next?
+	expected := store.Room{Members: next.Members, Admins: local.EffectiveAdmins()}.EffectiveAdmins()
+	if !slices.Equal(expected, next.EffectiveAdmins()) {
+		return errors.New("solo un administrador puede cambiar los administradores")
+	}
+	return nil
+}
+
 // handleRoomMessage guarda un mensaje de sala ya validado y con el remitente
 // verificado por TLS (en handleMsg).
 func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm wireMessage) {
@@ -147,27 +189,45 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 		return
 	}
 	ctx := r.Context()
-	if !slices.Contains(wr.Members, s.self.ID) {
-		http.Error(w, "este equipo no es miembro de la sala", http.StatusForbidden)
-		return
-	}
 	local, known, err := s.store.Room(ctx, wr.ID)
 	if err != nil {
 		http.Error(w, "error interno", http.StatusInternalServerError)
 		return
 	}
+	next := store.Room{ID: wr.ID, Name: wr.Name, Members: wr.Members, Admins: wr.Admins, Version: wr.Version}
+	if wr.Admins == nil { // de una versión que no conoce a los administradores
+		next.Admins = local.Admins
+	}
+	newer := !known || wr.Version > local.Version
+
+	// kicked: esta versión saca a este equipo de una sala en la que estaba.
+	kicked := false
+	if !slices.Contains(wr.Members, s.self.ID) {
+		if !known || local.Left || !newer || !slices.Contains(local.Members, s.self.ID) {
+			http.Error(w, "este equipo no es miembro de la sala", http.StatusForbidden)
+			return
+		}
+		kicked, next.Left = true, true
+	}
 	// El remitente debe ser miembro aquí (o haberlo sido: así llega el aviso
 	// de que salió) o venir agregado en una versión más nueva que la local.
 	member := slices.Contains(wr.Members, wm.From)
 	if known {
-		member = slices.Contains(local.Members, wm.From) || (member && wr.Version > local.Version)
+		member = slices.Contains(local.Members, wm.From) || (member && newer)
 	}
 	if !member {
 		http.Error(w, "el remitente no es miembro de la sala", http.StatusForbidden)
 		return
 	}
+	if known && newer {
+		if err := authorizeRoomChange(local, next, wm.From); err != nil {
+			s.log.Warn("cambio de sala rechazado", "sala", wr.ID, "from", wm.From, "err", err)
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+	}
 
-	applied, err := s.store.ApplyRoom(ctx, store.Room{ID: wr.ID, Name: wr.Name, Members: wr.Members, Version: wr.Version})
+	applied, err := s.store.ApplyRoom(ctx, next)
 	if err != nil {
 		http.Error(w, "error interno", http.StatusInternalServerError)
 		return
@@ -180,7 +240,9 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 	if applied {
 		s.emit(Event{Type: RoomChanged, Room: cur})
 	}
-	if cur.Left { // salimos de la sala: no se guardan más mensajes
+	// Fuera de la sala no se guardan más mensajes, salvo el aviso de que
+	// acaban de sacar a este equipo.
+	if cur.Left && !(kicked && applied) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

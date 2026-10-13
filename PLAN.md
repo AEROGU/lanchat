@@ -46,6 +46,7 @@ Rutas definidas en `internal/protocol/routes.go`:
 - `POST /v1/transfers/{id}/files/{idx}/done` — el destinatario confirma que llegó íntegro.
 - `POST /v1/transfers/{id}/state` — avisa un rechazo o cancelación al otro equipo.
 - `POST /v1/read` — avisos de lectura (IDs leídos, en tandas).
+- `POST /v1/ops` — avisos sobre mensajes ya enviados, en tandas: `delete` (el autor lo eliminó para todos) y `react` (una reacción; emoji vacío la quita). Ver "Avisos".
 - `GET /v1/peers` — equipos en línea que conoce este equipo (listas compartidas).
 
 ### Salas
@@ -54,6 +55,14 @@ Rutas definidas en `internal/protocol/routes.go`:
 - Cualquier miembro puede agregar a otros y renombrar; cada quien puede salir (conserva el historial). Los nuevos ven desde que entran. Máximo `protocol.MaxRoomMembers` (50).
 - Se aceptan mensajes solo de miembros (con la identidad TLS verificada). Si quien escribe no es miembro aquí, debe traer una versión más nueva de la sala (otro miembro lo agregó y el cambio aún no llega).
 - Sin archivos ni ✓✓ en las salas por ahora. Dos cambios simultáneos con la misma versión pueden dejar copias distintas hasta el siguiente cambio.
+- **Administradores**: el campo `admins` viaja con la sala. Quien la crea es su administrador; un administrador puede sacar a otros y nombrar o quitar administradores. Sin administradores entre los miembros (salas de versiones anteriores, o salieron todos) administra el miembro más antiguo: todos llegan al mismo resultado porque comparten la lista en orden (`store.Room.EffectiveAdmins`). No hay servidor que arbitre: cada equipo compara el cambio recibido con la versión que ya tiene y rechaza (403) el de quien no podía hacerlo (`chat.authorizeRoomChange`). Una versión anterior no manda `admins`: se conservan los que había. A quien sacan le llega el aviso (su copia queda como "ya no estás en esta sala").
+- Límite conocido: quien fue miembro conoce el ID de la sala y, con un programa modificado, podría presentarse en una versión más nueva; el programa normal no lo permite.
+
+### Avisos (eliminar para todos y reacciones)
+- Esperan en la tabla `outbox` (uno por destinatario) y se envían por `POST /v1/ops` **después** de los mensajes pendientes, así nunca llegan antes que el mensaje al que se refieren. Si el destinatario está desconectado, le llegan al volver. Un equipo con una versión que no conoce la ruta responde 404 y el aviso se descarta.
+- **Eliminar para todos**: solo mensajes de texto propios y dentro de `protocol.DeleteWindow` (10 min). Lo comprueban quien elimina y quien recibe (con las horas del remitente: no depende de que los relojes coincidan). El mensaje queda como renglón sin texto (`messages.deleted`), se borran sus reacciones y lo que faltaba entregar ya no se entrega. Un envío de archivos no se elimina: se cancela.
+- **Reacciones**: una por equipo y mensaje (tabla `reactions`), gana la más reciente. Solo reacciona quien participa en la conversación (el otro contacto, o un miembro de la sala). El emoji se valida (`protocol.ValidateReaction`): no puede ser texto.
+- Un aviso que no aplica (mensaje desconocido, sin permiso, fuera de plazo) se ignora y se responde 204: reintentar no serviría.
 
 ### Reglas de archivos
 1. El remitente ofrece; nada se transfiere hasta que el destinatario **acepta**.
@@ -125,6 +134,11 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 ### Fase 4: Android
 - [x] Núcleo portable (`mage portable` en `check`) y API `mobile/` para gomobile.
 - [ ] App Android (Kotlin + WebView + servicio en primer plano): ver [docs/ANDROID.md](docs/ANDROID.md).
+
+### Fase 6 (0.13)
+- [x] Administradores de sala: sacar miembros, nombrar y quitar administradores, eliminar la sala vacía.
+- [x] Eliminar un mensaje para todos (10 minutos).
+- [x] Reacciones con emoji.
 
 ### Fase 5
 - [x] **Vista previa de imágenes**, como en WhatsApp, en PC y en teléfono,

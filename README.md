@@ -32,7 +32,11 @@
   del equipo y su IP. A cada contacto le puedes poner un alias y un grupo.
 - **Mensajes** 1 a 1 con historial, entrega a los desconectados cuando se
   conectan, ✓ entregado y ✓✓ leído (desactivable).
-- **Salas** de chat grupales y **mensajes a varios** contactos o a un grupo.
+- **Reacciones** con emoji a cualquier mensaje y **eliminar para todos** un
+  mensaje propio durante los 10 minutos siguientes a enviarlo.
+- **Salas** de chat grupales con administradores (quien la crea puede sacar
+  miembros y nombrar más administradores) y **mensajes a varios** contactos
+  o a un grupo.
 - **Archivos y carpetas** (botón o arrastrar y soltar): el otro debe
   aceptarlos, se descargan una sola vez, se reanudan si se corta la red y se
   verifican con SHA-256. Las imágenes (JPG, PNG, GIF, WebP) llegan con

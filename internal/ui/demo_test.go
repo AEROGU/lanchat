@@ -95,6 +95,14 @@ func newDemoBackend() *demoBackend {
 		return m
 	}
 
+	// react agrega al mensaje la misma reacción de cada uno de peers ("" = Laura).
+	react := func(m store.Message, emoji string, peers ...string) store.Message {
+		for _, p := range peers {
+			m.Reactions = append(m.Reactions, store.Reaction{PeerID: p, Emoji: emoji})
+		}
+		return m
+	}
+
 	// Conversación con Carlos: texto, una carpeta enviada y una oferta recibida.
 	var invoices []store.TransferFile
 	for i, name := range []string{"F-1021 Papelería Central.pdf", "F-1022 Servicios de limpieza.pdf",
@@ -111,11 +119,11 @@ func newDemoBackend() *demoBackend {
 	files := func(m store.Message) store.Message { m.Kind = store.KindFiles; return m }
 	d.history["c1"] = []store.Message{
 		in("m1", "c1", today(9, 12), "Buenos días, Laura. ¿Ya llegaron las facturas de proveedores de septiembre?"),
-		out("m2", "c1", today(9, 14), "Sí, las escaneé hace rato. Te paso la carpeta.", true),
+		react(out("m2", "c1", today(9, 14), "Sí, las escaneé hace rato. Te paso la carpeta.", true), "👍", "c1"),
 		files(out("m3", "c1", today(9, 15), "📁 Facturas septiembre (8 archivos)", true)),
 		in("m4", "c1", today(9, 21), "Perfecto, ya las tengo 👍\nTe mando la conciliación para que la revises."),
 		files(in("m5", "c1", today(9, 22), "📎 Conciliación bancaria septiembre.xlsx")),
-		out("m6", "c1", today(9, 24), "Gracias, la reviso después de la junta.", true),
+		react(out("m6", "c1", today(9, 24), "Gracias, la reviso después de la junta.", true), "🙏", "c1"),
 	}
 	d.history["c4"] = []store.Message{
 		in("s1", "c4", today(10, 2), "¿Tienes a la mano el teléfono del proveedor de tóner?"),
@@ -145,10 +153,11 @@ func newDemoBackend() *demoBackend {
 	}
 	d.history[roomViewPrefix+"r1"] = []store.Message{
 		ev(outRoom("e1", "r1", today(8, 40), "Laura creó la sala «Cierre de mes»")),
-		inRoom("r1a", "r1", "c2", today(8, 42), "Recuerden que el viernes cerramos la contabilidad de septiembre."),
+		react(inRoom("r1a", "r1", "c2", today(8, 42), "Recuerden que el viernes cerramos la contabilidad de septiembre."),
+			"👍", "", "c1", "c3"),
 		inRoom("r1b", "r1", "c1", today(8, 45), "A mí me faltan dos facturas de Ventas."),
 		ev(inRoom("e2", "r1", "c2", today(8, 46), "María Fernanda Ortiz agregó a Jorge Salinas")),
-		inRoom("r1c", "r1", "c3", today(8, 51), "Las mando hoy antes de las 3 🙌"),
+		react(inRoom("r1c", "r1", "c3", today(8, 51), "Las mando hoy antes de las 3 🙌"), "❤️", "c2"),
 		outRoom("r1d", "r1", today(8, 53), "Gracias a todos. Cualquier duda, aquí estoy."),
 	}
 	return d
@@ -284,6 +293,16 @@ func (d *demoBackend) CreateRoom(context.Context, string, []string) (store.Room,
 func (d *demoBackend) AddRoomMembers(context.Context, string, []string) error { return errDemo }
 func (d *demoBackend) RenameRoom(context.Context, string, string) error       { return errDemo }
 func (d *demoBackend) LeaveRoom(context.Context, string) error                { return errDemo }
+func (d *demoBackend) RemoveRoomMember(context.Context, string, string) error { return errDemo }
+func (d *demoBackend) SetRoomAdmin(context.Context, string, string, bool) error {
+	return errDemo
+}
+func (d *demoBackend) DeleteForEveryone(context.Context, string) (store.Message, error) {
+	return store.Message{}, errDemo
+}
+func (d *demoBackend) React(context.Context, string, string) (store.Message, error) {
+	return store.Message{}, errDemo
+}
 func (d *demoBackend) SendRoom(_ context.Context, room, body string) (store.Message, error) {
 	m := store.Message{ID: time.Now().Format("150405.000"), RoomID: room, Outgoing: true, Body: body,
 		At: time.Now(), SentAt: time.Now(), Status: store.StatusDelivered}

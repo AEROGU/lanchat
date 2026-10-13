@@ -30,6 +30,8 @@ type limitsJSON struct {
 	MaxName         int `json:"maxName"`
 	MaxMessageBytes int `json:"maxMessageBytes"`
 	MaxStatusText   int `json:"maxStatusText"`
+	// DeleteWindowMs: cuánto después de enviarlo se puede eliminar un mensaje para todos.
+	DeleteWindowMs int64 `json:"deleteWindowMs"`
 }
 
 type selfJSON struct {
@@ -128,6 +130,18 @@ type messageJSON struct {
 	Broadcast bool `json:"broadcast"`
 	// ReadAt: cuándo el destinatario lo leyó (0 si no se sabe).
 	ReadAt int64 `json:"readAt"`
+	// Deleted: su autor lo eliminó para todos (Body viene vacío).
+	Deleted bool `json:"deleted"`
+	// Reactions: ausente si el evento no las trae (la página conserva las que
+	// tenía); una lista, aunque esté vacía, las reemplaza.
+	Reactions *[]reactionJSON `json:"reactions,omitempty"`
+}
+
+// reactionJSON es la reacción de un equipo a un mensaje.
+type reactionJSON struct {
+	// Peer es quien reaccionó; "" si fue este equipo.
+	Peer  string `json:"peer"`
+	Emoji string `json:"emoji"`
 }
 
 func toMessageJSON(m store.Message) messageJSON {
@@ -142,7 +156,17 @@ func toMessageJSON(m store.Message) messageJSON {
 	case store.KindRoomEvent:
 		kind = "event"
 	}
+	var reactions *[]reactionJSON
+	if m.Reactions != nil {
+		list := make([]reactionJSON, len(m.Reactions))
+		for i, r := range m.Reactions {
+			list[i] = reactionJSON{Peer: r.PeerID, Emoji: r.Emoji}
+		}
+		reactions = &list
+	}
 	return messageJSON{
+		Deleted:   m.Deleted,
+		Reactions: reactions,
 		Kind:      kind,
 		ID:        m.ID,
 		PeerID:    m.PeerID,

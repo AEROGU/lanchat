@@ -67,6 +67,10 @@ const (
 	MessageRead
 	// RoomChanged: llegó una versión nueva de una sala (Event.Room).
 	RoomChanged
+	// MessageDeleted: su autor eliminó el mensaje para todos (Message ya sin texto).
+	MessageDeleted
+	// MessageReaction: cambiaron las reacciones de un mensaje (Message las trae).
+	MessageReaction
 )
 
 type Event struct {
@@ -206,6 +210,7 @@ func New(self Identity, st *store.Store, dir Directory, client *http.Client, log
 func (s *Service) Register(srv *peer.Server) {
 	srv.Handle("POST "+protocol.RouteMessage, http.HandlerFunc(s.handleMsg))
 	srv.Handle("POST "+protocol.RouteRead, http.HandlerFunc(s.handleRead))
+	srv.Handle("POST "+protocol.RouteOps, http.HandlerFunc(s.handleOps))
 }
 
 // Events debe leerse hasta que se cierre (en Close).
@@ -316,7 +321,9 @@ func (s *Service) flush(peerID string) {
 		m.Status = store.StatusDelivered
 		s.emit(Event{Type: MessageDelivered, Message: m})
 	}
-	if !s.flushRoom(p) {
+	// Los avisos van después de los mensajes: así nunca llegan antes que el
+	// mensaje al que se refieren.
+	if !s.flushRoom(p) || !s.sendOps(p) {
 		return
 	}
 	s.sendReceipts(p)

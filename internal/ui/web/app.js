@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   self: null,
-  limits: { maxName: 64, maxMessageBytes: 65536 },
+  limits: { maxName: 64, maxMessageBytes: 65536, deleteWindowMs: 600000 },
   contacts: new Map(), // id -> contacto
   rooms: new Map(), // id -> sala
   // current es la conversación abierta: el id del contacto o ROOM + id de la sala.
@@ -71,6 +71,8 @@ const api = {
   name: (name) => request("POST", "/api/name", { name }),
   status: (status, text, autoAway) => request("POST", "/api/status", { status, text, autoAway }),
   sendMany: (peers, body) => request("POST", "/api/messages/many", { peers, body }),
+  deleteMessage: (id) => request("POST", "/api/messages/delete", { id }),
+  react: (id, emoji) => request("POST", "/api/messages/react", { id, emoji }),
   readReceipts: (enabled) => request("POST", "/api/read-receipts", { enabled }),
   group: (peer, group) => request("POST", "/api/group", { peer, group }),
   alias: (peer, alias) => request("POST", "/api/alias", { peer, alias }),
@@ -92,7 +94,7 @@ const api = {
   roomHistory: (room, before) =>
     request("GET", `/api/rooms/messages?${new URLSearchParams({ room, before: before ?? "" })}`),
   roomSend: (room, body) => request("POST", "/api/rooms/messages", { room, body }),
-  // action: members, rename, leave o read.
+  // action: members, rename, leave, kick, admin, destroy, delete o read.
   room: (action, room, extra) => request("POST", `/api/rooms/${action}`, { room, ...extra }),
   deleteConversation: (peer) => request("POST", "/api/conversation/delete", { peer }),
   wipe: (confirm) => request("POST", "/api/data/wipe", { confirm }),
@@ -371,7 +373,7 @@ function memberName(id) {
 }
 
 function roomDetail(r) {
-  if (r.left) return "Saliste de esta sala";
+  if (r.left) return "Ya no estás en esta sala";
   return `${r.members.length} ${r.members.length === 1 ? "miembro" : "miembros"}`;
 }
 
@@ -418,11 +420,11 @@ function renderRoomHeader(r) {
   $("peer-detail").textContent = r.members.map(memberName).join(", ");
   $("peer-dot").hidden = true;
   $("identity-note").hidden = true;
-  for (const id of ["room-add-btn", "room-rename-btn", "room-leave-btn"]) $(id).disabled = r.left;
+  for (const id of ["room-rename-btn", "room-leave-btn"]) $(id).disabled = r.left;
   $("composer").hidden = r.left;
   const note = $("offline-note");
   note.hidden = !r.left;
-  note.textContent = "Saliste de esta sala: ya no recibes sus mensajes. Para volver, pide a un miembro que te agregue.";
+  note.textContent = "Ya no estás en esta sala: no recibes sus mensajes. Para volver, pide a un miembro que te agregue.";
 }
 
 function renderHeader() {
@@ -462,12 +464,20 @@ function dayLabel(ts) {
 }
 
 function messageElement(m) {
-  if (m.kind === "files" && m.transfer) return transferCard(m);
+  if (m.kind === "files" && m.transfer) return withActions(transferCard(m), m);
   const div = document.createElement("div");
-  div.className = msgClass(m) + (m.kind === "event" ? " event" : "");
+  // Un mensaje eliminado no muestra marcas de entrega ni de lectura.
+  div.className = m.deleted
+    ? `msg ${m.outgoing ? "out" : "in"} deleted`
+    : msgClass(m) + (m.kind === "event" ? " event" : "");
   div.dataset.id = m.id;
   if (m.kind === "event") {
     div.append(document.createTextNode(m.body), metaElement(m));
+    return div;
+  }
+  if (m.deleted) {
+    const text = m.outgoing ? "🚫 Eliminaste este mensaje" : "🚫 Se eliminó este mensaje";
+    div.append(document.createTextNode(text), metaElement(m));
     return div;
   }
   if (m.roomId && !m.outgoing) {
@@ -483,7 +493,138 @@ function messageElement(m) {
     div.append(tag);
   }
   div.append(document.createTextNode(m.body), metaElement(m));
+  return withActions(div, m);
+}
+
+// ---------- Reacciones y eliminar para todos ----------
+
+// Las reacciones rápidas son las de WhatsApp; "+" muestra el resto. Todas
+// deben pasar protocol.ValidateReaction (lo comprueba una prueba).
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const MORE_REACTIONS = ["👏", "🎉", "🔥", "✅", "👌", "💪", "🙌", "😊", "😍", "🤔", "😅", "😎",
+  "😴", "😡", "👀", "💯", "⭐", "☕", "🍕", "🎂", "📌", "⏰", "👎", "❌"];
+
+// myReaction es el emoji con que este usuario reaccionó ("" = ninguno).
+const myReaction = (m) => (m.reactions ?? []).find((r) => r.peer === "")?.emoji ?? "";
+
+// canDelete: un mensaje de texto propio dentro del plazo se elimina para todos.
+function canDelete(m) {
+  return m.outgoing && m.kind === "text" && !m.deleted && Date.now() - m.at <= state.limits.deleteWindowMs;
+}
+
+// withActions agrega al globo el botón que abre el menú del mensaje.
+function withActions(div, m) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "msg-act";
+  btn.textContent = "☺";
+  btn.title = "Reaccionar";
+  btn.setAttribute("aria-label", "Reaccionar u otras opciones del mensaje");
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openMsgMenu(m.id, btn);
+  });
+  div.append(btn);
   return div;
+}
+
+// findMessage busca en la conversación abierta (el mensaje pudo cambiar
+// desde que se dibujó).
+const findMessage = (id) => state.messages.get(state.current)?.list.find((x) => x.id === id);
+
+function closeMsgMenu() {
+  $("msg-menu").hidden = true;
+  document.querySelector(".msg-act.open")?.classList.remove("open");
+}
+
+function openMsgMenu(id, anchor, showMore = false) {
+  const m = findMessage(id);
+  const menu = $("msg-menu");
+  if (!m || m.deleted || (!menu.hidden && menu.dataset.id === id && !showMore)) return closeMsgMenu();
+  closeMsgMenu();
+  menu.dataset.id = id;
+  const mine = myReaction(m);
+  const row = document.createElement("div");
+  row.className = "emoji-row";
+  for (const emoji of showMore ? [...QUICK_REACTIONS, ...MORE_REACTIONS] : QUICK_REACTIONS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "emoji" + (emoji === mine ? " mine" : "");
+    b.textContent = emoji;
+    b.title = emoji === mine ? "Quitar mi reacción" : "Reaccionar";
+    b.addEventListener("click", () => react(m, emoji));
+    row.append(b);
+  }
+  if (!showMore) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "emoji more";
+    more.textContent = "＋";
+    more.title = "Más reacciones";
+    more.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openMsgMenu(id, anchor, true);
+    });
+    row.append(more);
+  }
+  menu.replaceChildren(row);
+  if (canDelete(m)) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "menu-item";
+    del.textContent = "Eliminar para todos";
+    del.addEventListener("click", () => deleteForEveryone(m));
+    menu.append(del);
+  }
+  menu.hidden = false;
+  anchor.classList.add("open");
+  // Junto al botón, sin salirse de la ventana.
+  const a = anchor.getBoundingClientRect();
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  menu.style.left = `${Math.max(8, Math.min(a.left + a.width / 2 - w / 2, innerWidth - w - 8))}px`;
+  menu.style.top = `${a.bottom + h + 8 > innerHeight ? Math.max(8, a.top - h - 6) : a.bottom + 6}px`;
+}
+
+// react pone la reacción del usuario; elegir la que ya tenía la quita.
+async function react(m, emoji) {
+  closeMsgMenu();
+  try {
+    addMessage(await api.react(m.id, emoji === myReaction(m) ? "" : emoji));
+  } catch (e) {
+    showBanner(e.message, 5000);
+  }
+}
+
+async function deleteForEveryone(m) {
+  closeMsgMenu();
+  const where = m.roomId ? "todos los miembros de la sala" : memberName(m.peerId);
+  if (!confirm(`¿Eliminar este mensaje para todos? También se borrará en el equipo de ${where}.`)) return;
+  try {
+    addMessage(await api.deleteMessage(m.id));
+  } catch (e) {
+    showBanner(e.message, 5000);
+  }
+}
+
+// reactionsElement dibuja las reacciones bajo el mensaje, agrupadas por
+// emoji; null si no tiene.
+function reactionsElement(m) {
+  if (m.deleted || !m.reactions?.length) return null;
+  const groups = new Map(); // emoji -> quiénes
+  for (const r of m.reactions) groups.set(r.emoji, [...(groups.get(r.emoji) ?? []), r.peer]);
+  const box = document.createElement("div");
+  box.className = `reactions ${m.outgoing ? "out" : "in"}`;
+  for (const [emoji, peers] of [...groups].sort((x, y) => y[1].length - x[1].length)) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "reaction" + (peers.includes("") ? " mine" : "");
+    b.textContent = peers.length > 1 ? `${emoji} ${peers.length}` : emoji;
+    b.title = peers.map((p) => (p === "" ? "Tú" : memberName(p))).join(", ");
+    b.addEventListener("click", () => react(m, emoji));
+    box.append(b);
+  }
+  return box;
 }
 
 // msgClass: dirección, estado de entrega y si el destinatario ya lo leyó.
@@ -866,7 +1007,10 @@ function renderMessages({ keepScroll = false, toBottom = false } = {}) {
       lastDay = day;
     }
     box.append(messageElement(m));
+    const reactions = reactionsElement(m);
+    if (reactions) box.append(reactions);
   }
+  closeMsgMenu();
 
   if (keepScroll) box.scrollTop = box.scrollHeight - prevHeight + prevTop;
   else if (toBottom || nearBottom) box.scrollTop = box.scrollHeight;
@@ -893,6 +1037,10 @@ window.lanchatBack = () => {
   }
   if ($("chat-actions").classList.contains("open")) {
     setMenu(false);
+    return true;
+  }
+  if (!$("msg-menu").hidden) {
+    closeMsgMenu();
     return true;
   }
   if (state.current && NARROW.matches) {
@@ -963,7 +1111,10 @@ function addMessage(m) {
   const i = conv.list.findIndex((x) => x.id === m.id);
   if (i >= 0) {
     const old = conv.list[i];
+    // Un evento atrasado (p. ej. la entrega) no revive un mensaje eliminado.
+    if (old.deleted && !m.deleted) return;
     m.transfer ??= old.transfer; // conservar la oferta si el evento no la trae
+    m.reactions ??= old.reactions; // y las reacciones
     // La respuesta del envío puede llegar después del evento de entrega: el
     // estado nunca retrocede.
     if (old.status === "delivered") m.status = "delivered";
@@ -1322,7 +1473,7 @@ function openRoomDialog(mode) {
   const candidates = sortedContacts().filter((c) => !members.has(c.id));
   $("room-list").replaceChildren(...candidates.map(pickItem));
   $("room-help").textContent = mode === "create"
-    ? `Todos los miembros pueden escribir, agregar a otros y cambiar el nombre. Hasta ${MAX_ROOM_MEMBERS} miembros.`
+    ? `Quedas como administrador: puedes sacar miembros y nombrar más administradores. Todos pueden escribir, agregar a otros y cambiar el nombre. Hasta ${MAX_ROOM_MEMBERS} miembros.`
     : "Verán los mensajes a partir de ahora, no los anteriores.";
   $("room-error").hidden = true;
   $("room-dialog").showModal();
@@ -1349,6 +1500,78 @@ async function saveRoom(ev) {
   } catch (e) {
     $("room-error").textContent = e.message;
     $("room-error").hidden = false;
+  }
+}
+
+// openMembers muestra los miembros de la sala; a un administrador le deja
+// sacar a otros y nombrar o quitar administradores.
+function openMembers() {
+  if (!currentRoom()) return;
+  $("members-error").hidden = true;
+  renderMembers();
+  $("members-dialog").showModal();
+}
+
+function renderMembers() {
+  const r = currentRoom();
+  if (!r) return $("members-dialog").close();
+  const me = state.self.id;
+  const iAdmin = !r.left && r.admins.includes(me);
+  $("members-title").textContent = `Miembros de «${r.name}» (${r.members.length})`;
+  $("members-list").replaceChildren(...r.members.map((id) => {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = id === me ? `${state.self.name || state.self.hostname} (tú)` : memberName(id);
+    li.append(name);
+    const admin = r.admins.includes(id);
+    if (admin) {
+      const tag = document.createElement("span");
+      tag.className = "admin-tag";
+      tag.textContent = "Administrador";
+      li.append(tag);
+    }
+    if (iAdmin && id !== me) {
+      li.append(textButton(admin ? "Quitar admin" : "Hacer admin", () =>
+        memberAction("admin", r.id, { member: id, admin: !admin })));
+      const kick = textButton("Sacar", () => {
+        if (confirm(`¿Sacar a ${memberName(id)} de «${r.name}»? Dejará de recibir los mensajes de la sala.`)) {
+          memberAction("kick", r.id, { member: id });
+        }
+      });
+      kick.classList.add("danger-btn");
+      li.append(kick);
+    }
+    return li;
+  }));
+  $("members-help").textContent = r.left
+    ? "Ya no estás en esta sala: esta es la lista de cuando saliste."
+    : iAdmin
+      ? "Como administrador puedes sacar a otros miembros y nombrar o quitar administradores."
+      : "Solo los administradores pueden sacar a otros miembros o nombrar administradores.";
+  $("members-add").hidden = r.left;
+  // Sin nadie más, el administrador puede eliminar la sala.
+  $("members-destroy").hidden = !(iAdmin && r.members.length === 1);
+}
+
+async function memberAction(action, room, extra) {
+  $("members-error").hidden = true;
+  try {
+    await api.room(action, room, extra); // la lista se actualiza con el evento "room"
+  } catch (e) {
+    $("members-error").textContent = e.message;
+    $("members-error").hidden = false;
+  }
+}
+
+async function destroyRoom() {
+  const r = currentRoom();
+  if (!r || !confirm(`¿Eliminar la sala «${r.name}»? Se borrará de este equipo con todos sus mensajes.`)) return;
+  $("members-dialog").close();
+  try {
+    await api.room("destroy", r.id); // el evento "cleared" la quita de la lista
+  } catch (e) {
+    showBanner(e.message, 5000);
   }
 }
 
@@ -1514,6 +1737,7 @@ function connectEvents() {
     renderContacts();
     if (ROOM + r.id === state.current) {
       renderHeader();
+      if ($("members-dialog").open) renderMembers();
       if (r.unread > 0) markReadIfVisible();
     }
   });
@@ -1553,7 +1777,20 @@ function bind() {
   $("status-btn").addEventListener("click", openStatus);
   $("many-btn").addEventListener("click", openMany);
   $("new-room-btn").addEventListener("click", () => openRoomDialog("create"));
-  $("room-add-btn").addEventListener("click", () => openRoomDialog("add"));
+  $("room-members-btn").addEventListener("click", openMembers);
+  $("members-add").addEventListener("click", () => {
+    $("members-dialog").close();
+    openRoomDialog("add");
+  });
+  $("members-destroy").addEventListener("click", destroyRoom);
+  // El menú de un mensaje se cierra al hacer clic fuera, con Esc o al desplazar.
+  document.addEventListener("click", (e) => {
+    if (!$("msg-menu").hidden && !$("msg-menu").contains(e.target)) closeMsgMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMsgMenu();
+  });
+  $("messages").addEventListener("scroll", closeMsgMenu, { passive: true });
   $("room-rename-btn").addEventListener("click", () => openRoomDialog("rename"));
   $("room-leave-btn").addEventListener("click", leaveRoom);
   $("room-form").addEventListener("submit", saveRoom);

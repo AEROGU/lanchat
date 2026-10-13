@@ -106,6 +106,11 @@ type Backend interface {
 	SendRoom(ctx context.Context, roomID, body string) (store.Message, error)
 	RoomHistory(ctx context.Context, roomID, beforeID string, limit int) ([]store.Message, error)
 	MarkRoomRead(ctx context.Context, roomID string) (bool, error)
+	RemoveRoomMember(ctx context.Context, roomID, memberID string) error
+	SetRoomAdmin(ctx context.Context, roomID, memberID string, admin bool) error
+
+	DeleteForEveryone(ctx context.Context, msgID string) (store.Message, error)
+	React(ctx context.Context, msgID, emoji string) (store.Message, error)
 
 	ExportData(ctx context.Context, path string) error
 	DeleteConversation(ctx context.Context, peerID string) error
@@ -264,6 +269,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/messages", s.handleHistory)
 	mux.HandleFunc("POST /api/messages", s.handleSend)
 	mux.HandleFunc("POST /api/messages/many", s.handleSendMany)
+	mux.HandleFunc("POST /api/messages/delete", s.handleDeleteMessage)
+	mux.HandleFunc("POST /api/messages/react", s.handleReact)
 	mux.HandleFunc("POST /api/read", s.handleRead)
 	mux.HandleFunc("POST /api/name", s.handleName)
 	mux.HandleFunc("POST /api/status", s.handleStatus)
@@ -393,7 +400,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		DownloadDir: s.b.DownloadDir(),
 		Mobile:      s.Shell != nil,
 		Limits: limitsJSON{MaxName: protocol.MaxNameLen, MaxMessageBytes: protocol.MaxMessageBytes,
-			MaxStatusText: protocol.MaxStatusTextLen},
+			MaxStatusText: protocol.MaxStatusTextLen, DeleteWindowMs: protocol.DeleteWindow.Milliseconds()},
 	}
 	for i, c := range contacts {
 		out.Contacts[i] = toContactJSON(c)

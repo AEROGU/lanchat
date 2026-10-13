@@ -122,6 +122,28 @@ var migrations = [][]string{
 		// thumb: miniatura JPEG de una imagen (vista previa); NULL si no hay.
 		`ALTER TABLE transfer_files ADD COLUMN thumb BLOB`,
 	},
+	{
+		// admins: administradores de la sala (JSON); vacío = el primer miembro.
+		`ALTER TABLE rooms ADD COLUMN admins TEXT NOT NULL DEFAULT '[]'`,
+		// deleted: el autor lo eliminó para todos; queda el renglón sin texto.
+		`ALTER TABLE messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0`,
+		// Una reacción por equipo y mensaje; peer_id '' = este equipo.
+		`CREATE TABLE reactions (
+			message_id TEXT NOT NULL,
+			peer_id    TEXT NOT NULL,
+			emoji      TEXT NOT NULL,
+			at         INTEGER NOT NULL,
+			PRIMARY KEY (message_id, peer_id)
+		)`,
+		// Avisos (borrar para todos, reacciones) por entregar a cada equipo.
+		`CREATE TABLE outbox (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			peer_id    TEXT NOT NULL,
+			payload    TEXT NOT NULL,
+			created_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX outbox_peer ON outbox(peer_id, id)`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -299,6 +321,10 @@ type Message struct {
 	// RoomID es la sala del mensaje ("" = conversación 1 a 1). En una sala,
 	// PeerID es quien lo escribió (vacío si es propio).
 	RoomID string
+	// Deleted: su autor lo eliminó para todos (Body queda vacío).
+	Deleted bool
+	// Reactions: nil si no se consultaron (Message e historiales sí las traen).
+	Reactions []Reaction
 }
 
 type Kind int
@@ -315,7 +341,7 @@ const (
 // que solo cambian después.
 const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast, room_id`
 
-const messageSelect = messageColumns + `, read_at`
+const messageSelect = messageColumns + `, read_at, deleted`
 
 // InsertMessage guarda el mensaje; inserted es false si ese ID ya existía
 // (un reenvío del mismo mensaje).
@@ -393,12 +419,13 @@ func (s *Store) Pending(ctx context.Context, peerID string) ([]Message, error) {
 		WHERE peer_id = ? AND room_id = '' AND status = ? ORDER BY at, rowid`, peerID, StatusPending)
 }
 
-// PeersWithPending devuelve los contactos que tienen mensajes por entregar
-// (de conversación 1 a 1 o de salas).
+// PeersWithPending devuelve los contactos que tienen mensajes o avisos por
+// entregar (de conversación 1 a 1 o de salas).
 func (s *Store) PeersWithPending(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT peer_id FROM messages WHERE status = ? AND room_id = ''
-		UNION SELECT peer_id FROM room_deliveries WHERE delivered = 0`, StatusPending)
+		UNION SELECT peer_id FROM room_deliveries WHERE delivered = 0
+		UNION SELECT peer_id FROM outbox`, StatusPending)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +472,7 @@ func (s *Store) history(ctx context.Context, where, key, beforeID string, limit 
 		return nil, err
 	}
 	slices.Reverse(msgs)
-	return msgs, nil
+	return msgs, s.loadReactions(ctx, msgs)
 }
 
 func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Message, error) {
@@ -459,7 +486,7 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 		var m Message
 		var at, sent, readAt int64
 		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread,
-			&m.Kind, &m.Broadcast, &m.RoomID, &readAt); err != nil {
+			&m.Kind, &m.Broadcast, &m.RoomID, &readAt, &m.Deleted); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)

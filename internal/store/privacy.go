@@ -29,6 +29,7 @@ func (s *Store) DeleteConversation(ctx context.Context, peerID string) error {
 		stmt{`DELETE FROM transfer_files WHERE transfer_id IN (SELECT id FROM transfers WHERE peer_id = ?)`, []any{peerID}},
 		stmt{`DELETE FROM transfers WHERE peer_id = ?`, []any{peerID}},
 		stmt{`DELETE FROM messages WHERE peer_id = ? AND room_id = ''`, []any{peerID}},
+		stmt{`DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)`, nil},
 	)
 }
 
@@ -40,7 +41,7 @@ var keptRoomMessages = fmt.Sprintf(`SELECT message_id FROM room_deliveries WHERE
 
 // forgetHiddenRooms borra el nombre y los miembros de las salas ocultas que ya
 // no tienen avisos por entregar; queda solo su ID para ignorar sus mensajes.
-const forgetHiddenRooms = `UPDATE rooms SET name = '', members = '[]'
+const forgetHiddenRooms = `UPDATE rooms SET name = '', members = '[]', admins = '[]'
 	WHERE hidden = 1 AND id NOT IN (SELECT room_id FROM messages)`
 
 // DeleteRoomConversation borra los mensajes de la sala (también los que
@@ -51,6 +52,7 @@ func (s *Store) DeleteRoomConversation(ctx context.Context, roomID string, hide 
 		{`DELETE FROM room_deliveries WHERE message_id IN (SELECT id FROM messages WHERE room_id = ?)
 			AND message_id NOT IN (` + keptRoomMessages + `)`, []any{roomID}},
 		{`DELETE FROM messages WHERE room_id = ? AND id NOT IN (` + keptRoomMessages + `)`, []any{roomID}},
+		{`DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)`, nil},
 	}
 	if hide {
 		stmts = append(stmts,
@@ -70,6 +72,10 @@ func (s *Store) Wipe(ctx context.Context) error {
 	err := s.purge(ctx,
 		stmt{`DELETE FROM room_deliveries WHERE message_id NOT IN (` + keptRoomMessages + `)`, nil},
 		stmt{`DELETE FROM messages WHERE id NOT IN (` + keptRoomMessages + `)`, nil},
+		stmt{`DELETE FROM reactions`, nil},
+		// De los avisos solo quedan los de "borrar para todos": lo que el
+		// usuario ya eliminó debe eliminarse también en los demás equipos.
+		stmt{`DELETE FROM outbox WHERE payload NOT LIKE '%"type":"delete"%'`, nil},
 		stmt{`UPDATE rooms SET hidden = 1 WHERE left_room = 1`, nil},
 		stmt{`DELETE FROM rooms WHERE left_room = 0`, nil},
 		stmt{forgetHiddenRooms, nil},

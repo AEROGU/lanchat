@@ -17,13 +17,16 @@ type roomJSON struct {
 	ID      string   `json:"id"`
 	Name    string   `json:"name"`
 	Members []string `json:"members"` // IDs, incluido este equipo
+	// Admins: quiénes administran la sala (pueden sacar a otros).
+	Admins []string `json:"admins"`
 	// Left: este equipo salió; se ve el historial pero no se puede escribir.
 	Left   bool `json:"left"`
 	Unread int  `json:"unread"`
 }
 
 func toRoomJSON(r app.Room) roomJSON {
-	return roomJSON{ID: r.ID, Name: r.Name, Members: r.Members, Left: r.Left, Unread: r.Unread}
+	return roomJSON{ID: r.ID, Name: r.Name, Members: r.Members, Admins: r.EffectiveAdmins(),
+		Left: r.Left, Unread: r.Unread}
 }
 
 func (s *Server) roomsJSON(ctx context.Context) ([]roomJSON, error) {
@@ -97,13 +100,17 @@ func (s *Server) handleRoomSend(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toMessageJSON(m))
 }
 
-// handleRoomAction atiende los cambios a una sala: agregar miembros,
-// renombrar, salir, borrar sus mensajes y marcar como leída.
+// handleRoomAction atiende los cambios a una sala: agregar o sacar miembros,
+// nombrar administradores, renombrar, salir, borrar sus mensajes, eliminarla
+// y marcarla como leída.
 func (s *Server) handleRoomAction(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Room    string   `json:"room"`
 		Name    string   `json:"name"`
 		Members []string `json:"members"`
+		// Member y Admin: a quién sacar (kick) o hacer/quitar administrador (admin).
+		Member string `json:"member"`
+		Admin  bool   `json:"admin"`
 	}
 	if !s.decode(w, r, &req) {
 		return
@@ -117,6 +124,14 @@ func (s *Server) handleRoomAction(w http.ResponseWriter, r *http.Request) {
 		err = s.b.RenameRoom(ctx, req.Room, req.Name)
 	case "leave":
 		err = s.b.LeaveRoom(ctx, req.Room)
+	case "kick":
+		err = s.b.RemoveRoomMember(ctx, req.Room, req.Member)
+	case "admin":
+		err = s.b.SetRoomAdmin(ctx, req.Room, req.Member, req.Admin)
+	case "destroy": // salir y quitarla de la lista (el administrador de una sala vacía)
+		if err = s.b.LeaveRoom(ctx, req.Room); err == nil {
+			err = s.deleteRoom(r, req.Room)
+		}
 	case "delete":
 		err = s.deleteRoom(r, req.Room)
 	case "read":
@@ -138,7 +153,8 @@ func (s *Server) handleRoomAction(w http.ResponseWriter, r *http.Request) {
 
 // publishChat reenvía a las ventanas un evento de mensajes o salas.
 func (s *Server) publishChat(ctx context.Context, e chat.Event) {
-	received := e.Type == chat.MessageReceived
+	// Recibir o eliminar un mensaje cambia los contadores de no leídos.
+	received := e.Type == chat.MessageReceived || e.Type == chat.MessageDeleted
 	switch {
 	case e.Type == chat.RoomChanged:
 		s.publishRoom(ctx, e.Room.ID)

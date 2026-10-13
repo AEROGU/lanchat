@@ -34,6 +34,15 @@ USO
 - 👥 Salas: chat grupal. Cualquier miembro puede agregar a otros o
   cambiar el nombre; "Salir" te quita de la sala (conservas el historial).
   Quien estaba desconectado recibe los mensajes al conectarse.
+  Quien crea la sala es su administrador: en "Miembros" puede sacar a
+  otros y nombrar o quitar administradores. Si queda solo, puede
+  eliminarla. Si el único administrador sale, pasa a serlo el miembro
+  más antiguo.
+- ☺ junto a un mensaje: reaccionar con un emoji (una reacción por
+  persona; elegir la misma la quita) y, en tus mensajes de texto,
+  "Eliminar para todos" durante los 10 minutos siguientes a enviarlo: se
+  borra también en los equipos de los demás, aunque estén desconectados
+  (al volver).
 - ✓ = entregado, ✓✓ = leído (se desactiva en Ajustes).
 - Todo va cifrado. Si una conversación avisa que la identidad de alguien
   cambió, confirma con esa persona (botón "Identidad", comparen las huellas)
@@ -71,6 +80,9 @@ Cierra LanChat (clic derecho en la bandeja > Salir) y reemplaza
 lanchat.exe por el nuevo. Los mensajes y ajustes se conservan.
 Con teléfonos Android, actualiza también las PCs a esta versión: así los
 teléfonos las ven aunque tengan la pantalla apagada.
+Las reacciones, "Eliminar para todos" y los administradores de sala
+(versión 0.13) solo funcionan entre equipos actualizados: uno con una
+versión anterior no verá las reacciones ni borrará el mensaje.
 
 DESINSTALAR
 -----------

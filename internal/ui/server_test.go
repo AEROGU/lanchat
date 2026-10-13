@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"io"
@@ -693,6 +694,25 @@ func (f *fakeBackend) RenameRoom(_ context.Context, _, name string) error {
 	return nil
 }
 func (f *fakeBackend) LeaveRoom(context.Context, string) error { return nil }
+func (f *fakeBackend) RemoveRoomMember(_ context.Context, room, member string) error {
+	return f.record("kick", room+"/"+member)
+}
+func (f *fakeBackend) SetRoomAdmin(_ context.Context, room, member string, admin bool) error {
+	return f.record("admin", fmt.Sprintf("%s/%s/%v", room, member, admin))
+}
+func (f *fakeBackend) DeleteForEveryone(_ context.Context, id string) (store.Message, error) {
+	if id != "m1" {
+		return store.Message{}, errors.New("ya pasaron más de 10 minutos")
+	}
+	return store.Message{ID: id, PeerID: "c1", Outgoing: true, Deleted: true, At: time.Now(), Reactions: []store.Reaction{}}, nil
+}
+func (f *fakeBackend) React(_ context.Context, id, emoji string) (store.Message, error) {
+	m := store.Message{ID: id, PeerID: "c1", Body: "hola", At: time.Now(), Reactions: []store.Reaction{}}
+	if emoji != "" {
+		m.Reactions = append(m.Reactions, store.Reaction{Emoji: emoji})
+	}
+	return m, nil
+}
 func (f *fakeBackend) SendRoom(_ context.Context, room, body string) (store.Message, error) {
 	return store.Message{ID: "rm1", RoomID: room, Outgoing: true, Body: body, At: time.Now()}, nil
 }
@@ -988,5 +1008,101 @@ func TestAskAutostart(t *testing.T) {
 		if got := askAutostart(c.prompt, c.state, c.setupDone); got != c.want {
 			t.Errorf("askAutostart(%v, %v, %v) = %v", c.prompt, c.state, c.setupDone, got)
 		}
+	}
+}
+
+// Eliminar para todos, reaccionar y administrar una sala desde la página.
+func TestMessageActions(t *testing.T) {
+	s, b := startServer(t)
+	c := loggedClient(t, s)
+	do := func(path, body string, v any) int {
+		t.Helper()
+		resp, err := postJSON(c, base(s)+path, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if v != nil {
+			json.NewDecoder(resp.Body).Decode(v)
+		}
+		return resp.StatusCode
+	}
+
+	var m messageJSON
+	if code := do("/api/messages/delete", `{"id":"m1"}`, &m); code != http.StatusOK || !m.Deleted || m.Body != "" {
+		t.Errorf("eliminar: %d %+v", code, m)
+	}
+	var fail struct{ Error string }
+	if code := do("/api/messages/delete", `{"id":"viejo"}`, &fail); code != http.StatusBadRequest || fail.Error == "" {
+		t.Errorf("eliminar fuera de plazo: %d %+v", code, fail)
+	}
+	m = messageJSON{}
+	if code := do("/api/messages/react", `{"id":"m1","emoji":"👍"}`, &m); code != http.StatusOK ||
+		m.Reactions == nil || len(*m.Reactions) != 1 || (*m.Reactions)[0].Emoji != "👍" || (*m.Reactions)[0].Peer != "" {
+		t.Errorf("reaccionar: %d %+v", code, m.Reactions)
+	}
+	// Sin reacciones se manda la lista vacía (reemplaza las que tenía la página).
+	resp, _ := postJSON(c, base(s)+"/api/messages/react", `{"id":"m1","emoji":""}`)
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(raw), `"reactions":[]`) {
+		t.Errorf("quitar la reacción: %s", raw)
+	}
+	// Un evento que no consultó las reacciones no las menciona.
+	if j, _ := json.Marshal(toMessageJSON(store.Message{ID: "x"})); strings.Contains(string(j), "reactions") {
+		t.Errorf("mensaje sin reacciones consultadas: %s", j)
+	}
+
+	do("/api/rooms", `{"name":"Proyecto","members":["c1"]}`, nil)
+	if code := do("/api/rooms/kick", `{"room":"r1","member":"c1"}`, nil); code != http.StatusNoContent {
+		t.Errorf("sacar: %d", code)
+	}
+	if code := do("/api/rooms/admin", `{"room":"r1","member":"c1","admin":true}`, nil); code != http.StatusNoContent {
+		t.Errorf("hacer administrador: %d", code)
+	}
+	b.mu.Lock()
+	got := strings.Join(b.sent, ",")
+	b.mu.Unlock()
+	if got != "kick:r1/c1,admin:r1/c1/true" {
+		t.Errorf("acciones = %q", got)
+	}
+
+	var st stateJSON
+	r2, _ := c.Get(base(s) + "/api/state")
+	json.NewDecoder(r2.Body).Decode(&st)
+	r2.Body.Close()
+	if st.Limits.DeleteWindowMs != protocol.DeleteWindow.Milliseconds() ||
+		len(st.Rooms) != 1 || len(st.Rooms[0].Admins) != 1 || st.Rooms[0].Admins[0] != "yo" {
+		t.Errorf("estado: límites %+v, salas %+v", st.Limits, st.Rooms)
+	}
+}
+
+// Las reacciones que ofrece la página deben ser válidas para el protocolo:
+// si no, el otro equipo las rechazaría.
+func TestOfferedReactionsAreValid(t *testing.T) {
+	js, err := webFiles.ReadFile("web/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	total := 0
+	for _, name := range []string{"QUICK_REACTIONS", "MORE_REACTIONS"} {
+		_, rest, found := strings.Cut(string(js), "const "+name+" = [")
+		list, _, closed := strings.Cut(rest, "];")
+		if !found || !closed {
+			t.Fatalf("no se encontró %s en app.js", name)
+		}
+		for _, item := range strings.Split(list, ",") {
+			emoji := strings.Trim(strings.TrimSpace(item), `"`)
+			if emoji == "" {
+				continue
+			}
+			total++
+			if err := protocol.ValidateReaction(emoji); err != nil {
+				t.Errorf("%s: %q: %v", name, emoji, err)
+			}
+		}
+	}
+	if total < 6 {
+		t.Errorf("solo se encontraron %d reacciones", total)
 	}
 }

@@ -45,7 +45,8 @@ func (a *App) Room(ctx context.Context, id string) (Room, bool, error) {
 	return Room{Room: r, Unread: unread[id]}, true, err
 }
 
-// CreateRoom crea una sala con este equipo y los contactos indicados.
+// CreateRoom crea una sala con este equipo, que queda como su administrador,
+// y los contactos indicados.
 func (a *App) CreateRoom(ctx context.Context, name string, members []string) (store.Room, error) {
 	name, err := roomName(name)
 	if err != nil {
@@ -55,7 +56,9 @@ func (a *App) CreateRoom(ctx context.Context, name string, members []string) (st
 	if err != nil {
 		return store.Room{}, err
 	}
-	r := store.Room{ID: ids.New(), Name: name, Members: append([]string{a.Self().ID}, added...), Version: 1}
+	self := a.Self().ID
+	r := store.Room{ID: ids.New(), Name: name, Members: append([]string{self}, added...),
+		Admins: []string{self}, Version: 1}
 	if err := a.saveRoom(ctx, r); err != nil {
 		return store.Room{}, err
 	}
@@ -109,8 +112,73 @@ func (a *App) RenameRoom(ctx context.Context, roomID, name string) error {
 	return err
 }
 
+// RemoveRoomMember saca a otro miembro de la sala; solo un administrador
+// puede hacerlo. El que sale también recibe el aviso.
+func (a *App) RemoveRoomMember(ctx context.Context, roomID, memberID string) error {
+	r, err := a.adminRoom(ctx, roomID, memberID)
+	if err != nil {
+		return err
+	}
+	r.Admins = slices.DeleteFunc(r.EffectiveAdmins(), func(id string) bool { return id == memberID })
+	r.Members = slices.DeleteFunc(r.Members, func(id string) bool { return id == memberID })
+	r.Version++
+	if err := a.saveRoom(ctx, r); err != nil {
+		return err
+	}
+	_, err = a.chat.SendRoom(ctx, roomID,
+		fmt.Sprintf("%s sacó a %s de la sala", a.selfName(), a.contactName(ctx, memberID)), true, memberID)
+	return err
+}
+
+// SetRoomAdmin hace administrador a otro miembro o le quita el privilegio;
+// solo un administrador puede hacerlo.
+func (a *App) SetRoomAdmin(ctx context.Context, roomID, memberID string, admin bool) error {
+	r, err := a.adminRoom(ctx, roomID, memberID)
+	if err != nil {
+		return err
+	}
+	admins := r.EffectiveAdmins()
+	if slices.Contains(admins, memberID) == admin {
+		return nil
+	}
+	text := "%s hizo administrador a %s"
+	if admin {
+		admins = append(admins, memberID)
+	} else {
+		admins = slices.DeleteFunc(admins, func(id string) bool { return id == memberID })
+		text = "%s le quitó a %s el privilegio de administrador"
+	}
+	r.Admins = admins
+	r.Version++
+	if err := a.saveRoom(ctx, r); err != nil {
+		return err
+	}
+	_, err = a.chat.SendRoom(ctx, roomID, fmt.Sprintf(text, a.selfName(), a.contactName(ctx, memberID)), true)
+	return err
+}
+
+// adminRoom devuelve la sala si este equipo la administra y memberID es otro
+// de sus miembros.
+func (a *App) adminRoom(ctx context.Context, roomID, memberID string) (store.Room, error) {
+	r, err := a.activeRoom(ctx, roomID)
+	if err != nil {
+		return r, err
+	}
+	self := a.Self().ID
+	switch {
+	case !r.IsAdmin(self):
+		return r, errors.New("solo un administrador de la sala puede hacer eso")
+	case memberID == self:
+		return r, errors.New("eso solo se puede hacer con otro miembro")
+	case !slices.Contains(r.Members, memberID):
+		return r, errors.New("ya no es miembro de la sala")
+	}
+	return r, nil
+}
+
 // LeaveRoom saca a este equipo de la sala y avisa a los demás. El historial
-// se conserva pero ya no llegan mensajes.
+// se conserva pero ya no llegan mensajes. Si era el único administrador, pasa
+// a serlo el miembro más antiguo.
 func (a *App) LeaveRoom(ctx context.Context, roomID string) error {
 	r, err := a.activeRoom(ctx, roomID)
 	if err != nil {
@@ -118,6 +186,7 @@ func (a *App) LeaveRoom(ctx context.Context, roomID string) error {
 	}
 	self := a.Self().ID
 	r.Members = slices.DeleteFunc(r.Members, func(id string) bool { return id == self })
+	r.Admins = slices.DeleteFunc(r.Admins, func(id string) bool { return id == self })
 	r.Version++
 	r.Left = true
 	if err := a.saveRoom(ctx, r); err != nil {
@@ -125,6 +194,17 @@ func (a *App) LeaveRoom(ctx context.Context, roomID string) error {
 	}
 	_, err = a.chat.SendRoom(ctx, roomID, fmt.Sprintf("%s salió de la sala", a.selfName()), true)
 	return err
+}
+
+// DeleteForEveryone elimina para todos un mensaje de texto propio (de una
+// conversación o de una sala) dentro del plazo protocol.DeleteWindow.
+func (a *App) DeleteForEveryone(ctx context.Context, msgID string) (store.Message, error) {
+	return a.chat.DeleteForEveryone(ctx, msgID)
+}
+
+// React pone la reacción de este equipo a un mensaje; emoji vacío la quita.
+func (a *App) React(ctx context.Context, msgID, emoji string) (store.Message, error) {
+	return a.chat.React(ctx, msgID, emoji)
 }
 
 // SendRoom envía un mensaje a la sala.
@@ -148,7 +228,7 @@ func (a *App) activeRoom(ctx context.Context, id string) (store.Room, error) {
 	case !ok:
 		return r, errors.New("sala inexistente")
 	case r.Left:
-		return r, errors.New("saliste de esta sala")
+		return r, errors.New("ya no estás en esta sala")
 	}
 	return r, nil
 }

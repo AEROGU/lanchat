@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 )
 
@@ -14,6 +15,8 @@ type Room struct {
 	ID      string
 	Name    string
 	Members []string // IDs de los equipos, incluido este
+	// Admins son los administradores elegidos; ver EffectiveAdmins.
+	Admins  []string
 	Version int64
 	// Left: este equipo salió de la sala (se conserva el historial).
 	Left bool
@@ -22,17 +25,47 @@ type Room struct {
 	UpdatedAt time.Time
 }
 
-const roomColumns = `id, name, members, version, left_room, hidden, updated_at`
+const roomColumns = `id, name, members, version, left_room, hidden, updated_at, admins`
 
 func scanRoom(sc scanner) (Room, error) {
 	var r Room
-	var members string
+	var members, admins string
 	var updated int64
-	if err := sc.Scan(&r.ID, &r.Name, &members, &r.Version, &r.Left, &r.Hidden, &updated); err != nil {
+	if err := sc.Scan(&r.ID, &r.Name, &members, &r.Version, &r.Left, &r.Hidden, &updated, &admins); err != nil {
 		return r, err
 	}
 	r.UpdatedAt = time.UnixMilli(updated)
-	return r, json.Unmarshal([]byte(members), &r.Members)
+	return r, errors.Join(json.Unmarshal([]byte(members), &r.Members), json.Unmarshal([]byte(admins), &r.Admins))
+}
+
+// EffectiveAdmins devuelve quiénes administran la sala: los de Admins que
+// siguen siendo miembros o, si no queda ninguno (salas de versiones
+// anteriores, o salieron todos), el miembro más antiguo. Todos los equipos
+// llegan al mismo resultado porque comparten la lista de miembros en orden.
+func (r Room) EffectiveAdmins() []string {
+	var out []string
+	for _, m := range r.Members {
+		if slices.Contains(r.Admins, m) {
+			out = append(out, m)
+		}
+	}
+	if len(out) == 0 && len(r.Members) > 0 {
+		out = []string{r.Members[0]}
+	}
+	return out
+}
+
+// IsAdmin indica si id administra la sala.
+func (r Room) IsAdmin(id string) bool { return slices.Contains(r.EffectiveAdmins(), id) }
+
+// roomJSON codifica los miembros y los administradores para guardarlos.
+func roomJSON(r Room) (members, admins string, err error) {
+	m, err := json.Marshal(r.Members)
+	if err != nil {
+		return "", "", err
+	}
+	a, err := json.Marshal(append([]string{}, r.Admins...)) // nunca "null"
+	return string(m), string(a), err
 }
 
 func (s *Store) Room(ctx context.Context, id string) (Room, bool, error) {
@@ -63,16 +96,16 @@ func (s *Store) Rooms(ctx context.Context) ([]Room, error) {
 
 // SaveRoom guarda la sala tal cual (cambios hechos en este equipo).
 func (s *Store) SaveRoom(ctx context.Context, r Room) error {
-	members, err := json.Marshal(r.Members)
+	members, admins, err := roomJSON(r)
 	if err != nil {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, members = excluded.members,
 			version = excluded.version, left_room = excluded.left_room, hidden = excluded.hidden,
-			updated_at = excluded.updated_at`,
-		r.ID, r.Name, string(members), r.Version, r.Left, r.Hidden, time.Now().UnixMilli())
+			updated_at = excluded.updated_at, admins = excluded.admins`,
+		r.ID, r.Name, members, r.Version, r.Left, r.Hidden, time.Now().UnixMilli(), admins)
 	return err
 }
 
@@ -80,17 +113,17 @@ func (s *Store) SaveRoom(ctx context.Context, r Room) error {
 // nueva o más reciente que la local; applied indica si se guardó. Como la
 // versión recibida incluye a este equipo, la sala vuelve a ser visible.
 func (s *Store) ApplyRoom(ctx context.Context, r Room) (applied bool, err error) {
-	members, err := json.Marshal(r.Members)
+	members, admins, err := roomJSON(r)
 	if err != nil {
 		return false, err
 	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO rooms (`+roomColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, members = excluded.members,
 			version = excluded.version, left_room = excluded.left_room, hidden = excluded.hidden,
-			updated_at = excluded.updated_at
+			updated_at = excluded.updated_at, admins = excluded.admins
 		WHERE excluded.version > rooms.version`,
-		r.ID, r.Name, string(members), r.Version, r.Left, r.Hidden, time.Now().UnixMilli())
+		r.ID, r.Name, members, r.Version, r.Left, r.Hidden, time.Now().UnixMilli(), admins)
 	if err != nil {
 		return false, err
 	}

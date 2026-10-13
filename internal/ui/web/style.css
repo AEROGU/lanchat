@@ -696,3 +696,109 @@ dialog input, dialog textarea {
 .msg.event .meta { display: inline; margin-left: 6px; }
 /* Sin ✓ ni "pendiente" en los avisos (.out para ganarle a .msg.out.delivered). */
 .msg.event .meta::after, .msg.out.event .meta::after { content: none; }
+
+/* ---------- Reacciones y menú de un mensaje ---------- */
+
+.msg { position: relative; }
+
+/* Botón para reaccionar: aparece al pasar el cursor; en pantallas táctiles
+   (sin cursor) queda siempre a la vista. */
+.msg-act {
+  position: absolute;
+  top: 2px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+}
+.msg.in .msg-act { right: -32px; }
+.msg.out .msg-act { left: -32px; }
+.msg:hover .msg-act, .msg-act:focus-visible, .msg-act.open { opacity: 1; }
+@media (hover: none) { .msg-act { opacity: 0.6; } }
+
+.msg.deleted { font-style: italic; color: var(--muted); }
+
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: -6px 8px 4px;
+  z-index: 1;
+}
+.reactions.in { align-self: flex-start; }
+.reactions.out { align-self: flex-end; }
+
+.reaction {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+}
+.reaction.mine { border-color: var(--brand); background: var(--selected); }
+
+.msg-menu {
+  position: fixed;
+  z-index: 20;
+  width: max-content;
+  max-width: min(330px, calc(100vw - 16px));
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
+}
+.msg-menu .emoji-row { display: flex; flex-wrap: wrap; gap: 2px; }
+.msg-menu .emoji {
+  padding: 4px 6px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-size: 22px;
+  line-height: 1.2;
+}
+.msg-menu .emoji:hover, .msg-menu .emoji.mine { background: var(--selected); }
+.msg-menu .emoji.more { color: var(--muted); font-size: 18px; }
+.msg-menu .menu-item {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  background: none;
+  color: var(--danger);
+  text-align: left;
+}
+.msg-menu .menu-item:hover { background: var(--bg); }
+
+/* ---------- Miembros de una sala ---------- */
+
+.member-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 320px; overflow-y: auto; }
+.member-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.member-list .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-list .text-btn { flex: none; padding: 4px 6px; font-size: 13px; color: var(--brand); }
+.member-list .text-btn.danger-btn { color: var(--danger); }
+.admin-tag {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--brand);
+  border-radius: 8px;
+  color: var(--brand);
+  font-size: 11px;
+}
+.actions button.danger-outline { margin-right: auto; color: var(--danger); border-color: var(--danger); }

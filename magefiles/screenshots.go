@@ -79,6 +79,10 @@ func Screenshots() error {
 		if s.dark {
 			scheme = "0"
 		}
+		// La anterior no debe pasar por nueva si Edge no escribe nada.
+		if err := os.Remove(out); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		// Un perfil nuevo por captura: si no, Edge se une al proceso anterior.
 		err = exec.CommandContext(ctx, edge, "--headless=new", "--disable-gpu", "--hide-scrollbars",
@@ -90,9 +94,29 @@ func Screenshots() error {
 		if err != nil {
 			return fmt.Errorf("captura %s: %w", s.name, err)
 		}
+		// Edge puede devolver el control antes de escribir la imagen.
+		if err := waitImage(out, time.Minute); err != nil {
+			return fmt.Errorf("captura %s: %w", s.name, err)
+		}
 		fmt.Println(out)
 	}
 	return nil
+}
+
+// waitImage espera a que la captura exista y deje de crecer.
+func waitImage(path string, timeout time.Duration) error {
+	last := int64(-1)
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
+		fi, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if fi.Size() > 0 && fi.Size() == last {
+			return nil
+		}
+		last = fi.Size()
+	}
+	return errors.New("Edge no escribió la imagen " + path)
 }
 
 func findEdge() (string, error) {
