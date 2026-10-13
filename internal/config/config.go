@@ -29,8 +29,8 @@ type Config struct {
 	ManualPeers []string `json:"manual_peers"`
 	// DownloadDir es donde se guardan los archivos recibidos ("" = Descargas\LanChat).
 	DownloadDir string `json:"download_dir"`
-	// SetupDone: ya se aplicaron los ajustes de la primera ejecución (p. ej.
-	// activar el inicio con Windows); después manda lo que elija el usuario.
+	// SetupDone: el usuario ya respondió las preguntas de la primera ejecución
+	// (p. ej. si LanChat debe iniciar con Windows) y no se le vuelven a hacer.
 	SetupDone bool `json:"setup_done"`
 	// Status y StatusText son el estado elegido por el usuario (protocol.Status*).
 	Status     string `json:"status"`

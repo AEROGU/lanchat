@@ -39,8 +39,8 @@ type Options struct {
 	// Dir es la carpeta de datos; vacío = %APPDATA%\LanChat.
 	Dir string
 	// CustomDir: Dir se eligió con -dir (pruebas, otra copia). Entonces no se
-	// activa ni se actualiza solo el inicio con Windows, para no reemplazar el
-	// de la instalación normal.
+	// pregunta por el inicio con Windows, para no reemplazar el de la
+	// instalación normal.
 	CustomDir bool
 	// Hidden arranca solo en la bandeja, sin abrir la ventana (inicio con Windows).
 	Hidden bool
@@ -94,10 +94,12 @@ func RunGUI(o Options) error {
 		o.Log.Warn("guardando icono", "err", err)
 	}
 
+	// Con -dir (pruebas, otra copia) no se ofrece el inicio con Windows, para
+	// no reemplazar el de la instalación normal.
 	if o.CustomDir {
 		srv.AutostartArgs = []string{"-dir", o.Dir}
 	} else {
-		setupAutostart(a, o.Log)
+		srv.AutostartPrompt = true
 	}
 
 	g := &gui{app: a, srv: srv, log: o.Log, profileDir: filepath.Join(o.Dir, edgeProfileDir)}
@@ -218,23 +220,5 @@ func (g *gui) applyTray(unread int) {
 func (g *gui) maybeNotify(ctx context.Context, ev any) {
 	if n, ok := g.srv.Notification(ctx, ev); ok {
 		go g.notifier.notify(n.Title, n.Body)
-	}
-}
-
-// setupAutostart activa el inicio con Windows en la primera ejecución y, si
-// está activo, actualiza la ruta por si el programa se movió de carpeta.
-func setupAutostart(a *app.App, log *slog.Logger) {
-	exe, err := platform.Executable()
-	if err != nil {
-		return
-	}
-	first, err := a.FirstRun()
-	if err != nil {
-		log.Warn("guardando la primera ejecución", "err", err)
-	}
-	if first || platform.AutostartEnabled() {
-		if err := platform.SetAutostart(true, exe); err != nil && !errors.Is(err, platform.ErrUnsupported) {
-			log.Warn("configurando el inicio con Windows", "err", err)
-		}
 	}
 }

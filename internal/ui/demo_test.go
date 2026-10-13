@@ -224,6 +224,8 @@ func (d *demoBackend) History(_ context.Context, key, before string, _ int) ([]s
 func (d *demoBackend) SetName(string) error                           { return errDemo }
 func (d *demoBackend) SetStatus(string, string) error                 { return errDemo }
 func (d *demoBackend) SetAutoAway(bool) error                         { return errDemo }
+func (d *demoBackend) SetupDone() bool                                { return true }
+func (d *demoBackend) MarkSetupDone() error                           { return nil }
 func (d *demoBackend) SetReadReceipts(bool) error                     { return errDemo }
 func (d *demoBackend) SetAlias(context.Context, string, string) error { return errDemo }
 func (d *demoBackend) SetGroup(context.Context, string, string) error { return errDemo }

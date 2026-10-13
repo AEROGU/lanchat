@@ -105,7 +105,7 @@ La primera vez Windows pedirá permiso de red: hay que permitirlo en **redes
 privadas** (UDP 50000 y TCP 50001). También se puede crear la regla desde
 Ajustes > Firewall de Windows, o con `lanchat.exe -firewall add`.
 
-En la primera ejecución se activa el inicio con Windows (en la bandeja); se
+La primera vez LanChat pregunta si debe iniciar con Windows (en la bandeja); se
 desactiva en Ajustes. Con `-dir` no se toca, para no reemplazar el de la
 instalación normal.
 
@@ -113,7 +113,7 @@ Opciones:
 
 | Opción | Uso |
 |---|---|
-| `-hidden` | arrancar solo en la bandeja (para el inicio con Windows) |
+| `-tray` | arrancar solo en la bandeja (para el inicio con Windows) |
 | `-dir carpeta` | otra carpeta de datos (por defecto `%APPDATA%\LanChat`) |
 | `-version` | mostrar la versión |
 | `-firewall add` / `remove` | crear o quitar la regla del Firewall de Windows (pide administrador) |

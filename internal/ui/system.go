@@ -14,21 +14,43 @@ type systemJSON struct {
 	Supported bool `json:"supported"`
 	// Autostart: LanChat arranca al iniciar sesión.
 	Autostart bool `json:"autostart"`
+	// AskAutostart: la página debe preguntar si se activa el inicio con
+	// Windows; AutostartMoved: porque estaba activado para otra ubicación.
+	AskAutostart   bool `json:"askAutostart"`
+	AutostartMoved bool `json:"autostartMoved"`
 	// Firewall: existe la regla del Firewall de Windows para este ejecutable.
 	Firewall bool `json:"firewall"`
 }
 
-func systemState() systemJSON {
+func (s *Server) systemState() systemJSON {
+	out := systemJSON{Supported: runtime.GOOS == "windows"}
 	exe, err := platform.Executable()
-	return systemJSON{
-		Supported: runtime.GOOS == "windows",
-		Autostart: platform.AutostartEnabled(),
-		Firewall:  err == nil && platform.FirewallAllowed(exe),
+	if err != nil {
+		return out
 	}
+	state := platform.Autostart(exe)
+	out.Autostart = state == platform.AutostartOn
+	out.AutostartMoved = state == platform.AutostartMoved
+	out.AskAutostart = out.Supported && askAutostart(s.AutostartPrompt, state, s.b.SetupDone())
+	out.Firewall = platform.FirewallAllowed(exe)
+	return out
+}
+
+// askAutostart decide si hay que preguntar por el inicio con Windows: la
+// primera vez, o si quedó activado para otra ubicación del programa. LanChat
+// nunca lo activa ni lo actualiza por su cuenta.
+func askAutostart(prompt bool, state platform.AutostartState, setupDone bool) bool {
+	switch {
+	case !prompt:
+		return false
+	case state == platform.AutostartMoved:
+		return true
+	}
+	return state == platform.AutostartOff && !setupDone
 }
 
 func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, systemState())
+	writeJSON(w, http.StatusOK, s.systemState())
 }
 
 func (s *Server) handleAutostart(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +68,11 @@ func (s *Server) handleAutostart(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, systemState())
+	// El usuario ya eligió: no se le vuelve a preguntar.
+	if err := s.b.MarkSetupDone(); err != nil {
+		s.log.Warn("guardando la respuesta del inicio con Windows", "err", err)
+	}
+	writeJSON(w, http.StatusOK, s.systemState())
 }
 
 // handleFirewall crea la regla del firewall relanzando LanChat como
@@ -68,5 +94,5 @@ func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, systemState())
+	writeJSON(w, http.StatusOK, s.systemState())
 }

@@ -22,26 +22,43 @@ const runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
 
 // autostartCommand arma la línea de comandos del inicio automático.
 func autostartCommand(exe string, args []string) string {
-	cmd := syscall.EscapeArg(exe) + " -" + HiddenFlag
+	cmd := syscall.EscapeArg(exe) + " -" + TrayFlag
 	for _, a := range args {
 		cmd += " " + syscall.EscapeArg(a)
 	}
 	return cmd
 }
 
-// AutostartEnabled indica si LanChat arranca al iniciar sesión.
-func AutostartEnabled() bool {
-	k, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.QUERY_VALUE)
-	if err != nil {
-		return false
-	}
-	defer k.Close()
-	_, _, err = k.GetStringValue(appName)
-	return err == nil
+// commandRuns indica si la línea de comandos de una entrada de inicio
+// arranca exe (con cualquier opción, también las de versiones anteriores).
+func commandRuns(command, exe string) bool {
+	command, exe = strings.ToLower(command), strings.ToLower(syscall.EscapeArg(exe))
+	return command == exe || strings.HasPrefix(command, exe+" ")
 }
 
-// SetAutostart activa o desactiva el inicio automático de exe (oculto en la
-// bandeja); args se agregan a la línea de comandos.
+// Autostart indica si LanChat arranca al iniciar sesión y si la entrada es
+// de exe, el ejecutable actual. Solo consulta: el inicio con Windows nunca
+// se cambia sin que el usuario lo pida (ver SetAutostart).
+func Autostart(exe string) AutostartState {
+	k, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.QUERY_VALUE)
+	if err != nil {
+		return AutostartOff
+	}
+	defer k.Close()
+	command, _, err := k.GetStringValue(appName)
+	switch {
+	case err != nil:
+		return AutostartOff
+	case commandRuns(command, exe):
+		return AutostartOn
+	}
+	return AutostartMoved
+}
+
+// SetAutostart activa o desactiva el inicio automático de exe (en la
+// bandeja); args se agregan a la línea de comandos. Se llama solo cuando el
+// usuario lo elige: un programa que se registra por su cuenta para arrancar
+// con Windows es justo lo que los antivirus vigilan.
 func SetAutostart(enabled bool, exe string, args ...string) error {
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, runKey, registry.SET_VALUE)
 	if err != nil {

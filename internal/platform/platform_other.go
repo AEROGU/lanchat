@@ -4,7 +4,7 @@ package platform
 
 import "time"
 
-func AutostartEnabled() bool                     { return false }
+func Autostart(string) AutostartState            { return AutostartOff }
 func SetAutostart(bool, string, ...string) error { return ErrUnsupported }
 func FirewallAllowed(string) bool                { return false }
 func AllowFirewall(string) error                 { return ErrUnsupported }

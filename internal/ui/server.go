@@ -81,6 +81,8 @@ type Backend interface {
 	TrustIdentity(ctx context.Context, peerID string) error
 	ManualPeers() []string
 	SetManualPeers(peers []string) error
+	SetupDone() bool
+	MarkSetupDone() error
 
 	OfferFiles(ctx context.Context, peerID string, paths []string) (store.Message, error)
 	Upload(ctx context.Context, peerID string, next func() (name, dir string, r io.Reader, err error)) (store.Message, error)
@@ -124,6 +126,9 @@ type Server struct {
 	OnUnreadChanged func(total int)
 	// AutostartArgs se agregan al inicio con Windows (p. ej. -dir).
 	AutostartArgs []string
+	// AutostartPrompt: la página puede preguntar si LanChat debe iniciar con
+	// Windows (la primera vez, o si el programa cambió de carpeta).
+	AutostartPrompt bool
 	// Shell, si no es nil, reemplaza las funciones del escritorio (Android);
 	// la página lo sabe por stateJSON.Mobile. Debe asignarse antes de Serve.
 	Shell *Shell

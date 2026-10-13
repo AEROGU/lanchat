@@ -24,6 +24,7 @@ import (
 
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/chat"
+	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/version"
@@ -624,6 +625,8 @@ func (f *fakeBackend) SetStatus(status, text string) error {
 	return nil
 }
 func (f *fakeBackend) SetAutoAway(bool) error { return nil }
+func (f *fakeBackend) SetupDone() bool        { return true }
+func (f *fakeBackend) MarkSetupDone() error   { return nil }
 
 func (f *fakeBackend) SendMany(ctx context.Context, peers []string, body string) ([]store.Message, error) {
 	var out []store.Message
@@ -960,5 +963,30 @@ func TestNotification(t *testing.T) {
 	b.SetStatus(protocol.StatusBusy, "")
 	if _, ok := s.Notification(ctx, received(msg)); ok {
 		t.Error("Ocupado: no se notifica")
+	}
+}
+
+// El inicio con Windows solo se pregunta la primera vez o si quedó activado
+// para otra ubicación del programa; nunca con -dir.
+func TestAskAutostart(t *testing.T) {
+	cases := []struct {
+		prompt    bool
+		state     platform.AutostartState
+		setupDone bool
+		want      bool
+	}{
+		{true, platform.AutostartOff, false, true},    // primera ejecución
+		{true, platform.AutostartOff, true, false},    // ya respondió que no
+		{true, platform.AutostartOn, false, false},    // ya está activado
+		{true, platform.AutostartOn, true, false},     //
+		{true, platform.AutostartMoved, true, true},   // el programa cambió de carpeta
+		{true, platform.AutostartMoved, false, true},  //
+		{false, platform.AutostartOff, false, false},  // con -dir no se pregunta
+		{false, platform.AutostartMoved, true, false}, //
+	}
+	for _, c := range cases {
+		if got := askAutostart(c.prompt, c.state, c.setupDone); got != c.want {
+			t.Errorf("askAutostart(%v, %v, %v) = %v", c.prompt, c.state, c.setupDone, got)
+		}
 	}
 }

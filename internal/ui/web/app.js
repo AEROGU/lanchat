@@ -1045,6 +1045,21 @@ function openSettings() {
   api.system().then(renderSystem).catch(() => {});
 }
 
+// askAutostart pregunta, la primera vez (o si el programa cambió de carpeta),
+// si LanChat debe iniciar con Windows: nunca se activa sin que el usuario lo
+// elija. Cerrar el diálogo con Esc cuenta como "Ahora no".
+async function askAutostart() {
+  const sys = await api.system();
+  if (!sys.askAutostart) return;
+  const dialog = $("autostart-dialog");
+  $("autostart-moved").hidden = !sys.autostartMoved;
+  dialog.returnValue = "";
+  dialog.addEventListener("close", () => {
+    api.autostart(dialog.returnValue === "yes").catch((e) => showBanner(e.message, 5000));
+  }, { once: true });
+  dialog.showModal();
+}
+
 function renderSystem(sys) {
   $("system-section").hidden = !sys.supported;
   $("autostart-input").checked = sys.autostart;
@@ -1654,4 +1669,5 @@ window.lanchatResume = () => {
 bind();
 loadState()
   .then(connectEvents)
+  .then(askAutostart)
   .catch((e) => showBanner(e.message));

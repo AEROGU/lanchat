@@ -11,8 +11,8 @@ INSTALACIÓN (en cada PC)
 2. Abre lanchat.exe. Si Windows muestra "Windows protegió su PC", haz clic
    en "Más información" y luego en "Ejecutar de todas formas" (LanChat no
    está firmado digitalmente; solo pasa la primera vez).
-   Queda un ícono en la bandeja del sistema (junto al reloj) y se activa el
-   inicio automático con Windows.
+   Queda un ícono en la bandeja del sistema (junto al reloj). LanChat
+   pregunta si debe iniciar con Windows: conviene responder que sí.
 3. Firewall: la primera vez Windows puede preguntar si permite el acceso a
    la red. Marca "Redes privadas" y acepta. Si no preguntó o no tienes
    permisos, abre Ajustes (⚙) > "Firewall de Windows" > Permitir.
@@ -84,7 +84,7 @@ PARA EL ADMINISTRADOR
       lanchat.exe -firewall add
   Quitarla:
       lanchat.exe -firewall remove
-- Opciones: -hidden (arrancar en la bandeja), -dir carpeta (otros datos),
+- Opciones: -tray (arrancar en la bandeja), -dir carpeta (otros datos),
   -version.
 
 LICENCIA

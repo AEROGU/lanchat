@@ -645,16 +645,23 @@ func (a *App) requireContact(ctx context.Context, peerID string) error {
 	return err
 }
 
-// FirstRun devuelve true solo la primera vez que se llama en este equipo (y
-// lo deja anotado en config.json).
-func (a *App) FirstRun() (bool, error) {
+// SetupDone indica si el usuario ya respondió las preguntas de la primera
+// ejecución (p. ej. si LanChat debe iniciar con Windows).
+func (a *App) SetupDone() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.cfg.SetupDone
+}
+
+// MarkSetupDone anota en config.json que ya no hay que volver a preguntar.
+func (a *App) MarkSetupDone() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.cfg.SetupDone {
-		return false, nil
+		return nil
 	}
 	a.cfg.SetupDone = true
-	return true, a.cfg.Save(a.dir)
+	return a.cfg.Save(a.dir)
 }
 
 // ---------- Estado ----------
