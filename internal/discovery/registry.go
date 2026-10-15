@@ -142,6 +142,14 @@ func (r *registry) expire(now time.Time, ttl time.Duration) []Event {
 	return evs
 }
 
+func (r *registry) forget(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p, ok := r.peers[id]; ok && !p.Online {
+		delete(r.peers, id)
+	}
+}
+
 func (r *registry) get(id string) (Peer, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

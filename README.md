@@ -175,6 +175,12 @@ Cada conversación (o sala) tiene además el botón **Borrar**: borra sus
 mensajes y cancela los archivos pendientes con ese contacto; el contacto se
 conserva. Borrar una sala de la que ya saliste la quita de la lista.
 
+Un contacto **desconectado** tiene también **Quitar**: lo saca de la lista.
+Sirve cuando alguien reinstaló LanChat (o borró sus datos) y aparece de nuevo
+con otra identidad: LanChat pregunta si combinar su conversación con la de
+otro contacto (sugiere el que tiene el mismo nombre o equipo) o borrarla. Si
+ese equipo vuelve a conectarse, reaparece en la lista.
+
 Lo borrado no queda recuperable en `lanchat.db`: la base usa `secure_delete`
 (sobrescribe con ceros) y se vacía su registro (`-wal`). Borrar es solo en
 esta PC: los demás conservan su copia de las conversaciones.

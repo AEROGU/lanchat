@@ -114,6 +114,7 @@ type Backend interface {
 
 	ExportData(ctx context.Context, path string) error
 	DeleteConversation(ctx context.Context, peerID string) error
+	RemoveContact(ctx context.Context, peerID, into string) error
 	DeleteRoomConversation(ctx context.Context, roomID string) error
 	WipeData(ctx context.Context) error
 }
@@ -297,6 +298,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/data/export", s.handleSaveExport)
 	mux.HandleFunc("POST /api/data/wipe", s.handleWipe)
 	mux.HandleFunc("POST /api/conversation/delete", s.handleDeleteConversation)
+	mux.HandleFunc("POST /api/contact/remove", s.handleRemoveContact)
 	mux.HandleFunc("POST /api/rooms", s.handleCreateRoom)
 	mux.HandleFunc("GET /api/rooms/messages", s.handleRoomHistory)
 	mux.HandleFunc("POST /api/rooms/messages", s.handleRoomSend)

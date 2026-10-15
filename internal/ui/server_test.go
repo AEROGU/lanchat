@@ -816,6 +816,9 @@ func (f *fakeBackend) ExportData(_ context.Context, path string) error {
 func (f *fakeBackend) DeleteConversation(_ context.Context, peer string) error {
 	return f.record("delete-conversation", peer)
 }
+func (f *fakeBackend) RemoveContact(_ context.Context, peer, into string) error {
+	return f.record("remove-contact", peer+">"+into)
+}
 func (f *fakeBackend) DeleteRoomConversation(_ context.Context, room string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -904,6 +907,19 @@ func TestPrivacy(t *testing.T) {
 		t.Errorf("evento al borrar: %+v", got)
 	}
 
+	resp, _ = postJSON(c, base(s)+"/api/contact/remove", `{"peer":"c1","into":"c2"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("quitar contacto: %d", resp.StatusCode)
+	}
+	found := false
+	for _, ev := range readEvents(t, events.Body, 2) {
+		found = found || ev.name == "removed" && strings.Contains(ev.data, `"into":"c2"`)
+	}
+	if !found {
+		t.Error("faltó el evento removed")
+	}
+
 	// Sin la palabra de confirmación no se borra nada.
 	resp, _ = postJSON(c, base(s)+"/api/data/wipe", `{"confirm":"borrar"}`)
 	resp.Body.Close()
@@ -918,7 +934,7 @@ func TestPrivacy(t *testing.T) {
 	b.mu.Lock()
 	actions := strings.Join(b.sent, ",")
 	b.mu.Unlock()
-	if actions != "delete-conversation:c1,wipe:" {
+	if actions != "delete-conversation:c1,remove-contact:c1>c2,wipe:" {
 		t.Errorf("acciones = %q", actions)
 	}
 }

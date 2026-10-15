@@ -131,6 +131,10 @@ func (s *Service) Peers() []Peer { return s.reg.snapshot() }
 // Peer devuelve un equipo visto desde que arrancó (ver Peer.Online).
 func (s *Service) Peer(id string) (Peer, bool) { return s.reg.get(id) }
 
+// Forget olvida a un equipo desconectado (el usuario lo quitó de su lista).
+// Si vuelve a anunciarse, se registra como nuevo.
+func (s *Service) Forget(id string) { s.reg.forget(id) }
+
 // Name es el nombre propio que se anuncia.
 func (s *Service) Name() string {
 	s.mu.Lock()

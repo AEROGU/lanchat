@@ -99,6 +99,7 @@ const api = {
   // action: members, rename, leave, kick, admin, destroy, delete o read.
   room: (action, room, extra) => request("POST", `/api/rooms/${action}`, { room, ...extra }),
   deleteConversation: (peer) => request("POST", "/api/conversation/delete", { peer }),
+  removeContact: (peer, into) => request("POST", "/api/contact/remove", { peer, into }),
   wipe: (confirm) => request("POST", "/api/data/wipe", { confirm }),
 };
 
@@ -181,8 +182,10 @@ window.lanchatOpen = (id) => {
   if (state.contacts.has(id) || state.rooms.has(roomId(id))) openChat(id);
 };
 
+// sortedContacts: los de la lista. Los quitados siguen en state.contacts solo
+// para nombrarlos en las salas.
 function sortedContacts() {
-  return [...state.contacts.values()].sort(
+  return [...state.contacts.values()].filter((c) => !c.removed).sort(
     (a, b) => b.online - a.online || a.displayName.localeCompare(b.displayName, "es", { sensitivity: "base" }),
   );
 }
@@ -298,7 +301,7 @@ function toggleGroup(name) {
 }
 
 function groupNames() {
-  const names = new Set([...state.contacts.values()].map((c) => c.group).filter(Boolean));
+  const names = new Set(sortedContacts().map((c) => c.group).filter(Boolean));
   return [...names].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
 }
 
@@ -347,7 +350,7 @@ function renderContacts() {
     }
   }
   if (hidden > 0) ul.append(hiddenHint(hidden));
-  $("no-contacts").hidden = state.contacts.size > 0;
+  $("no-contacts").hidden = sortedContacts().length > 0;
   const btn = $("offline-btn");
   btn.setAttribute("aria-pressed", hideOffline());
   btn.title = hideOffline() ? "Mostrar los contactos desconectados" : "Ocultar los contactos desconectados";
@@ -496,6 +499,7 @@ function renderHeader() {
   }
   $("peer-detail").textContent = detail;
   $("peer-dot").className = dotClass(c.online, c.status);
+  $("remove-contact-btn").hidden = c.online;
   const note = $("offline-note");
   note.hidden = c.online;
   note.textContent = `${c.displayName} está desconectado. Los mensajes que envíes se entregarán cuando se conecte.`;
@@ -1854,6 +1858,79 @@ async function deleteChat() {
   }
 }
 
+// ---------- Quitar contacto ----------
+
+// openRemove pregunta qué hacer con la conversación del contacto (desconectado)
+// antes de quitarlo: combinarla con la de otro contacto, que suele ser la
+// misma persona con una identidad nueva, o borrarla.
+function openRemove() {
+  const c = state.contacts.get(state.current);
+  if (!c || c.online) return;
+  $("remove-who").textContent = c.displayName;
+  const candidates = mergeCandidates(c);
+  const select = $("remove-into");
+  select.replaceChildren(...candidates.map((o) => Object.assign(document.createElement("option"), {
+    value: o.id,
+    textContent: `${o.displayName} · ${o.detail}${o.online ? "" : " (desconectado)"}`,
+  })));
+  const conv = state.messages.get(c.id);
+  const hasMessages = c.unread > 0 || !conv || conv.list.length > 0;
+  $("remove-choice").hidden = !hasMessages;
+  const merge = candidates.length > 0 && samePerson(c, candidates[0]);
+  $("remove-form").elements["remove-mode"].value = merge ? "merge" : "delete";
+  for (const el of $("remove-form").querySelectorAll('input[value="merge"], #remove-into')) {
+    el.disabled = candidates.length === 0;
+  }
+  $("remove-error").hidden = true;
+  $("remove-dialog").showModal();
+}
+
+// samePerson: mismo nombre propio o mismo nombre de equipo.
+function samePerson(a, b) {
+  const same = (x, y) => Boolean(x) && x.toLocaleLowerCase("es") === y.toLocaleLowerCase("es");
+  return same(a.name, b.name) || same(a.hostname, b.hostname);
+}
+
+// mergeCandidates: los demás contactos, primero los que parecen la misma
+// persona (y de ellos, los conectados).
+function mergeCandidates(c) {
+  const rank = (o) => (samePerson(c, o) ? 0 : 2) + (o.online ? 0 : 1);
+  return sortedContacts().filter((o) => o.id !== c.id).sort((a, b) => rank(a) - rank(b));
+}
+
+async function removeContact(ev) {
+  if (ev.submitter?.value !== "save") return;
+  ev.preventDefault();
+  const c = state.contacts.get(state.current);
+  if (!c) return $("remove-dialog").close();
+  const merge = !$("remove-choice").hidden && $("remove-form").elements["remove-mode"].value === "merge";
+  const into = merge ? $("remove-into").value : "";
+  if (!$("remove-choice").hidden && !merge &&
+      !confirm(`¿Borrar toda la conversación con ${c.displayName} de este equipo?`)) return;
+  try {
+    await api.removeContact(c.id, into);
+    $("remove-dialog").close();
+  } catch (e) {
+    $("remove-error").textContent = e.message;
+    $("remove-error").hidden = false;
+  }
+}
+
+// contactRemoved llega cuando se quitó un contacto (en esta u otra ventana).
+// Si su conversación se combinó con la de otro, se abre esa.
+function contactRemoved(ev) {
+  state.messages.delete(ev.peer);
+  if (ev.into) state.messages.delete(ev.into);
+  if (state.current === ev.peer) {
+    if (ev.into && state.contacts.has(ev.into)) openChat(ev.into);
+    else showEmpty();
+  } else if (ev.into && state.current === ev.into) {
+    loadHistory(ev.into);
+  } else {
+    renderContacts();
+  }
+}
+
 // cleared llega cuando se borró una conversación (en esta u otra ventana).
 function cleared(ev) {
   const key = ev.room ? ROOM + ev.room : ev.peer;
@@ -1971,6 +2048,7 @@ function connectEvents() {
   });
 
   es.addEventListener("cleared", (e) => cleared(JSON.parse(e.data)));
+  es.addEventListener("removed", (e) => contactRemoved(JSON.parse(e.data)));
   es.addEventListener("reload", reloadAll);
 
   es.addEventListener("focus", () => window.focus());
@@ -2024,6 +2102,8 @@ function bind() {
   $("room-leave-btn").addEventListener("click", leaveRoom);
   $("room-form").addEventListener("submit", saveRoom);
   $("delete-chat-btn").addEventListener("click", deleteChat);
+  $("remove-contact-btn").addEventListener("click", openRemove);
+  $("remove-form").addEventListener("submit", removeContact);
   $("export-btn").addEventListener("click", exportData);
   $("wipe-export-btn").addEventListener("click", exportData);
   $("wipe-open-btn").addEventListener("click", openWipe);

@@ -144,6 +144,11 @@ var migrations = [][]string{
 		)`,
 		`CREATE INDEX outbox_peer ON outbox(peer_id, id)`,
 	},
+	{
+		// removed: el usuario lo quitó de su lista. El renglón se conserva
+		// para mostrar su nombre en las salas; vuelve si se anuncia de nuevo.
+		`ALTER TABLE peers ADD COLUMN removed INTEGER NOT NULL DEFAULT 0`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -214,17 +219,20 @@ type Peer struct {
 	// primera que se vio, o la que el usuario aceptó después.
 	Fingerprint string
 	LastSeen    time.Time
+	// Removed: el usuario lo quitó de su lista (RemovePeer).
+	Removed bool
 }
 
 // UpsertPeer guarda los datos anunciados por un equipo sin tocar su alias ni
 // su grupo. La huella solo se guarda si todavía no tenía una (para cambiarla
-// está SetFingerprint).
+// está SetFingerprint). Un contacto quitado que vuelve a anunciarse regresa
+// a la lista.
 func (s *Store) UpsertPeer(ctx context.Context, p Peer) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO peers (id, name, hostname, ip, last_seen, fingerprint) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name, hostname = excluded.hostname,
-			ip = excluded.ip, last_seen = excluded.last_seen,
+			ip = excluded.ip, last_seen = excluded.last_seen, removed = 0,
 			fingerprint = CASE WHEN peers.fingerprint = '' THEN excluded.fingerprint ELSE peers.fingerprint END`,
 		p.ID, p.Name, p.Hostname, p.IP, p.LastSeen.UnixMilli(), p.Fingerprint)
 	return err
@@ -251,7 +259,7 @@ func peerNotFound(id string, err error) error {
 	return err
 }
 
-const peerColumns = `id, name, hostname, ip, alias, group_name, fingerprint, last_seen`
+const peerColumns = `id, name, hostname, ip, alias, group_name, fingerprint, last_seen, removed`
 
 // scanner lo cumplen *sql.Row y *sql.Rows.
 type scanner interface{ Scan(dest ...any) error }
@@ -259,7 +267,7 @@ type scanner interface{ Scan(dest ...any) error }
 func scanPeer(sc scanner) (Peer, error) {
 	var p Peer
 	var seen int64
-	err := sc.Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &p.Group, &p.Fingerprint, &seen)
+	err := sc.Scan(&p.ID, &p.Name, &p.Hostname, &p.IP, &p.Alias, &p.Group, &p.Fingerprint, &seen, &p.Removed)
 	p.LastSeen = time.UnixMilli(seen)
 	return p, err
 }

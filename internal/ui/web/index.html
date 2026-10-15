@@ -64,6 +64,7 @@
           <button id="room-members-btn" class="text-btn room-only" title="Ver los miembros, agregar o sacar">Miembros</button>
           <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
           <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
+          <button id="remove-contact-btn" class="text-btn contact-only danger-btn" title="Quitar este contacto desconectado de tu lista">Quitar</button>
           <button id="delete-chat-btn" class="text-btn danger-btn" title="Borrar esta conversación de este equipo">Borrar</button>
         </div>
       </header>
@@ -274,6 +275,25 @@
       <div class="actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button value="save" class="primary danger" id="wipe-btn" disabled>Borrar todo</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="remove-dialog">
+    <form method="dialog" id="remove-form">
+      <h2>Quitar a <span id="remove-who"></span></h2>
+      <p class="help">Deja de aparecer en tu lista. Si ese equipo vuelve a conectarse, aparecerá de nuevo.</p>
+      <div id="remove-choice" class="status-options">
+        <strong class="remove-question">¿Qué hacer con su conversación?</strong>
+        <label class="check"><input type="radio" name="remove-mode" value="merge"> Combinarla con la de:</label>
+        <select id="remove-into" aria-label="Contacto con el que combinar la conversación"></select>
+        <small class="help">Úsalo si es la misma persona con otra identidad (p. ej. reinstaló LanChat o cambió de teléfono): sus mensajes quedan juntos en una sola conversación.</small>
+        <label class="check"><input type="radio" name="remove-mode" value="delete"> Borrarla de este equipo</label>
+      </div>
+      <p id="remove-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary danger">Quitar</button>
       </div>
     </form>
   </dialog>

@@ -25,12 +25,40 @@ func (s *Store) Backup(ctx context.Context, path string) error {
 // ofertas de archivos. Conserva el contacto (alias, grupo, huella). Las
 // transferencias en curso deben cancelarse antes.
 func (s *Store) DeleteConversation(ctx context.Context, peerID string) error {
-	return s.purge(ctx,
-		stmt{`DELETE FROM transfer_files WHERE transfer_id IN (SELECT id FROM transfers WHERE peer_id = ?)`, []any{peerID}},
-		stmt{`DELETE FROM transfers WHERE peer_id = ?`, []any{peerID}},
-		stmt{`DELETE FROM messages WHERE peer_id = ? AND room_id = ''`, []any{peerID}},
-		stmt{`DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)`, nil},
-	)
+	return s.purge(ctx, deleteConversation(peerID)...)
+}
+
+func deleteConversation(peerID string) []stmt {
+	return []stmt{
+		{`DELETE FROM transfer_files WHERE transfer_id IN (SELECT id FROM transfers WHERE peer_id = ?)`, []any{peerID}},
+		{`DELETE FROM transfers WHERE peer_id = ?`, []any{peerID}},
+		{`DELETE FROM messages WHERE peer_id = ? AND room_id = ''`, []any{peerID}},
+		{`DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)`, nil},
+	}
+}
+
+// RemovePeer quita al contacto de la lista. Su conversación pasa a la de into
+// (otra identidad de la misma persona, p. ej. si reinstaló LanChat), que
+// también hereda su alias y grupo si no tenía; con into vacío se borra. Los
+// avisos pendientes para él se descartan. Las transferencias en curso deben
+// cancelarse antes.
+func (s *Store) RemovePeer(ctx context.Context, id, into string) error {
+	stmts := []stmt{{`DELETE FROM outbox WHERE peer_id = ?`, []any{id}}}
+	if into == "" {
+		stmts = append(stmts, deleteConversation(id)...)
+	} else {
+		stmts = append(stmts,
+			// Los acuses de lectura pendientes eran para la identidad anterior.
+			stmt{`UPDATE messages SET peer_id = ?, receipt = 0 WHERE peer_id = ? AND room_id = ''`, []any{into, id}},
+			stmt{`UPDATE transfers SET peer_id = ? WHERE peer_id = ?`, []any{into, id}},
+			stmt{`UPDATE OR IGNORE reactions SET peer_id = ? WHERE peer_id = ?
+				AND message_id IN (SELECT id FROM messages WHERE peer_id = ? AND room_id = '')`, []any{into, id, into}},
+			stmt{`UPDATE peers SET alias = (SELECT alias FROM peers WHERE id = ?) WHERE id = ? AND alias = ''`, []any{id, into}},
+			stmt{`UPDATE peers SET group_name = (SELECT group_name FROM peers WHERE id = ?) WHERE id = ? AND group_name = ''`, []any{id, into}},
+		)
+	}
+	stmts = append(stmts, stmt{`UPDATE peers SET removed = 1 WHERE id = ?`, []any{id}})
+	return s.purge(ctx, stmts...)
 }
 
 // keptRoomMessages son los avisos de sala propios que faltan por entregar

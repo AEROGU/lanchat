@@ -315,11 +315,14 @@ type Contact struct {
 	// Status y StatusText: presencia anunciada (solo si está en línea).
 	Status     string
 	StatusText string
+	// Removed: el usuario lo quitó de su lista (RemoveContact). Se sigue
+	// entregando para mostrar su nombre en las salas.
+	Removed bool
 }
 
 func contactFromStore(r store.Peer) Contact {
 	return Contact{ID: r.ID, Name: r.Name, Hostname: r.Hostname, IP: r.IP, Alias: r.Alias, Group: r.Group,
-		Fingerprint: r.Fingerprint, LastSeen: r.LastSeen}
+		Fingerprint: r.Fingerprint, LastSeen: r.LastSeen, Removed: r.Removed}
 }
 
 // overlay reemplaza los datos guardados con los que el equipo anuncia ahora;

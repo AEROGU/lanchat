@@ -328,6 +328,7 @@ func (d *demoBackend) MarkRoomRead(_ context.Context, id string) (bool, error) {
 func (d *demoBackend) ExportData(context.Context, string) error             { return errDemo }
 func (d *demoBackend) DeleteConversation(context.Context, string) error     { return errDemo }
 func (d *demoBackend) DeleteRoomConversation(context.Context, string) error { return errDemo }
+func (d *demoBackend) RemoveContact(context.Context, string, string) error  { return errDemo }
 func (d *demoBackend) WipeData(context.Context) error                       { return errDemo }
 
 // demoScript abre la escena indicada en el fragmento de la dirección, para

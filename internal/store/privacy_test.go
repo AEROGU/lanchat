@@ -216,3 +216,76 @@ func TestPrivacy(t *testing.T) {
 		t.Errorf("el aviso entregado de una sala borrada debía borrarse: %+v", h)
 	}
 }
+
+// Quitar un contacto combina su conversación con la de otro (la misma persona
+// con otra identidad) o la borra; vuelve a la lista si se anuncia de nuevo.
+func TestRemovePeer(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	now := time.Now()
+	for _, id := range []string{"vieja", "nueva", "otra"} {
+		if err := s.UpsertPeer(ctx, Peer{ID: id, Hostname: "OPPO", LastSeen: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.SetAlias(ctx, "vieja", "Angelika")
+	s.SetGroup(ctx, "vieja", "Oficina")
+	s.SetGroup(ctx, "nueva", "Amigos")
+	msg := func(id, peer string, at time.Time) Message {
+		return Message{ID: id, PeerID: peer, Body: id, At: at, SentAt: at, Status: StatusDelivered, Unread: true}
+	}
+	s.InsertMessage(ctx, msg("m1", "vieja", now.Add(-2*time.Minute)))
+	s.InsertMessage(ctx, msg("m2", "nueva", now.Add(-time.Minute)))
+	s.InsertMessage(ctx, msg("m3", "vieja", now))
+	s.SetReaction(ctx, "m1", "vieja", "👍", now)
+	s.EnqueueOps(ctx, []string{"vieja"}, `{"type":"react"}`)
+	s.InsertMessage(ctx, msg("x1", "otra", now))
+	s.MarkRead(ctx, "vieja", true) // acuses de lectura pendientes para la vieja
+
+	if err := s.RemovePeer(ctx, "vieja", "nueva"); err != nil {
+		t.Fatal(err)
+	}
+	h, err := s.History(ctx, "nueva", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h) != 3 || h[0].ID != "m1" || h[1].ID != "m2" || h[2].ID != "m3" {
+		t.Fatalf("conversación combinada: %+v", h)
+	}
+	if len(h[0].Reactions) != 1 || h[0].Reactions[0].PeerID != "nueva" {
+		t.Errorf("reacción: %+v", h[0].Reactions)
+	}
+	if ids, _ := s.PendingReceipts(ctx, "nueva", 10); len(ids) != 0 {
+		t.Errorf("acuses pendientes: %v (eran para la identidad vieja)", ids)
+	}
+	if u, _ := s.UnreadCounts(ctx); u["nueva"] != 1 || u["vieja"] != 0 {
+		t.Errorf("no leídos: %v", u)
+	}
+	if ops, _ := s.PendingOps(ctx, "vieja", 10); len(ops) != 0 {
+		t.Errorf("avisos para la vieja: %v", ops)
+	}
+	nueva, _, _ := s.Peer(ctx, "nueva")
+	if nueva.Alias != "Angelika" || nueva.Group != "Amigos" {
+		t.Errorf("hereda el alias pero conserva su grupo: %+v", nueva)
+	}
+	vieja, ok, _ := s.Peer(ctx, "vieja")
+	if !ok || !vieja.Removed || vieja.Alias != "Angelika" {
+		t.Errorf("la vieja debía quedar quitada, con su nombre para las salas: %+v", vieja)
+	}
+
+	// Sin con quién combinar, la conversación se borra.
+	if err := s.RemovePeer(ctx, "otra", ""); err != nil {
+		t.Fatal(err)
+	}
+	if h, _ := s.History(ctx, "otra", "", 10); len(h) != 0 {
+		t.Errorf("quedaron mensajes: %+v", h)
+	}
+
+	// Si vuelve a anunciarse, regresa a la lista.
+	if err := s.UpsertPeer(ctx, Peer{ID: "otra", Hostname: "OPPO", LastSeen: now}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _, _ := s.Peer(ctx, "otra"); p.Removed {
+		t.Error("al anunciarse debía volver")
+	}
+}

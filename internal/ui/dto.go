@@ -85,6 +85,8 @@ type contactJSON struct {
 	// Status: available, away o busy; vacío si está desconectado.
 	Status     string `json:"status"`
 	StatusText string `json:"statusText"`
+	// Removed: quitado de la lista; solo sirve para nombrarlo en las salas.
+	Removed bool `json:"removed"`
 }
 
 func toContactJSON(c app.Contact) contactJSON {
@@ -105,6 +107,7 @@ func toContactJSON(c app.Contact) contactJSON {
 		StatusText:      c.StatusText,
 		Fingerprint:     identity.Format(c.Fingerprint),
 		IdentityChanged: c.IdentityChanged(),
+		Removed:         c.Removed,
 	}
 	if out.IdentityChanged {
 		out.NewFingerprint = identity.Format(c.AnnouncedFingerprint)

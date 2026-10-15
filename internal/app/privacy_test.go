@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/AEROGU/lanchat/internal/chat"
+	"github.com/AEROGU/lanchat/internal/discovery"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/testutil"
 )
@@ -111,5 +112,54 @@ func TestWipeData(t *testing.T) {
 	}
 	if h, _ := b.app.RoomHistory(ctx, room.ID, "", 10); len(h) != 0 {
 		t.Errorf("el aviso de salida ya entregado debía borrarse: %+v", h)
+	}
+}
+
+// B reinstala LanChat y aparece con otra identidad: A quita la vieja y combina
+// su conversación con la nueva, que recibe lo que quedó pendiente.
+func TestRemoveContactMerges(t *testing.T) {
+	a := startNode(t, testutil.TempDir(t), "PC-A")
+	b := startNode(t, testutil.TempDir(t), "PC-B", a.udpPort())
+	ctx := context.Background()
+	idOld := b.app.Self().ID
+	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idOld))
+	if _, err := a.app.Send(ctx, idOld, "antes de reinstalar"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, a, "A entrega", chatEvent(chat.MessageDelivered, "antes de reinstalar"))
+	if err := a.app.RemoveContact(ctx, idOld, ""); err == nil {
+		t.Error("conectado no debía poder quitarse")
+	}
+
+	b.stop()
+	waitFor(t, a, "A ve salir a B", peerEvent(discovery.PeerOffline, idOld))
+	if _, err := a.app.Send(ctx, idOld, "en espera"); err != nil {
+		t.Fatal(err)
+	}
+	b2 := startNode(t, testutil.TempDir(t), "PC-B", a.udpPort()) // datos nuevos: otra identidad
+	idNew := b2.app.Self().ID
+	waitFor(t, a, "A ve a la nueva B", peerEvent(discovery.PeerOnline, idNew))
+
+	if err := a.app.RemoveContact(ctx, idOld, idOld); err == nil {
+		t.Error("no debía combinarse consigo misma")
+	}
+	if err := a.app.RemoveContact(ctx, idOld, idNew); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b2, "la nueva B recibe el pendiente", chatEvent(chat.MessageReceived, "en espera"))
+	if h, _ := a.app.History(ctx, idNew, "", 10); len(h) != 2 || h[0].Body != "antes de reinstalar" {
+		t.Errorf("conversación combinada: %+v", h)
+	}
+	contacts, err := a.app.Contacts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range contacts {
+		if c.ID == idOld && !c.Removed {
+			t.Error("la identidad vieja debía quedar quitada")
+		}
+	}
+	if _, known := a.app.disc.Peer(idOld); known {
+		t.Error("el descubrimiento debía olvidarla")
 	}
 }

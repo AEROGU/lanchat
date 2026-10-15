@@ -82,6 +82,7 @@ Rutas definidas en `internal/protocol/routes.go`:
 ## Privacidad
 - `GET /api/data/export` (interfaz local): copia consistente con `VACUUM INTO`.
 - Borrar una conversación: mensajes y transferencias con ese contacto (las pendientes se cancelan y se avisa al otro); el contacto (alias, grupo, huella) se conserva.
+- Quitar un contacto (solo desconectado): `peers.removed = 1`; el renglón se conserva para nombrarlo en las salas y el descubrimiento lo olvida. Su conversación pasa a otro contacto (misma persona con otra identidad: mensajes, archivos, reacciones; hereda alias y grupo si no tenía; se descartan acuses y avisos pendientes para la vieja) o se borra. Si vuelve a anunciarse, `UpsertPeer` lo regresa a la lista.
 - Borrar una sala: sus mensajes, salvo los avisos de salida aún sin entregar. Si ya se salió, la sala queda oculta (`rooms.hidden`) y, entregado el aviso, sin nombre ni miembros: solo su ID, para ignorar los mensajes de quienes aún no saben que salió. Si alguien vuelve a agregar al equipo (versión nueva), reaparece.
 - Borrar todo: salir de las salas, cancelar transferencias, borrar mensajes/salas/transferencias, alias y grupos, nombre y estado; `VACUUM`. Se conservan el directorio de equipos con sus huellas (no son datos del usuario y protegen contra suplantaciones), la configuración de red y la identidad.
 - La base usa `secure_delete` y tras cada borrado se vacía el WAL (`wal_checkpoint(TRUNCATE)`): lo borrado no queda en el disco.

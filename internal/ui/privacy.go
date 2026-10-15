@@ -116,6 +116,30 @@ func (s *Server) handleDeleteConversation(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleRemoveContact quita de la lista a un contacto desconectado; su
+// conversación se combina con la de "into" o, sin él, se borra.
+func (s *Server) handleRemoveContact(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Peer string `json:"peer"`
+		Into string `json:"into"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	ctx := r.Context()
+	if err := s.b.RemoveContact(ctx, req.Peer, req.Into); err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	s.hub.broadcast("removed", map[string]string{"peer": req.Peer, "into": req.Into})
+	s.publishContact(ctx, req.Peer)
+	if req.Into != "" {
+		s.publishContact(ctx, req.Into)
+	}
+	s.unreadChanged(ctx)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // deleteRoom borra los mensajes de una sala (y la sala, si este equipo ya salió).
 func (s *Server) deleteRoom(r *http.Request, id string) error {
 	ctx := r.Context()

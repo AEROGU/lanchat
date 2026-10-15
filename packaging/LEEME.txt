@@ -34,6 +34,10 @@ USO
 - El botón de los dos puntos (verde y gris), junto al buscador, oculta o
   muestra a los contactos desconectados. Los que te dejaron mensajes sin
   leer se siguen viendo, y al buscar aparecen todos.
+- Quitar: en la conversación de un contacto desconectado. Sirve cuando la
+  misma persona aparece repetida (reinstaló LanChat o cambió de equipo y
+  llega con otra identidad): su conversación se combina con la del contacto
+  que elijas o se borra. Si ese equipo vuelve a conectarse, reaparece.
 - 👥 Salas: chat grupal. Cualquier miembro puede agregar a otros o
   cambiar el nombre; "Salir" te quita de la sala (conservas el historial).
   Quien estaba desconectado recibe los mensajes al conectarse.
