@@ -35,7 +35,8 @@
 - **Reacciones** con emoji a cualquier mensaje y **eliminar para todos** un
   mensaje propio durante los 10 minutos siguientes a enviarlo.
 - **Selector de emojis** 😊 junto a la caja de texto, con todos los de
-  Unicode por categoría y los usados recientemente.
+  Unicode por categoría y los usados recientemente, en la PC y en el
+  teléfono.
 - **Salas** de chat grupales con administradores (quien la crea puede sacar
   miembros y nombrar más administradores) y **mensajes a varios** contactos
   o a un grupo.

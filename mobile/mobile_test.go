@@ -2,6 +2,8 @@ package mobile
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -34,7 +36,7 @@ func (h *fakeHost) UnreadChanged(total int) {
 func TestStartStop(t *testing.T) {
 	dir := testutil.TempDir(t)
 	// Puertos propios para no chocar con un LanChat abierto en esta PC.
-	cfg := `{"udp_port": 50120, "http_port": 50121, "setup_done": true}`
+	cfg := fmt.Sprintf(`{"udp_port": %d, "http_port": %d, "setup_done": true}`, freeUDPPort(t), freeTCPPort(t))
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -121,4 +123,26 @@ func TestSetNetworks(t *testing.T) {
 	if err := SetNetworks(""); err != nil || len(currentNetworks()) != 0 {
 		t.Errorf("sin redes: %v %v", err, currentNetworks())
 	}
+}
+
+// freeTCPPort y freeUDPPort piden al sistema un puerto libre: uno fijo puede
+// estar ocupado (Windows reparte esos números a conexiones salientes).
+func freeTCPPort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp4", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+func freeUDPPort(t *testing.T) int {
+	t.Helper()
+	c, err := net.ListenPacket("udp4", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	return c.LocalAddr().(*net.UDPAddr).Port
 }

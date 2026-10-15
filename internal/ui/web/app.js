@@ -248,6 +248,31 @@ async function saveStatus(ev) {
 // ---------- Grupos ----------
 
 const COLLAPSED_KEY = "lanchat.collapsedGroups";
+const HIDE_OFFLINE_KEY = "lanchat.hideOffline";
+
+// Ocultar desconectados se recuerda solo en esta ventana (localStorage).
+function hideOffline() {
+  try {
+    return localStorage.getItem(HIDE_OFFLINE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setHideOffline(hide) {
+  try {
+    localStorage.setItem(HIDE_OFFLINE_KEY, hide ? "1" : "0");
+  } catch {
+    // sin almacenamiento: vale hasta que se cierre la ventana
+  }
+  renderContacts();
+}
+
+// visibleContact: al ocultar desconectados se siguen viendo los que tienen
+// mensajes sin leer y la conversación abierta; al buscar, todos.
+function visibleContact(c, filter) {
+  return c.online || filter || !hideOffline() || c.unread > 0 || c.id === state.current;
+}
 const NO_GROUP = "Sin grupo";
 const ROOMS_GROUP = "Salas";
 const CONTACTS_GROUP = "Contactos";
@@ -296,9 +321,11 @@ function renderContacts() {
   const filter = $("search").value.trim().toLocaleLowerCase("es");
   const ul = $("contacts");
   ul.replaceChildren();
-  const list = sortedContacts().filter(
+  const matching = sortedContacts().filter(
     (c) => !filter || `${c.displayName} ${c.detail} ${c.group}`.toLocaleLowerCase("es").includes(filter),
   );
+  const list = matching.filter((c) => visibleContact(c, filter));
+  const hidden = matching.length - list.length;
   const rooms = sortedRooms().filter((r) => !filter || r.name.toLocaleLowerCase("es").includes(filter));
   const collapsed = filter ? new Set() : collapsedGroups(); // al buscar se muestra todo
   if (rooms.length > 0) {
@@ -307,20 +334,41 @@ function renderContacts() {
   }
   const names = groupNames();
   if (names.length === 0) {
-    if (rooms.length > 0 && list.length > 0) ul.append(groupHeader(CONTACTS_GROUP, list, false, false));
+    if (rooms.length > 0 && list.length > 0) ul.append(groupHeader(CONTACTS_GROUP, matching, false, false));
     for (const c of list) ul.append(contactItem(c));
   } else {
     for (const name of [...names, NO_GROUP]) {
+      // El encabezado cuenta a todos (en línea/total); se dibujan los visibles.
+      const all = matching.filter((c) => (c.group || NO_GROUP) === name);
       const members = list.filter((c) => (c.group || NO_GROUP) === name);
       if (members.length === 0) continue;
-      ul.append(groupHeader(name, members, collapsed.has(name)));
+      ul.append(groupHeader(name, all, collapsed.has(name)));
       if (!collapsed.has(name)) for (const c of members) ul.append(contactItem(c));
     }
   }
+  if (hidden > 0) ul.append(hiddenHint(hidden));
   $("no-contacts").hidden = state.contacts.size > 0;
+  const btn = $("offline-btn");
+  btn.setAttribute("aria-pressed", hideOffline());
+  btn.title = hideOffline() ? "Mostrar los contactos desconectados" : "Ocultar los contactos desconectados";
+  btn.setAttribute("aria-label", btn.title);
 
   const total = totalUnread();
   document.title = total > 0 ? `(${total}) LanChat` : "LanChat";
+}
+
+// hiddenHint avisa al final de la lista cuántos desconectados no se ven.
+function hiddenHint(n) {
+  const li = document.createElement("li");
+  li.className = "hidden-hint";
+  li.append(`${n} ${n === 1 ? "desconectado oculto" : "desconectados ocultos"} · `,
+    Object.assign(document.createElement("button"), {
+      type: "button",
+      className: "link-btn",
+      textContent: "Mostrar",
+      onclick: () => setHideOffline(false),
+    }));
+  return li;
 }
 
 function contactItem(c) {
@@ -634,6 +682,8 @@ function openEmojiPanel() {
   // La primera vez: Recientes si ya hay alguno; si no, las caritas.
   emojiTab ??= recentEmoji().some(drawable) ? RECENT_TAB : EMOJI_GROUPS[0];
   renderEmojiPanel();
+  // En el teléfono se esconde el teclado: si no, tapa el panel.
+  if (state.mobile) $("input").blur();
   $("emoji-panel").hidden = false;
   $("emoji-btn").setAttribute("aria-expanded", "true");
 }
@@ -643,13 +693,14 @@ function closeEmojiPanel() {
   $("emoji-btn").setAttribute("aria-expanded", "false");
 }
 
-// insertEmoji escribe el emoji donde está el cursor y deja el panel abierto
-// para poner varios.
+// insertEmoji escribe el emoji donde está el cursor (la caja lo recuerda
+// aunque no tenga el foco) y deja el panel abierto para poner varios.
 function insertEmoji(emoji) {
   const input = $("input");
   input.setRangeText(emoji, input.selectionStart, input.selectionEnd, "end");
   input.dispatchEvent(new Event("input")); // ajusta la altura de la caja
-  input.focus();
+  // En el teléfono, darle el foco abriría el teclado encima del panel.
+  if (!state.mobile) input.focus();
   rememberEmoji(emoji);
 }
 
@@ -1936,6 +1987,7 @@ function connectEvents() {
 
 function bind() {
   $("search").addEventListener("input", renderContacts);
+  $("offline-btn").addEventListener("click", () => setHideOffline(!hideOffline()));
   $("settings-btn").addEventListener("click", openSettings);
   $("status-btn").addEventListener("click", openStatus);
   $("many-btn").addEventListener("click", openMany);

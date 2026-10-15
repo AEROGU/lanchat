@@ -407,6 +407,13 @@ func TestDemo(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.srv.Handler = withDemoScript(s.srv.Handler)
+	// LANCHAT_DEMO_MOBILE=1: la página se comporta como en el teléfono.
+	if os.Getenv("LANCHAT_DEMO_MOBILE") == "1" {
+		s.Shell = &Shell{
+			OpenFile: func(string) error { return errDemo },
+			OpenURL:  func(string) error { return errDemo },
+		}
+	}
 	urlFile := os.Getenv("LANCHAT_DEMO_URL")
 	if urlFile == "" {
 		urlFile = "demo-url.txt"

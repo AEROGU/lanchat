@@ -95,8 +95,11 @@ button, input, textarea { font: inherit; color: inherit; }
 
 .who small, .contact .detail { color: var(--muted); font-size: 12px; }
 
+.search-row { display: flex; align-items: center; gap: 4px; margin: 10px 8px 10px 12px; }
+
 #search {
-  margin: 10px 12px;
+  flex: 1;
+  min-width: 0;
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -858,3 +861,26 @@ dialog input, dialog textarea {
 }
 .emoji-cell:hover, .emoji-cell:focus-visible { background: var(--selected); }
 .emoji-empty { grid-column: 1 / -1; padding: 16px 4px; color: var(--muted); font-size: 13px; }
+
+/* ---------- Ocultar desconectados ---------- */
+
+/* Ícono: un punto en línea y uno desconectado; al ocultar, solo el verde. */
+.offline-icon {
+  display: block;
+  width: 18px;
+  height: 10px;
+  background:
+    radial-gradient(circle at 4px 5px, var(--online) 3.5px, transparent 4px),
+    radial-gradient(circle at 14px 5px, var(--offline) 3.5px, transparent 4px);
+}
+#offline-btn[aria-pressed="true"] { background: var(--selected); }
+#offline-btn[aria-pressed="true"] .offline-icon {
+  background: radial-gradient(circle at 9px 5px, var(--online) 3.5px, transparent 4px);
+}
+
+.hidden-hint {
+  padding: 10px 10px 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.hidden-hint .link-btn { font-size: 12px; }

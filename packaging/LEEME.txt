@@ -31,6 +31,9 @@ USO
   Tras 10 minutos sin usar la PC pasas a Ausente. Ocupado = sin avisos.
 - 📢 Mensaje a varios: el mismo mensaje a varios contactos o a un grupo.
 - Grupos: en una conversación, botón "Grupo" (solo los ves tú).
+- El botón de los dos puntos (verde y gris), junto al buscador, oculta o
+  muestra a los contactos desconectados. Los que te dejaron mensajes sin
+  leer se siguen viendo, y al buscar aparecen todos.
 - 👥 Salas: chat grupal. Cualquier miembro puede agregar a otros o
   cambiar el nombre; "Salir" te quita de la sala (conservas el historial).
   Quien estaba desconectado recibe los mensajes al conectarse.
@@ -39,9 +42,8 @@ USO
   eliminarla. Si el único administrador sale, pasa a serlo el miembro
   más antiguo.
 - 😊 junto a la caja de texto: emojis por categoría para escribirlos en
-  el mensaje (en el teléfono se usan los del teclado). Solo aparecen los
-  que tu Windows sabe mostrar: Windows 10 no trae los más nuevos ni las
-  banderas de países.
+  el mensaje. Solo aparecen los que el equipo sabe mostrar: Windows 10 no
+  trae los más nuevos ni las banderas de países.
 - ☺ junto a un mensaje: reaccionar con un emoji (una reacción por
   persona; elegir la misma la quita) y, en tus mensajes de texto,
   "Eliminar para todos" durante los 10 minutos siguientes a enviarlo: se

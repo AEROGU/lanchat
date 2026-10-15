@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
@@ -38,8 +39,15 @@ func Portable() error {
 // Android. Requiere el SDK y el NDK de Android y gomobile (ver docs/ANDROID.md).
 func Android() error {
 	if _, err := exec.LookPath("gomobile"); err != nil {
-		return errors.New("falta gomobile: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init (ver docs/ANDROID.md)")
+		// Un comando por renglón, sin comentarios en la misma línea: se copian
+		// tal cual a la terminal.
+		return errors.New(strings.Join([]string{
+			"falta gomobile; instálalo con estos dos comandos (detalles en docs/ANDROID.md):",
+			"  go install golang.org/x/mobile/cmd/gomobile@latest",
+			"  gomobile init",
+		}, "\n"))
 	}
+	findAndroidTools()
 	if os.Getenv("ANDROID_HOME") == "" && os.Getenv("ANDROID_SDK_ROOT") == "" {
 		return errors.New("falta ANDROID_HOME: la ruta del SDK de Android (en Android Studio: Settings > Android SDK)")
 	}

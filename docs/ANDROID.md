@@ -45,7 +45,9 @@ Sirve también para preparar otra PC:
   - *SDK Tools*: Android SDK Build-Tools, **NDK (Side by side)** y Android
     SDK Command-line Tools. CMake no hace falta (gomobile usa el clang del
     NDK y la app no tiene código C++ propio).
-- [x] Variables de entorno de usuario (ajusta las rutas):
+- [x] Variables de entorno de usuario (opcionales: si faltan, `mage android`
+  y `mage apk` buscan el SDK, el NDK más nuevo y el JDK donde los instala
+  Android Studio; hacen falta para usar `gomobile` directamente):
   - `ANDROID_HOME` = `C:\Users\<usuario>\AppData\Local\Android\Sdk`
   - `ANDROID_NDK_HOME` = `%ANDROID_HOME%\ndk\<versión>`
   - `JAVA_HOME` = el JDK que trae Android Studio (`...\Android Studio\jbr`)
