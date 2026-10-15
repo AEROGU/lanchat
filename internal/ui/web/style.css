@@ -264,6 +264,7 @@ body.mobile .desktop-only { display: none !important; }
   margin-top: 2px;
 }
 
+.msg .meta .merged { font-style: italic; }
 .msg.pending .meta::after { content: " · pendiente"; }
 .msg.out.delivered .meta::after { content: " ✓"; }
 .msg.out.delivered.read .meta::after { content: " ✓✓"; color: var(--brand); }

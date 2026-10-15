@@ -42,14 +42,27 @@ func deleteConversation(peerID string) []stmt {
 // también hereda su alias y grupo si no tenía; con into vacío se borra. Los
 // avisos pendientes para él se descartan. Las transferencias en curso deben
 // cancelarse antes.
+//
+// Cada mensaje combinado guarda en MergedFrom quién era el contacto quitado
+// (su nombre anunciado, no el alias), para que no pase por escrito por into.
+// Uno que ya venía de otra combinación conserva su origen.
 func (s *Store) RemovePeer(ctx context.Context, id, into string) error {
 	stmts := []stmt{{`DELETE FROM outbox WHERE peer_id = ?`, []any{id}}}
 	if into == "" {
 		stmts = append(stmts, deleteConversation(id)...)
 	} else {
+		p, ok, err := s.Peer(ctx, id)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return peerNotFound(id, ErrNotFound)
+		}
 		stmts = append(stmts,
 			// Los acuses de lectura pendientes eran para la identidad anterior.
-			stmt{`UPDATE messages SET peer_id = ?, receipt = 0 WHERE peer_id = ? AND room_id = ''`, []any{into, id}},
+			stmt{`UPDATE messages SET peer_id = ?, receipt = 0,
+				merged_from = CASE WHEN merged_from = '' THEN ? ELSE merged_from END
+				WHERE peer_id = ? AND room_id = ''`, []any{into, p.Describe(), id}},
 			stmt{`UPDATE transfers SET peer_id = ? WHERE peer_id = ?`, []any{into, id}},
 			stmt{`UPDATE OR IGNORE reactions SET peer_id = ? WHERE peer_id = ?
 				AND message_id IN (SELECT id FROM messages WHERE peer_id = ? AND room_id = '')`, []any{into, id, into}},

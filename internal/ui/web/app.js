@@ -848,11 +848,25 @@ function metaElement(m) {
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = timeFmt.format(new Date(m.at));
+  if (m.mergedFrom) meta.prepend(mergedElement(m));
   if (m.status === "pending" && m.roomId) meta.title = "Pendiente: falta entregarlo a algún miembro desconectado";
   else if (m.status === "pending") meta.title = "Pendiente: se entregará cuando el contacto se conecte";
   else if (m.outgoing && m.readAt) meta.title = `Leído: ${dayLabel(m.readAt)} ${timeFmt.format(new Date(m.readAt))}`;
   else if (m.outgoing) meta.title = "Entregado";
   return meta;
+}
+
+// mergedElement: el mensaje era de otro contacto (una identidad vieja que se
+// quitó) y se combinó aquí; se dice de quién, para que no pase por escrito
+// por este.
+function mergedElement(m) {
+  const span = document.createElement("span");
+  span.className = "merged";
+  span.textContent = `⤷ Combinado de ${m.mergedFrom} · `;
+  span.title = m.outgoing
+    ? `Lo enviaste a otro contacto (${m.mergedFrom}) que quitaste y combinaste con esta conversación.`
+    : `Lo escribió otro contacto (${m.mergedFrom}) que quitaste y combinaste con esta conversación.`;
+  return span;
 }
 
 // ---------- Render: archivos ----------
@@ -879,7 +893,8 @@ function textButton(label, onClick, primary = false) {
 }
 
 function transferStatus(m, t) {
-  const who = state.contacts.get(m.peerId)?.displayName ?? "El contacto";
+  // Uno combinado fue de otro contacto: se nombra a ese.
+  const who = m.mergedFrom?.split(" · ")[0] || (state.contacts.get(m.peerId)?.displayName ?? "El contacto");
   const until = `Disponible hasta el ${expiryFmt.format(new Date(t.expiresAt))}.`;
   const one = t.files.length === 1;
   if (t.outgoing) {

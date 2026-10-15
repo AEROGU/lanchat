@@ -223,8 +223,8 @@ func TestRemovePeer(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
 	now := time.Now()
-	for _, id := range []string{"vieja", "nueva", "otra"} {
-		if err := s.UpsertPeer(ctx, Peer{ID: id, Hostname: "OPPO", LastSeen: now}); err != nil {
+	for _, id := range []string{"vieja", "nueva", "otra", "tercera"} {
+		if err := s.UpsertPeer(ctx, Peer{ID: id, Name: id, Hostname: "OPPO", IP: "10.0.0.1", LastSeen: now}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -252,6 +252,10 @@ func TestRemovePeer(t *testing.T) {
 	if len(h) != 3 || h[0].ID != "m1" || h[1].ID != "m2" || h[2].ID != "m3" {
 		t.Fatalf("conversación combinada: %+v", h)
 	}
+	// Cada mensaje combinado dice de quién era (el nombre anunciado, no el alias).
+	if h[0].MergedFrom != "vieja · OPPO · 10.0.0.1" || h[2].MergedFrom != h[0].MergedFrom || h[1].MergedFrom != "" {
+		t.Errorf("origen: %q %q %q", h[0].MergedFrom, h[1].MergedFrom, h[2].MergedFrom)
+	}
 	if len(h[0].Reactions) != 1 || h[0].Reactions[0].PeerID != "nueva" {
 		t.Errorf("reacción: %+v", h[0].Reactions)
 	}
@@ -271,6 +275,15 @@ func TestRemovePeer(t *testing.T) {
 	vieja, ok, _ := s.Peer(ctx, "vieja")
 	if !ok || !vieja.Removed || vieja.Alias != "Angelika" {
 		t.Errorf("la vieja debía quedar quitada, con su nombre para las salas: %+v", vieja)
+	}
+
+	// Combinar otra vez conserva el origen de los que ya venían combinados.
+	if err := s.RemovePeer(ctx, "nueva", "tercera"); err != nil {
+		t.Fatal(err)
+	}
+	h, _ = s.History(ctx, "tercera", "", 10)
+	if len(h) != 3 || h[0].MergedFrom != "vieja · OPPO · 10.0.0.1" || h[1].MergedFrom != "nueva · OPPO · 10.0.0.1" {
+		t.Errorf("segunda combinación: %+v", h)
 	}
 
 	// Sin con quién combinar, la conversación se borra.

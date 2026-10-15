@@ -38,6 +38,7 @@ USO
   misma persona aparece repetida (reinstaló LanChat o cambió de equipo y
   llega con otra identidad): su conversación se combina con la del contacto
   que elijas o se borra. Si ese equipo vuelve a conectarse, reaparece.
+  Los mensajes combinados muestran en pequeño de quién venían.
 - 👥 Salas: chat grupal. Cualquier miembro puede agregar a otros o
   cambiar el nombre; "Salir" te quita de la sala (conservas el historial).
   Quien estaba desconectado recibe los mensajes al conectarse.

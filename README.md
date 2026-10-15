@@ -179,7 +179,10 @@ Un contacto **desconectado** tiene también **Quitar**: lo saca de la lista.
 Sirve cuando alguien reinstaló LanChat (o borró sus datos) y aparece de nuevo
 con otra identidad: LanChat pregunta si combinar su conversación con la de
 otro contacto (sugiere el que tiene el mismo nombre o equipo) o borrarla. Si
-ese equipo vuelve a conectarse, reaparece en la lista.
+ese equipo vuelve a conectarse, reaparece en la lista. Cada mensaje combinado
+lleva una leyenda pequeña con su origen ("⤷ Combinado de Angelika · OPPO
+Reno10 5G · 192.168.1.149", con el nombre que ese equipo anunciaba, no el
+alias), para que nadie lo haga pasar por escrito por el otro contacto.
 
 Lo borrado no queda recuperable en `lanchat.db`: la base usa `secure_delete`
 (sobrescribe con ceros) y se vacía su registro (`-wal`). Borrar es solo en

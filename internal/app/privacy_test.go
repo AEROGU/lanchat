@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/AEROGU/lanchat/internal/chat"
@@ -147,7 +148,8 @@ func TestRemoveContactMerges(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, b2, "la nueva B recibe el pendiente", chatEvent(chat.MessageReceived, "en espera"))
-	if h, _ := a.app.History(ctx, idNew, "", 10); len(h) != 2 || h[0].Body != "antes de reinstalar" {
+	if h, _ := a.app.History(ctx, idNew, "", 10); len(h) != 2 || h[0].Body != "antes de reinstalar" ||
+		!strings.HasPrefix(h[0].MergedFrom, "PC-B · 127.0.0.1") {
 		t.Errorf("conversación combinada: %+v", h)
 	}
 	contacts, err := a.app.Contacts(ctx)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -149,6 +150,11 @@ var migrations = [][]string{
 		// para mostrar su nombre en las salas; vuelve si se anuncia de nuevo.
 		`ALTER TABLE peers ADD COLUMN removed INTEGER NOT NULL DEFAULT 0`,
 	},
+	{
+		// merged_from: el mensaje era de otro contacto y se combinó en esta
+		// conversación; guarda quién era ("Angelika · OPPO · 192.168.1.149").
+		`ALTER TABLE messages ADD COLUMN merged_from TEXT NOT NULL DEFAULT ''`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -221,6 +227,21 @@ type Peer struct {
 	LastSeen    time.Time
 	// Removed: el usuario lo quitó de su lista (RemovePeer).
 	Removed bool
+}
+
+// Describe nombra al equipo como él se anuncia (sin el alias, que es local):
+// "Angelika · OPPO Reno10 5G · 192.168.1.149".
+func (p Peer) Describe() string {
+	var parts []string
+	for _, s := range []string{p.Name, p.Hostname, p.IP} {
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+	if len(parts) == 0 {
+		return p.ID
+	}
+	return strings.Join(parts, " · ")
 }
 
 // UpsertPeer guarda los datos anunciados por un equipo sin tocar su alias ni
@@ -331,6 +352,9 @@ type Message struct {
 	RoomID string
 	// Deleted: su autor lo eliminó para todos (Body queda vacío).
 	Deleted bool
+	// MergedFrom: era de otro contacto, combinado aquí al quitarlo
+	// (RemovePeer); describe a ese contacto. Vacío si no.
+	MergedFrom string
 	// Reactions: nil si no se consultaron (Message e historiales sí las traen).
 	Reactions []Reaction
 }
@@ -349,7 +373,7 @@ const (
 // que solo cambian después.
 const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast, room_id`
 
-const messageSelect = messageColumns + `, read_at, deleted`
+const messageSelect = messageColumns + `, read_at, deleted, merged_from`
 
 // InsertMessage guarda el mensaje; inserted es false si ese ID ya existía
 // (un reenvío del mismo mensaje).
@@ -494,7 +518,7 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 		var m Message
 		var at, sent, readAt int64
 		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread,
-			&m.Kind, &m.Broadcast, &m.RoomID, &readAt, &m.Deleted); err != nil {
+			&m.Kind, &m.Broadcast, &m.RoomID, &readAt, &m.Deleted, &m.MergedFrom); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)

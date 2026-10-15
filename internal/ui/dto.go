@@ -138,6 +138,8 @@ type messageJSON struct {
 	// Reactions: ausente si el evento no las trae (la página conserva las que
 	// tenía); una lista, aunque esté vacía, las reemplaza.
 	Reactions *[]reactionJSON `json:"reactions,omitempty"`
+	// MergedFrom: era de otro contacto y se combinó en esta conversación.
+	MergedFrom string `json:"mergedFrom,omitempty"`
 }
 
 // reactionJSON es la reacción de un equipo a un mensaje.
@@ -168,18 +170,19 @@ func toMessageJSON(m store.Message) messageJSON {
 		reactions = &list
 	}
 	return messageJSON{
-		Deleted:   m.Deleted,
-		Reactions: reactions,
-		Kind:      kind,
-		ID:        m.ID,
-		PeerID:    m.PeerID,
-		RoomID:    m.RoomID,
-		Outgoing:  m.Outgoing,
-		Body:      m.Body,
-		At:        m.At.UnixMilli(),
-		Status:    status,
-		Broadcast: m.Broadcast,
-		ReadAt:    unixMilli(m.ReadAt),
+		Deleted:    m.Deleted,
+		Reactions:  reactions,
+		Kind:       kind,
+		ID:         m.ID,
+		PeerID:     m.PeerID,
+		RoomID:     m.RoomID,
+		Outgoing:   m.Outgoing,
+		Body:       m.Body,
+		At:         m.At.UnixMilli(),
+		Status:     status,
+		Broadcast:  m.Broadcast,
+		ReadAt:     unixMilli(m.ReadAt),
+		MergedFrom: m.MergedFrom,
 	}
 }
 
