@@ -237,6 +237,29 @@
     </form>
   </dialog>
 
+  <dialog id="share-dialog">
+    <form method="dialog" id="share-form">
+      <h2 id="share-title"></h2>
+      <p id="share-files" class="help share-files"></p>
+      <div class="select-row">
+        Elegir:
+        <button type="button" class="text-btn" data-share-select="online">En línea</button>
+        <button type="button" class="text-btn" data-share-select="none">Ninguno</button>
+      </div>
+      <ul id="share-list" class="pick-list"></ul>
+      <div id="share-text-box" hidden>
+        <label for="share-text">Mensaje</label>
+        <textarea id="share-text" rows="3"></textarea>
+      </div>
+      <small class="help">Los desconectados los reciben al conectarse, mientras LanChat siga activo en este teléfono.</small>
+      <p id="share-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary" id="share-send">Enviar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="room-dialog">
     <form method="dialog" id="room-form">
       <h2 id="room-title"></h2>

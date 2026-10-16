@@ -253,6 +253,14 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
 - [x] **📎 Enviar archivos**: con `mobile`, el 📎 abre un
   `<input type="file" multiple>` (en Kotlin, `onShowFileChooser` con el
   selector de Android) y sube por `/api/files/upload`, como al arrastrar.
+- [x] **Compartir > LanChat** desde otras apps: `MainActivity` recibe
+  `ACTION_SEND`/`SEND_MULTIPLE` (cualquier tipo) y `SharedItems` pasa los
+  nombres a `window.lanchatShare`. La página pregunta a qué contactos
+  enviarlo, lee cada archivo de `/android-share/<token>/<n>` (lo sirve
+  `shouldInterceptRequest` desde el `content://` de la otra app, sin red) y
+  lo sube por `/api/files/upload`; un texto compartido va como mensaje. Solo
+  se aceptan `content://` de otras apps: un `file://` podría apuntar a la
+  identidad de LanChat. Al enviar o cancelar, `shareDone` deja de servirlos.
 - [x] **📁 Enviar carpeta**: oculto en Android (la WebView no elige carpetas).
 - [x] **Abrir archivo recibido / enlace del proyecto**: `Host.openFile`
   (`ACTION_VIEW` con `FileProvider`, solo la carpeta de recibidos) y

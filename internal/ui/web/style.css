@@ -602,6 +602,7 @@ dialog input, dialog textarea, dialog select {
 
 .pick-list label.check { margin: 4px 0; }
 .pick-list .help-inline { margin-left: auto; }
+.share-files { overflow-wrap: anywhere; }
 
 /* ---------- Grupos ---------- */
 

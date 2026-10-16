@@ -82,6 +82,8 @@ TELÉFONOS ANDROID (7 o posterior)
 LanChat arranca solo al encender el teléfono (se desactiva en Ajustes) y
 sigue recibiendo con la ventana cerrada; se detiene desde su notificación.
 Los archivos recibidos quedan en Descargas > LanChat.
+Desde otras apps (Galería, Archivos...), "Compartir > LanChat" envía
+fotos, archivos o un texto: LanChat pregunta a qué contactos enviarlos.
 
 ACTUALIZAR
 ----------

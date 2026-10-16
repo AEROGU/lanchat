@@ -85,6 +85,10 @@ misma interfaz que en la PC; LanChat arranca solo al encender el teléfono
 teléfonos vean a las PCs con la pantalla apagada, las PCs deben tener la
 misma versión o una posterior.
 
+Desde otras apps (Galería, Archivos, WhatsApp…), **Compartir > LanChat** envía
+fotos, archivos o un texto: LanChat se abre y pregunta a qué contactos
+enviarlos.
+
 ### Aviso de Windows SmartScreen
 
 LanChat no está firmado con un certificado de firma de código (cuestan

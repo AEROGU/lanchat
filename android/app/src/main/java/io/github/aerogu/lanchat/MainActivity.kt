@@ -14,6 +14,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -101,12 +102,35 @@ class MainActivity : ComponentActivity() {
         LanChatService.whenStarted(onStarted)
         LanChatService.whenStopped(onStopped)
         pendingChat = intent.getStringExtra(EXTRA_CHAT) // se abre al cargar la página
+        receiveShare(intent)
     }
 
-    // Tocar un aviso con la app abierta (launchMode singleTask) llega aquí.
+    // Tocar un aviso o compartir algo con la app abierta (launchMode
+    // singleTask) llega aquí.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.getStringExtra(EXTRA_CHAT)?.let(::openChat)
+        receiveShare(intent)
+    }
+
+    // Lo compartido desde otra app. La WebView pide sus archivos desde otro
+    // hilo (Client.shouldInterceptRequest).
+    @Volatile private var share: SharedItems? = null
+    private var shareShown = false
+    private var pageLoaded = false
+
+    /** "Compartir > LanChat": la página pregunta a quién enviarlo. */
+    private fun receiveShare(intent: Intent) {
+        share = SharedItems.from(this, intent) ?: return
+        shareShown = false
+        if (pageLoaded) showShare()
+    }
+
+    private fun showShare() {
+        val s = share ?: return
+        if (shareShown) return
+        shareShown = true
+        web.evaluateJavascript("window.lanchatShare?.(${s.json})", null)
     }
 
     // Conversación de un aviso tocado con la app cerrada: se abre en onPageFinished.
@@ -171,6 +195,12 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun openAppSettings() = runOnUiThread { BatteryOptimization.openAppSettings(this@MainActivity) }
 
+        /** Se envió o canceló lo compartido: sus archivos ya no se sirven. */
+        @JavascriptInterface
+        fun shareDone() {
+            share = null
+        }
+
         /** Se abrió una conversación: su aviso ya no hace falta. */
         @JavascriptInterface
         fun chatOpened(chat: String) = Notifications.clearMessage(this@MainActivity, chat)
@@ -185,9 +215,17 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onPageFinished(view: WebView, url: String) {
-            if (url.startsWith("http://127.0.0.1")) pendingChat?.let(::openChat)
+            pageLoaded = url.startsWith("http://127.0.0.1")
+            if (pageLoaded) {
+                pendingChat?.let(::openChat)
+                showShare()
+            }
             pendingChat = null
         }
+
+        // Los archivos compartidos (SharedItems); lo demás va al servidor de LanChat.
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+            share?.serve(this@MainActivity, request.url)
     }
 
     private inner class ChromeClient : WebChromeClient() {

@@ -168,6 +168,11 @@ async function loadState() {
     pendingOpen = null;
     window.lanchatOpen(id);
   }
+  if (pendingShare) {
+    const share = pendingShare;
+    pendingShare = null;
+    openShare(share);
+  }
 }
 
 // lanchatOpen lo llama la app de Android al tocar el aviso de un mensaje: abre
@@ -1203,15 +1208,120 @@ async function uploadItems(items) {
   if (items.length > MAX_OFFER_FILES) {
     return showBanner(`Son más de ${MAX_OFFER_FILES} archivos; comprímelos en un .zip o envíalos en partes.`, 6000);
   }
-  const form = new FormData();
-  for (const { file, dir } of items) form.append(dir ? `dir:${dir}` : "files", file, file.name);
   showBanner(`Preparando ${items.length === 1 ? items[0].file.name : `${items.length} archivos`}…`);
   try {
-    const m = await api.upload(state.current, form);
+    addMessage(await api.upload(state.current, uploadForm(items)));
     hideBanner();
-    addMessage(m);
   } catch (e) {
     showBanner(e.message, 5000);
+  }
+}
+
+function uploadForm(items) {
+  const form = new FormData();
+  for (const { file, dir } of items) form.append(dir ? `dir:${dir}` : "files", file, file.name);
+  return form;
+}
+
+// ---------- Compartir desde otras apps (Android) ----------
+
+// lanchatShare lo llama la app de Android cuando el usuario comparte archivos
+// (o un texto) con LanChat desde otra app: {files: [{name, size, url}], text}.
+// Cada url la sirve la app (MainActivity) mientras el envío esté pendiente.
+// Se pregunta a quién enviarlos.
+let pendingShare = null;
+window.lanchatShare = (share) => {
+  if (!state.loaded) {
+    pendingShare = share;
+    return;
+  }
+  openShare(share);
+};
+
+let currentShare = null;
+
+function openShare(share) {
+  const files = share.files ?? [];
+  const text = share.text ?? "";
+  if (files.length === 0 && !text) return shareFinished();
+  if (files.length > MAX_OFFER_FILES) {
+    showBanner(`Son más de ${MAX_OFFER_FILES} archivos; compártelos en partes.`, 6000);
+    return shareFinished();
+  }
+  currentShare = share;
+  // Otro diálogo abierto se cierra; el de compartir se reutiliza (cerrarlo
+  // avisaría a la app que este envío terminó).
+  const open = document.querySelector("dialog[open]");
+  if (open && open.id !== "share-dialog") open.close();
+  const total = files.reduce((n, f) => n + Math.max(f.size, 0), 0);
+  $("share-title").textContent = files.length === 0 ? "Enviar mensaje"
+    : files.length === 1 ? "Enviar 1 archivo" : `Enviar ${files.length} archivos`;
+  const names = files.slice(0, 3).map((f) => f.name).join(", ");
+  const more = files.length > 3 ? ` y ${files.length - 3} más` : "";
+  $("share-files").textContent = files.length ? `${names}${more}${total ? ` · ${fmtSize(total)}` : ""}` : "";
+  $("share-files").hidden = files.length === 0;
+  $("share-list").replaceChildren(...sortedContacts().map(pickItem));
+  // Un texto compartido junto a archivos (p. ej. el pie de una foto) va como mensaje.
+  $("share-text-box").hidden = !text;
+  $("share-text").value = text;
+  $("share-error").hidden = true;
+  $("share-send").disabled = false;
+  if (!$("share-dialog").open) $("share-dialog").showModal();
+}
+
+// shareFinished avisa a la app que ya no hace falta servir los archivos.
+function shareFinished() {
+  currentShare = null;
+  window.LanChatAndroid?.shareDone?.();
+}
+
+async function sendShare(ev) {
+  if (ev.submitter?.value !== "save") return;
+  ev.preventDefault();
+  const share = currentShare;
+  const peers = [...$("share-list").querySelectorAll("input:checked")].map((b) => b.value);
+  const err = $("share-error");
+  err.hidden = true;
+  if (!share) return $("share-dialog").close();
+  if (peers.length === 0) {
+    err.textContent = "Elige al menos un contacto.";
+    err.hidden = false;
+    return;
+  }
+  const text = $("share-text-box").hidden ? "" : $("share-text").value.trim();
+  $("share-send").disabled = true;
+  try {
+    let items = [];
+    if (share.files?.length) {
+      showBanner("Preparando los archivos…");
+      items = await Promise.all(share.files.map(async (f) => {
+        const resp = await fetch(f.url);
+        if (!resp.ok) throw new Error(`No se pudo leer ${f.name}`);
+        return { file: new File([await resp.blob()], f.name), dir: "" };
+      }));
+    }
+    for (const [i, peer] of peers.entries()) {
+      if (items.length) {
+        showBanner(peers.length === 1 ? "Enviando…" : `Enviando a ${i + 1} de ${peers.length}…`);
+        addMessage(await api.upload(peer, uploadForm(items)));
+      }
+      if (text) addMessage(await api.send(peer, text));
+    }
+    hideBanner();
+    $("share-dialog").close();
+    if (peers.length === 1) openChat(peers[0]);
+    else showBanner(`Enviado a ${peers.length} contactos.`, 4000);
+  } catch (e) {
+    hideBanner();
+    err.textContent = e.message;
+    err.hidden = false;
+    $("share-send").disabled = false;
+  }
+}
+
+function selectShare(which) {
+  for (const box of $("share-list").querySelectorAll("input")) {
+    box.checked = which === "online" && box.dataset.online === "true";
   }
 }
 
@@ -2119,6 +2229,12 @@ function bind() {
   $("delete-chat-btn").addEventListener("click", deleteChat);
   $("remove-contact-btn").addEventListener("click", openRemove);
   $("remove-form").addEventListener("submit", removeContact);
+  $("share-form").addEventListener("submit", sendShare);
+  // Cancelar, Atrás o terminar de enviar: la app deja de servir los archivos.
+  $("share-dialog").addEventListener("close", shareFinished);
+  for (const b of document.querySelectorAll("[data-share-select]")) {
+    b.addEventListener("click", () => selectShare(b.dataset.shareSelect));
+  }
   $("export-btn").addEventListener("click", exportData);
   $("wipe-export-btn").addEventListener("click", exportData);
   $("wipe-open-btn").addEventListener("click", openWipe);
