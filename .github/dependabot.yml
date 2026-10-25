@@ -1,10 +1,11 @@
 # Dependabot abre pull requests cuando hay versiones nuevas de las librerías
 # de Go, de las acciones de GitHub o de la app de Android; ci.yml las verifica
-# antes de aceptarlas.
+# antes de aceptarlas. Los PRs van a develop y llegan a main con cada release.
 version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     groups:
@@ -13,6 +14,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     groups:
@@ -22,6 +24,7 @@ updates:
   # La app de Android: plugin de Gradle y librerías de AndroidX.
   - package-ecosystem: gradle
     directory: /android
+    target-branch: develop
     schedule:
       interval: weekly
     groups:
