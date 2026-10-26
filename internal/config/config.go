@@ -39,6 +39,8 @@ type Config struct {
 	DisableAutoAway bool `json:"disable_auto_away"`
 	// NoReadReceipts: no avisar a los demás cuando se leen sus mensajes.
 	NoReadReceipts bool `json:"no_read_receipts"`
+	// NoPreviews: no generar, guardar ni mostrar miniaturas de imágenes.
+	NoPreviews bool `json:"no_previews"`
 }
 
 // DefaultDir devuelve %APPDATA%\LanChat (o su equivalente en otros sistemas).

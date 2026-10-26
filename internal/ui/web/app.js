@@ -76,6 +76,9 @@ const api = {
   deleteMessage: (id) => request("POST", "/api/messages/delete", { id }),
   react: (id, emoji) => request("POST", "/api/messages/react", { id, emoji }),
   readReceipts: (enabled) => request("POST", "/api/read-receipts", { enabled }),
+  previews: (enabled) => request("POST", "/api/previews", { enabled }),
+  thumbsUsage: () => request("GET", "/api/previews/stored"),
+  clearThumbs: () => request("POST", "/api/previews/clear", {}),
   group: (peer, group) => request("POST", "/api/group", { peer, group }),
   alias: (peer, alias) => request("POST", "/api/alias", { peer, alias }),
   manualPeers: (peers) => request("POST", "/api/manual-peers", { peers }),
@@ -985,6 +988,7 @@ const MAX_PREVIEWS = 4;
 // que se ven antes de aceptar. Tocar abre la imagen completa si ya se puede
 // (enviada, o recibida y terminada).
 function previews(t) {
+  if (!state.self.previews) return null;
   const withThumb = t.files.filter((f) => f.thumb);
   if (withThumb.length === 0) return null;
   const shown = withThumb.slice(0, MAX_PREVIEWS);
@@ -1533,6 +1537,10 @@ function openSettings() {
   $("peers-input").value = (state.manualPeers ?? []).join("\n");
   $("download-input").value = state.downloadDir;
   $("receipts-input").checked = state.self.readReceipts;
+  $("previews-input").checked = state.self.previews;
+  $("thumbs-usage").textContent = "";
+  $("thumbs-clear-btn").disabled = true;
+  api.thumbsUsage().then(renderThumbsUsage).catch(() => {});
   $("about").textContent = [`LanChat ${s.version} · ${s.hostname}`, s.copyright, s.license].join("\n");
   $("settings-error").hidden = true;
   renderAndroid();
@@ -1585,6 +1593,42 @@ async function toggleReceipts() {
   try {
     state.self = await api.readReceipts($("receipts-input").checked);
   } catch (e) {
+    settingsError(e);
+  }
+}
+
+async function togglePreviews() {
+  const input = $("previews-input");
+  try {
+    state.self = await api.previews(input.checked);
+    renderMessages({ keepScroll: true });
+  } catch (e) {
+    input.checked = state.self.previews;
+    settingsError(e);
+  }
+}
+
+function renderThumbsUsage(u) {
+  $("thumbs-usage").textContent = u.count === 0
+    ? "No hay miniaturas guardadas"
+    : `${u.count} ${u.count === 1 ? "miniatura guardada" : "miniaturas guardadas"} (${fmtSize(u.bytes)})`;
+  $("thumbs-clear-btn").disabled = u.count === 0;
+}
+
+// clearThumbs borra las miniaturas ya guardadas; las tarjetas cargadas dejan
+// de mostrarlas sin esperar a recargar la conversación.
+async function clearThumbs() {
+  if (!confirm("¿Borrar todas las miniaturas guardadas? Las imágenes no se borran, pero sus vistas previas no se pueden recuperar.")) return;
+  const btn = $("thumbs-clear-btn");
+  btn.disabled = true; // compactar la base puede tardar
+  try {
+    renderThumbsUsage(await api.clearThumbs());
+    for (const conv of state.messages.values()) {
+      for (const m of conv.list) m.transfer?.files.forEach((f) => (f.thumb = false));
+    }
+    renderMessages({ keepScroll: true });
+  } catch (e) {
+    btn.disabled = false;
     settingsError(e);
   }
 }
@@ -2300,6 +2344,8 @@ function bind() {
     api.uninstall().catch((e) => showBanner(e.message, 5000));
   });
   $("receipts-input").addEventListener("change", toggleReceipts);
+  $("previews-input").addEventListener("change", togglePreviews);
+  $("thumbs-clear-btn").addEventListener("click", clearThumbs);
   $("firewall-btn").addEventListener("click", allowFirewall);
   $("battery-btn").addEventListener("click", () => window.LanChatAndroid?.allowBackground());
   $("app-settings-btn").addEventListener("click", () => window.LanChatAndroid?.openAppSettings());

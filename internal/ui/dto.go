@@ -50,8 +50,10 @@ type selfJSON struct {
 	Idle     bool `json:"idle"`
 	AutoAway bool `json:"autoAway"`
 	// ReadReceipts: se avisa a los demás cuando se leen sus mensajes.
-	ReadReceipts bool   `json:"readReceipts"`
-	Fingerprint  string `json:"fingerprint"`
+	ReadReceipts bool `json:"readReceipts"`
+	// Previews: se muestran miniaturas de las imágenes.
+	Previews    bool   `json:"previews"`
+	Fingerprint string `json:"fingerprint"`
 }
 
 func toSelfJSON(s app.Self) selfJSON {
@@ -60,8 +62,8 @@ func toSelfJSON(s app.Self) selfJSON {
 		AppName: version.Name, Copyright: version.Copyright, License: version.License,
 		LicenseName: version.LicenseName, Repository: version.Repository,
 		Status: s.Status, StatusText: s.StatusText, Idle: s.Idle, AutoAway: s.AutoAwayEnabled,
-		ReadReceipts: s.ReadReceipts,
-		Fingerprint:  identity.Format(s.Fingerprint),
+		ReadReceipts: s.ReadReceipts, Previews: s.Previews,
+		Fingerprint: identity.Format(s.Fingerprint),
 	}
 }
 

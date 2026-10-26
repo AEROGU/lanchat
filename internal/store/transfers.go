@@ -167,6 +167,25 @@ func (s *Store) SetThumb(ctx context.Context, id string, idx int, thumb []byte) 
 		nullBytes(thumb), id, idx)
 }
 
+// ThumbsUsage dice cuántas miniaturas hay guardadas y cuántos bytes ocupan.
+func (s *Store) ThumbsUsage(ctx context.Context) (count int, bytes int64, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT COUNT(thumb), COALESCE(SUM(LENGTH(thumb)), 0)
+		FROM transfer_files WHERE thumb IS NOT NULL`).Scan(&count, &bytes)
+	return count, bytes, err
+}
+
+// ClearThumbs borra todas las miniaturas guardadas y compacta la base para
+// que el archivo libere ese espacio.
+func (s *Store) ClearThumbs(ctx context.Context) error {
+	if err := s.purge(ctx, stmt{`UPDATE transfer_files SET thumb = NULL WHERE thumb IS NOT NULL`, nil}); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `VACUUM`); err != nil {
+		return err
+	}
+	return s.truncateWAL(ctx)
+}
+
 // Thumbs devuelve las miniaturas de una transferencia (índice → JPEG).
 func (s *Store) Thumbs(ctx context.Context, id string) (map[int][]byte, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT idx, thumb FROM transfer_files

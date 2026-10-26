@@ -78,6 +78,9 @@ type Backend interface {
 	SetStatus(status, text string) error
 	SetAutoAway(enabled bool) error
 	SetReadReceipts(enabled bool) error
+	SetPreviews(enabled bool) error
+	ThumbsUsage(ctx context.Context) (count int, bytes int64, err error)
+	ClearThumbs(ctx context.Context) error
 	SetAlias(ctx context.Context, peerID, alias string) error
 	SetGroup(ctx context.Context, peerID, group string) error
 	TrustIdentity(ctx context.Context, peerID string) error
@@ -276,6 +279,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/name", s.handleName)
 	mux.HandleFunc("POST /api/status", s.handleStatus)
 	mux.HandleFunc("POST /api/read-receipts", s.handleReadReceipts)
+	mux.HandleFunc("POST /api/previews", s.handlePreviews)
+	mux.HandleFunc("GET /api/previews/stored", s.handleThumbsUsage)
+	mux.HandleFunc("POST /api/previews/clear", s.handleClearThumbs)
 	mux.HandleFunc("POST /api/alias", s.handleAlias)
 	mux.HandleFunc("POST /api/group", s.handleGroup)
 	mux.HandleFunc("POST /api/trust", s.handleTrust)
@@ -681,6 +687,42 @@ func (s *Server) handleReadReceipts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
+}
+
+func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	if err := s.b.SetPreviews(req.Enabled); err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
+}
+
+// handleThumbsUsage dice cuántas miniaturas hay guardadas y cuánto ocupan.
+func (s *Server) handleThumbsUsage(w http.ResponseWriter, r *http.Request) {
+	count, bytes, err := s.b.ThumbsUsage(r.Context())
+	if err != nil {
+		s.fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Count int   `json:"count"`
+		Bytes int64 `json:"bytes"`
+	}{count, bytes})
+}
+
+// handleClearThumbs borra las miniaturas guardadas y responde el uso que queda.
+func (s *Server) handleClearThumbs(w http.ResponseWriter, r *http.Request) {
+	if err := s.b.ClearThumbs(r.Context()); err != nil {
+		s.fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.handleThumbsUsage(w, r)
 }
 
 func (s *Server) handleGroup(w http.ResponseWriter, r *http.Request) {

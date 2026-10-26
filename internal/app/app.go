@@ -182,7 +182,9 @@ func New(o Options) (a *App, err error) {
 		StagingDir:  filepath.Join(o.Dir, stagingDirName),
 		DownloadDir: a.configuredDownloadDir,
 		Identity:    id,
+		Previews:    a.previewsEnabled,
 	}, st, disc, ch, o.Log)
+	ch.SetPreviews(a.previewsEnabled)
 	a.transfer.Register(srv)
 	return a, nil
 }
@@ -277,6 +279,8 @@ type Self struct {
 	AutoAwayEnabled bool
 	// ReadReceipts: se avisa a los demás cuando se leen sus mensajes.
 	ReadReceipts bool
+	// Previews: se generan, guardan y muestran miniaturas de las imágenes.
+	Previews bool
 	// Fingerprint es la huella de la identidad TLS de este equipo.
 	Fingerprint string
 }
@@ -289,6 +293,7 @@ func (a *App) Self() Self {
 		Status: a.cfg.Status, StatusText: a.cfg.StatusText,
 		Idle: a.idle, AutoAwayEnabled: !a.cfg.DisableAutoAway,
 		ReadReceipts: !a.cfg.NoReadReceipts,
+		Previews:     !a.cfg.NoPreviews,
 		Fingerprint:  a.identity.Fingerprint,
 	}
 }
@@ -451,6 +456,32 @@ func (a *App) SetReadReceipts(enabled bool) error {
 	return a.cfg.Save(a.dir)
 }
 
+// SetPreviews activa o desactiva las miniaturas de las imágenes. Desactivadas,
+// las ofertas nuevas no llevan ni guardan miniatura y las anteriores se
+// conservan sin mostrarse (ClearThumbs las borra).
+func (a *App) SetPreviews(enabled bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.NoPreviews = !enabled
+	return a.cfg.Save(a.dir)
+}
+
+// ThumbsUsage dice cuántas miniaturas hay guardadas y cuánto ocupan.
+func (a *App) ThumbsUsage(ctx context.Context) (count int, bytes int64, err error) {
+	return a.store.ThumbsUsage(ctx)
+}
+
+// ClearThumbs borra todas las miniaturas guardadas y libera su espacio.
+func (a *App) ClearThumbs(ctx context.Context) error {
+	return a.store.ClearThumbs(ctx)
+}
+
+func (a *App) previewsEnabled() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return !a.cfg.NoPreviews
+}
+
 // Send envía (o deja en cola) un mensaje para el contacto.
 func (a *App) Send(ctx context.Context, peerID, body string) (store.Message, error) {
 	if err := a.requireContact(ctx, peerID); err != nil {
@@ -603,6 +634,9 @@ func (a *App) TransfersByID(ctx context.Context, ids []string) (map[string]store
 
 // Thumb devuelve la miniatura JPEG de un archivo de una transferencia.
 func (a *App) Thumb(ctx context.Context, id string, idx int) ([]byte, bool, error) {
+	if !a.previewsEnabled() {
+		return nil, false, nil
+	}
 	thumbs, err := a.store.Thumbs(ctx, id)
 	if err != nil {
 		return nil, false, err

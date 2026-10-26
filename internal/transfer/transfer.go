@@ -84,7 +84,11 @@ type Config struct {
 	DownloadDir func() string
 	// Identity es la identidad TLS de este equipo para hablar con los demás.
 	Identity *identity.Identity
+	// Previews dice si se generan miniaturas de las imágenes (nil = sí).
+	Previews func() bool
 }
+
+func (s *Service) previewsEnabled() bool { return s.cfg.Previews == nil || s.cfg.Previews() }
 
 type EventType int
 
@@ -226,7 +230,9 @@ func (s *Service) Offer(ctx context.Context, peerID string, items []Item) (store
 			Index: i, Name: fi.Name(), Size: fi.Size(), ModTime: fi.ModTime(), Path: it.Path, Dir: it.Dir,
 		})
 	}
-	addThumbs(t.Files)
+	if s.previewsEnabled() {
+		addThumbs(t.Files)
+	}
 	return s.sender.SendOffer(ctx, peerID, offerSummary(t.Files, t.TotalSize()), t)
 }
 
@@ -638,7 +644,7 @@ func (s *Service) download(ctx context.Context, t store.Transfer) {
 			return
 		}
 		// Si el remitente no mandó miniatura (versión anterior), se genera aquí.
-		if !f.HasThumb && thumbs < thumb.MaxPerOffer && thumb.Supported(f.Name) {
+		if !f.HasThumb && thumbs < thumb.MaxPerOffer && thumb.Supported(f.Name) && s.previewsEnabled() {
 			if b := safeThumb(path); b != nil && s.store.SetThumb(s.ctx, t.ID, f.Index, b) == nil {
 				thumbs++
 			}

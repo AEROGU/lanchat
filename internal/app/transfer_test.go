@@ -145,6 +145,69 @@ func TestImagePreview(t *testing.T) {
 	}
 }
 
+// Con las vistas previas desactivadas las miniaturas guardadas se conservan
+// pero no se muestran, las que llegan se descartan y las ofertas propias no
+// las llevan. ClearThumbs borra las guardadas.
+func TestPreviewsDisabled(t *testing.T) {
+	a, b, _ := pair(t)
+	src := testutil.TempDir(t)
+	photo := filepath.Join(src, "foto.png")
+	var buf bytes.Buffer
+	png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 64, 64)))
+	if err := os.WriteFile(photo, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	hasThumb := func(n *node, id string) bool {
+		tr, _, _ := n.app.Transfer(ctx, id)
+		return tr.Files[0].HasThumb
+	}
+
+	m1 := offer(t, a, b, photo)
+	if !hasThumb(b, m1.ID) {
+		t.Fatal("con vistas previas debía llegar la miniatura")
+	}
+	if err := b.app.SetPreviews(false); err != nil {
+		t.Fatal(err)
+	}
+	if b.app.Self().Previews {
+		t.Error("Self().Previews sigue activo")
+	}
+	if !hasThumb(b, m1.ID) {
+		t.Error("desactivar no debía borrar la miniatura guardada")
+	}
+	if _, ok, _ := b.app.Thumb(ctx, m1.ID, 0); ok {
+		t.Error("desactivadas, Thumb no debía devolver nada")
+	}
+
+	if m2 := offer(t, a, b, photo); hasThumb(b, m2.ID) {
+		t.Error("una miniatura recibida no debía guardarse")
+	}
+
+	// Al volver a activarlas, la anterior se ve otra vez.
+	b.app.SetPreviews(true)
+	if _, ok, _ := b.app.Thumb(ctx, m1.ID, 0); !ok {
+		t.Error("la miniatura anterior debía mostrarse otra vez")
+	}
+
+	// Quien envía con las vistas previas desactivadas no genera miniatura.
+	a.app.SetPreviews(false)
+	if m3 := offer(t, a, b, photo); hasThumb(a, m3.ID) || hasThumb(b, m3.ID) {
+		t.Error("la oferta no debía llevar miniatura")
+	}
+
+	// Borrado manual de las guardadas.
+	if n, size, err := b.app.ThumbsUsage(ctx); err != nil || n != 1 || size <= 0 {
+		t.Fatalf("ThumbsUsage = %d, %d, %v; quería 1 miniatura", n, size, err)
+	}
+	if err := b.app.ClearThumbs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n, size, _ := b.app.ThumbsUsage(ctx); n != 0 || size != 0 || hasThumb(b, m1.ID) {
+		t.Errorf("tras borrar quedan %d miniaturas (%d bytes)", n, size)
+	}
+}
+
 // getFile pide un archivo a sender usando la identidad TLS who.
 func getFile(t *testing.T, who *identity.Identity, sender *node, id string, idx int, token string) int {
 	t.Helper()

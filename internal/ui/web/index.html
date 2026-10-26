@@ -124,6 +124,16 @@
         Avisar a los demás cuando leo sus mensajes (✓✓)
       </label>
 
+      <label class="check">
+        <input type="checkbox" id="previews-input">
+        Mostrar vistas previas de las imágenes
+      </label>
+      <small class="help">Desactivadas, no se guardan miniaturas de las imágenes nuevas (ni las llevan las que envías). Las anteriores se conservan por si las vuelves a activar.</small>
+      <div class="input-row">
+        <span id="thumbs-usage" class="status-text"></span>
+        <button type="button" id="thumbs-clear-btn" class="text-btn danger-btn">Borrar miniaturas guardadas</button>
+      </div>
+
       <div id="system-section" hidden>
         <label class="check">
           <input type="checkbox" id="autostart-input">

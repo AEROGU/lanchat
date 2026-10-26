@@ -150,7 +150,8 @@ func toWireOffer(t store.Transfer, thumbs map[int][]byte) *wireOffer {
 }
 
 // incomingTransfer arma la transferencia que se guarda al recibir una oferta.
-func (m wireMessage) incomingTransfer(now time.Time) store.Transfer {
+// Sin withThumbs se descartan las miniaturas (el usuario no quiere vistas previas).
+func (m wireMessage) incomingTransfer(now time.Time, withThumbs bool) store.Transfer {
 	t := store.Transfer{
 		ID:        m.ID,
 		PeerID:    m.From,
@@ -166,7 +167,7 @@ func (m wireMessage) incomingTransfer(now time.Time) store.Transfer {
 	for i, f := range m.Offer.Files {
 		t.Files[i] = store.TransferFile{Index: i, Name: f.Name, Size: f.Size, Dir: f.Dir}
 		// Una miniatura que no sea un JPEG pequeño se descarta (no el mensaje).
-		if thumbs < thumb.MaxPerOffer && thumb.Valid(f.Thumb) {
+		if withThumbs && thumbs < thumb.MaxPerOffer && thumb.Valid(f.Thumb) {
 			t.Files[i].Thumb = f.Thumb
 			thumbs++
 		}
@@ -189,7 +190,17 @@ type Service struct {
 	mu       sync.Mutex
 	closed   bool
 	flushing map[string]*sync.Mutex // un envío a la vez por destinatario, para respetar el orden
+
+	// previews dice si se guardan las miniaturas que llegan con las ofertas
+	// (nil = sí).
+	previews func() bool
 }
+
+// SetPreviews indica de dónde leer si se guardan las miniaturas recibidas.
+// Se llama antes de Start.
+func (s *Service) SetPreviews(enabled func() bool) { s.previews = enabled }
+
+func (s *Service) previewsEnabled() bool { return s.previews == nil || s.previews() }
 
 func New(self Identity, st *store.Store, dir Directory, client *http.Client, log *slog.Logger) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -436,7 +447,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 	var t *store.Transfer
 	if wm.Offer != nil {
 		m.Kind = store.KindFiles
-		tr := wm.incomingTransfer(now)
+		tr := wm.incomingTransfer(now, s.previewsEnabled())
 		t = &tr
 	}
 	inserted, err := s.store.InsertMessageWithTransfer(r.Context(), m, t)

@@ -655,7 +655,12 @@ func TestSendManyRoute(t *testing.T) {
 		t.Errorf("mensaje a varios: %d %+v %v", resp.StatusCode, out, b.sent)
 	}
 }
-func (f *fakeBackend) SetReadReceipts(bool) error                     { return nil }
+func (f *fakeBackend) SetReadReceipts(bool) error { return nil }
+func (f *fakeBackend) SetPreviews(bool) error     { return nil }
+func (f *fakeBackend) ThumbsUsage(context.Context) (int, int64, error) {
+	return 0, 0, nil
+}
+func (f *fakeBackend) ClearThumbs(context.Context) error              { return nil }
 func (f *fakeBackend) SetGroup(context.Context, string, string) error { return nil }
 func (f *fakeBackend) TrustIdentity(context.Context, string) error    { return nil }
 
