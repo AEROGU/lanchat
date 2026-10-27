@@ -109,6 +109,8 @@ var testTransfers = map[string]store.Transfer{
 		Files: []store.TransferFile{{Index: 0, Name: "a.pdf", Size: 3, Done: true, Path: `C:\no\existe\a (1).pdf`}}},
 	"t2": {ID: "t2", PeerID: "c1", Outgoing: true, State: store.TransferOffered,
 		Files: []store.TransferFile{{Index: 0, Name: "b.txt", Size: 5, Path: `C:\docs\b.txt`}}},
+	"t4": {ID: "t4", PeerID: "c1", Outgoing: true, State: store.TransferCanceled,
+		Files: []store.TransferFile{{Index: 0, Name: "c.png", Size: 7, Path: `C:\docs\c.png`}}},
 }
 
 func (f *fakeBackend) OfferFiles(context.Context, string, []string) (store.Message, error) {
@@ -149,6 +151,12 @@ func (f *fakeBackend) RejectTransfer(_ context.Context, id string) error {
 }
 func (f *fakeBackend) CancelTransfer(_ context.Context, id string) error {
 	return f.record("cancel", id)
+}
+func (f *fakeBackend) DeleteTransfer(_ context.Context, id string) error {
+	if testTransfers[id].State != store.TransferCanceled {
+		return errors.New("solo se pueden borrar los envíos cancelados, rechazados o caducados")
+	}
+	return f.record("delete", id)
 }
 func (f *fakeBackend) Transfer(_ context.Context, id string) (store.Transfer, bool, error) {
 	t, ok := testTransfers[id]
@@ -912,12 +920,33 @@ func TestPrivacy(t *testing.T) {
 		t.Errorf("evento al borrar: %+v", got)
 	}
 
+	// Una oferta cancelada se borra; una pendiente o inexistente, no.
+	for _, id := range []string{"t2", "nada"} {
+		resp, _ = postJSON(c, base(s)+"/api/transfers/delete", `{"id":"`+id+`"}`)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("borrar oferta %s: %d", id, resp.StatusCode)
+		}
+	}
+	resp, _ = postJSON(c, base(s)+"/api/transfers/delete", `{"id":"t4"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("borrar oferta cancelada: %d", resp.StatusCode)
+	}
+	found := false
+	for _, ev := range readEvents(t, events.Body, 2) {
+		found = found || ev.name == "deleted" && strings.Contains(ev.data, `"id":"t4"`) && strings.Contains(ev.data, `"peer":"c1"`)
+	}
+	if !found {
+		t.Error("faltó el evento deleted")
+	}
+
 	resp, _ = postJSON(c, base(s)+"/api/contact/remove", `{"peer":"c1","into":"c2"}`)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Errorf("quitar contacto: %d", resp.StatusCode)
 	}
-	found := false
+	found = false
 	for _, ev := range readEvents(t, events.Body, 2) {
 		found = found || ev.name == "removed" && strings.Contains(ev.data, `"into":"c2"`)
 	}
@@ -939,7 +968,7 @@ func TestPrivacy(t *testing.T) {
 	b.mu.Lock()
 	actions := strings.Join(b.sent, ",")
 	b.mu.Unlock()
-	if actions != "delete-conversation:c1,remove-contact:c1>c2,wipe:" {
+	if actions != "delete-conversation:c1,delete:t4,remove-contact:c1>c2,wipe:" {
 		t.Errorf("acciones = %q", actions)
 	}
 }

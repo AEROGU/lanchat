@@ -94,6 +94,7 @@ type Backend interface {
 	AcceptTransfer(ctx context.Context, id string) error
 	RejectTransfer(ctx context.Context, id string) error
 	CancelTransfer(ctx context.Context, id string) error
+	DeleteTransfer(ctx context.Context, id string) error
 	Transfer(ctx context.Context, id string) (store.Transfer, bool, error)
 	TransfersByID(ctx context.Context, ids []string) (map[string]store.Transfer, error)
 	Thumb(ctx context.Context, id string, idx int) ([]byte, bool, error)
@@ -294,6 +295,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/files/pick-folder", s.handlePickFolder)
 	mux.HandleFunc("POST /api/files/open-dir", s.handleOpenDir)
 	mux.HandleFunc("POST "+uploadPath, s.handleUpload)
+	mux.HandleFunc("POST /api/transfers/delete", s.handleDeleteTransfer)
 	mux.HandleFunc("POST /api/transfers/{action}", s.handleTransferAction)
 	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
 	mux.HandleFunc("GET /api/files/thumb", s.handleThumb)

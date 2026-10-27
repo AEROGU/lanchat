@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -35,6 +36,21 @@ func deleteConversation(peerID string) []stmt {
 		{`DELETE FROM messages WHERE peer_id = ? AND room_id = ''`, []any{peerID}},
 		{`DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)`, nil},
 	}
+}
+
+// DeleteTransfer borra de este equipo una oferta de archivos de una
+// conversación 1 a 1: su mensaje, sus archivos (con las miniaturas) y sus
+// reacciones. No mira el estado: quien llama decide si se puede borrar.
+func (s *Store) DeleteTransfer(ctx context.Context, id string) error {
+	if _, ok, err := s.Transfer(ctx, id); err != nil || !ok {
+		return cmp.Or(err, ErrNotFound)
+	}
+	return s.purge(ctx,
+		stmt{`DELETE FROM transfer_files WHERE transfer_id = ?`, []any{id}},
+		stmt{`DELETE FROM transfers WHERE id = ?`, []any{id}},
+		stmt{`DELETE FROM messages WHERE id = ? AND room_id = ''`, []any{id}},
+		stmt{`DELETE FROM reactions WHERE message_id = ?`, []any{id}},
+	)
 }
 
 // RemovePeer quita al contacto de la lista. Su conversación pasa a la de into

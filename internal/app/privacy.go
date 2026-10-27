@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/AEROGU/lanchat/internal/store"
 )
 
 // Privacidad: descargar una copia de los datos y borrarlos (p. ej. cuando el
@@ -24,6 +26,24 @@ func (a *App) DeleteConversation(ctx context.Context, peerID string) error {
 		return fmt.Errorf("cancelando los archivos pendientes: %w", err)
 	}
 	return a.store.DeleteConversation(ctx, peerID)
+}
+
+// DeleteTransfer borra de este equipo una oferta de archivos que no llegó a
+// nada (cancelada, rechazada o caducada), con su mensaje y sus miniaturas. El
+// otro equipo conserva la suya.
+func (a *App) DeleteTransfer(ctx context.Context, id string) error {
+	t, ok, err := a.store.Transfer(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("transferencia inexistente")
+	}
+	switch t.State {
+	case store.TransferCanceled, store.TransferRejected, store.TransferExpired:
+		return a.store.DeleteTransfer(ctx, id)
+	}
+	return errors.New("solo se pueden borrar los envíos cancelados, rechazados o caducados")
 }
 
 // RemoveContact quita de la lista a un contacto desconectado: típicamente una

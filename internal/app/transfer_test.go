@@ -245,6 +245,59 @@ func TestRejectAndCancel(t *testing.T) {
 	}
 }
 
+// Una oferta que no llegó a nada se borra de un equipo (mensaje, archivos y
+// miniaturas); una pendiente no. El otro equipo conserva la suya.
+func TestDeleteTransfer(t *testing.T) {
+	a, b, _ := pair(t)
+	src := testutil.TempDir(t)
+	photo := filepath.Join(src, "foto.png")
+	var buf bytes.Buffer
+	png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 64, 64)))
+	if err := os.WriteFile(photo, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	inHistory := func(n *node, peer, id string) bool {
+		msgs, err := n.app.History(ctx, peer, "", 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range msgs {
+			if m.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	m := offer(t, a, b, photo)
+	if err := b.app.DeleteTransfer(ctx, m.ID); err == nil {
+		t.Error("borrar una oferta pendiente debía fallar")
+	}
+	if err := a.app.CancelTransfer(ctx, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B ve la cancelación", transferState(m.ID, store.TransferCanceled))
+	if err := b.app.DeleteTransfer(ctx, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := b.app.Transfer(ctx, m.ID); ok {
+		t.Error("la transferencia sigue en B")
+	}
+	if inHistory(b, a.app.Self().ID, m.ID) {
+		t.Error("el mensaje sigue en el historial de B")
+	}
+	if n, _, _ := b.app.ThumbsUsage(ctx); n != 0 {
+		t.Errorf("quedan %d miniaturas en B", n)
+	}
+	if _, ok, _ := a.app.Transfer(ctx, m.ID); !ok || !inHistory(a, b.app.Self().ID, m.ID) {
+		t.Error("A debía conservar su oferta")
+	}
+	if err := b.app.DeleteTransfer(ctx, m.ID); err == nil {
+		t.Error("borrar otra vez debía fallar")
+	}
+}
+
 // Un .part existente se reanuda; si su contenido no coincide con el original,
 // el SHA-256 lo detecta, se descarta y el reintento baja todo de nuevo.
 func TestResumeAndIntegrity(t *testing.T) {

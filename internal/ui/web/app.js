@@ -931,6 +931,10 @@ function transferStatus(m, t) {
   return t.state;
 }
 
+// DELETABLE_TRANSFERS: estados en que una oferta no llegó a nada y se puede
+// borrar de este equipo (app.DeleteTransfer).
+const DELETABLE_TRANSFERS = new Set(["canceled", "rejected", "expired"]);
+
 function transferCard(m) {
   const t = m.transfer;
   const div = document.createElement("div");
@@ -973,6 +977,9 @@ function transferCard(m) {
   } else if (t.state === "downloading" || (t.outgoing && t.state === "offered")) {
     actions.append(act(t.outgoing ? "Cancelar envío" : "Cancelar", "cancel", false,
       t.outgoing ? "¿Cancelar el envío?" : "¿Cancelar la descarga?"));
+  } else if (DELETABLE_TRANSFERS.has(t.state)) {
+    actions.append(act("Borrar", "delete", false,
+      "¿Borrar este envío de este equipo, con sus vistas previas? El otro equipo conserva el suyo."));
   }
   if (actions.childElementCount) div.append(actions);
 
@@ -2100,6 +2107,16 @@ function contactRemoved(ev) {
   }
 }
 
+// messageDeleted llega cuando se borró de este equipo una oferta de archivos
+// (en esta u otra ventana): se quita de su conversación.
+function messageDeleted(ev) {
+  state.progress.delete(ev.id);
+  const conv = state.messages.get(ev.peer);
+  if (!conv) return;
+  conv.list = conv.list.filter((m) => m.id !== ev.id);
+  if (ev.peer === state.current) renderMessages({ keepScroll: true });
+}
+
 // cleared llega cuando se borró una conversación (en esta u otra ventana).
 function cleared(ev) {
   const key = ev.room ? ROOM + ev.room : ev.peer;
@@ -2217,6 +2234,7 @@ function connectEvents() {
   });
 
   es.addEventListener("cleared", (e) => cleared(JSON.parse(e.data)));
+  es.addEventListener("deleted", (e) => messageDeleted(JSON.parse(e.data)));
   es.addEventListener("removed", (e) => contactRemoved(JSON.parse(e.data)));
   es.addEventListener("reload", reloadAll);
 

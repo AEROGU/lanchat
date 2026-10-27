@@ -101,6 +101,32 @@ func (s *Server) handleTransferAction(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleDeleteTransfer borra de este equipo una oferta que no llegó a nada
+// (cancelada, rechazada o caducada) y avisa a las ventanas para quitarla.
+func (s *Server) handleDeleteTransfer(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	t, ok, err := s.b.Transfer(r.Context(), req.ID)
+	if err == nil && !ok {
+		err = errors.New("transferencia inexistente")
+	}
+	if err == nil {
+		err = s.b.DeleteTransfer(r.Context(), req.ID)
+	}
+	if err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	s.hub.broadcast("deleted", map[string]string{"id": t.ID, "peer": t.PeerID})
+	s.publishContact(r.Context(), t.PeerID)
+	s.unreadChanged(r.Context())
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleOpenFile abre un archivo recibido o lo muestra en su carpeta. Solo
 // acepta archivos de transferencias completadas, nunca rutas arbitrarias.
 func (s *Server) handleOpenFile(w http.ResponseWriter, r *http.Request) {
