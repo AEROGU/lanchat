@@ -558,7 +558,8 @@ func (s *Service) Cancel(ctx context.Context, id string) error {
 
 // Discard detiene la transferencia si está en curso y borra lo que dejó en
 // este equipo (archivos a medias o copias preparadas para enviar), sin avisar
-// al otro equipo: se usa antes de eliminar su mensaje para todos.
+// al otro equipo: se usa antes de eliminar su mensaje para todos. Los
+// archivos ya descargados se conservan.
 func (s *Service) Discard(ctx context.Context, id string) {
 	t, ok, err := s.store.Transfer(ctx, id)
 	if err != nil || !ok {
@@ -641,6 +642,10 @@ func (s *Service) download(ctx context.Context, t store.Transfer) {
 		p, ok := s.dir.Peer(t.PeerID)
 		if !ok || !p.Online {
 			s.fail(t, errors.New("el remitente no está conectado; reintenta cuando se conecte"))
+			return
+		}
+		if !p.Compatible() {
+			s.fail(t, errors.New("el remitente usa una versión de LanChat incompatible; reintenta cuando actualice"))
 			return
 		}
 		path, err := s.downloadFile(ctx, p, t, f, prog)
@@ -856,7 +861,7 @@ func (s *Service) notifyState(t store.Transfer, state string) {
 // (lo descubrirá con un 410 o al caducar la oferta).
 func (s *Service) notify(t store.Transfer, path string, body []byte) {
 	p, ok := s.dir.Peer(t.PeerID)
-	if !ok || !p.Online {
+	if !ok || !p.Online || !p.Compatible() {
 		return
 	}
 	if body == nil {

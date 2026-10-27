@@ -38,6 +38,7 @@ Paquetes JSON: `{"m":"lanchat","v":1,"t":"hello|announce|bye","id":"…","name":
   - equipos manuales (`manual_peers` en config: `ip`, `ip:puerto` u `hostname`),
   - todos los equipos conocidos: los de otras subredes (basta con que **un** lado tenga al otro configurado) y los de la misma, porque un teléfono con la pantalla apagada no recibe los broadcast (el Wi-Fi en ahorro de energía se los salta; el unicast el módem lo guarda hasta que despierta).
 - Si llega un paquete con nuestro ID desde otra IP → aviso de ID duplicado (config copiada entre PCs).
+- **Versiones**: cada paquete lleva `v` (protocolo, `protocol.Version`) y `app` (versión de LanChat). Un equipo con otro `v` se lista como **incompatible** (no se le envía nada; sus peticiones llegan a rutas `/vN` que no existen). Lo pendiente para él espera a que actualice. A uno con `protocol.LegacyVersion` se le manda **una vez** un mensaje normal en su protocolo pidiéndole actualizar (`chat.NotifyIncompatible`; `peers.notified_protocol` recuerda que ya se le avisó, también tras reiniciar). v3 (0.18): todos respetan "Eliminar para todos" en archivos.
 
 ### Comunicación — HTTP :50001 (entre equipos)
 Rutas definidas en `internal/protocol/routes.go`:
@@ -60,7 +61,7 @@ Rutas definidas en `internal/protocol/routes.go`:
 
 ### Avisos (eliminar para todos y reacciones)
 - Esperan en la tabla `outbox` (uno por destinatario) y se envían por `POST /v1/ops` **después** de los mensajes pendientes, así nunca llegan antes que el mensaje al que se refieren. Si el destinatario está desconectado, le llegan al volver. Un equipo con una versión que no conoce la ruta responde 404 y el aviso se descarta.
-- **Eliminar para todos**: solo mensajes de texto propios y dentro de `protocol.DeleteWindow` (10 min). Lo comprueban quien elimina y quien recibe (con las horas del remitente: no depende de que los relojes coincidan). El mensaje queda como renglón sin texto (`messages.deleted`), se borran sus reacciones y lo que faltaba entregar ya no se entrega. Un envío de archivos no se elimina: se cancela.
+- **Eliminar para todos**: solo mensajes propios y dentro de `protocol.DeleteWindow` (15 min). Lo comprueban quien elimina y quien recibe (con las horas del remitente: no depende de que los relojes coincidan). El mensaje queda como renglón sin texto (`messages.deleted`), se borran sus reacciones y lo que faltaba entregar ya no se entrega. Un envío de archivos propio también, una vez terminado (descargado, cancelado, rechazado o caducado): en ambos equipos se borran la oferta y sus miniaturas, quien la recibía detiene la descarga y borra lo que quedó a medias, y lo ya descargado se queda en su carpeta. Uno que no llegó a nada se puede además borrar solo de este equipo (`app.DeleteTransfer`), sin plazo.
 - **Reacciones**: una por equipo y mensaje (tabla `reactions`), gana la más reciente. Solo reacciona quien participa en la conversación (el otro contacto, o un miembro de la sala). El emoji se valida (`protocol.ValidateReaction`): no puede ser texto.
 - Un aviso que no aplica (mensaje desconocido, sin permiso, fuera de plazo) se ignora y se responde 204: reintentar no serviría.
 
@@ -138,7 +139,7 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
 
 ### Fase 6 (0.13)
 - [x] Administradores de sala: sacar miembros, nombrar y quitar administradores, eliminar la sala vacía.
-- [x] Eliminar un mensaje para todos (10 minutos).
+- [x] Eliminar un mensaje para todos (15 minutos).
 - [x] Reacciones con emoji.
 - [x] Selector de emojis en la caja de texto (PC y teléfono; en el teléfono no abre el teclado al elegir): `internal/ui/web/emoji.js` se genera con `go tool mage emoji` desde `emoji-test.txt` de Unicode (1906 emojis sin tonos de piel, como escapes para no guardar caracteres invisibles). La página prueba en un lienzo cuáles sabe dibujar el sistema y oculta el resto (el "cuadrito" de carácter inexistente, las secuencias que salen como varios emojis y las banderas sin color).
 

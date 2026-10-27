@@ -6,6 +6,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/protocol"
 )
 
 // Peer es otro equipo LanChat visto en la red.
@@ -19,6 +21,8 @@ type Peer struct {
 	HTTPPort int
 	// AppVersion es la versión del programa que usa (puede estar vacía).
 	AppVersion string
+	// Protocol es la versión del protocolo que anuncia (ver Compatible).
+	Protocol int
 	// Status es protocol.StatusAvailable, StatusAway o StatusBusy.
 	Status     string
 	StatusText string
@@ -31,6 +35,11 @@ type Peer struct {
 	udp netip.AddrPort
 }
 
+// Compatible indica si el equipo usa el mismo protocolo que este. A uno
+// incompatible no se le envía nada (salvo chat.NotifyIncompatible) hasta que
+// uno de los dos actualice.
+func (p Peer) Compatible() bool { return p.Protocol == protocol.Version }
+
 // HTTPAddr es la dirección donde el equipo atiende mensajes y archivos.
 func (p Peer) HTTPAddr() netip.AddrPort {
 	return netip.AddrPortFrom(p.IP, uint16(p.HTTPPort))
@@ -41,7 +50,7 @@ type EventType int
 const (
 	// PeerOnline: equipo nuevo o que volvió a conectarse.
 	PeerOnline EventType = iota
-	// PeerUpdated: cambió su nombre, hostname, IP, puerto, versión o estado.
+	// PeerUpdated: cambió su nombre, hostname, IP, puerto, versión, protocolo o estado.
 	PeerUpdated
 	// PeerOffline: se despidió o dejó de anunciarse.
 	PeerOffline
@@ -91,6 +100,7 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 		IP:          src.Addr(),
 		HTTPPort:    p.HTTPPort,
 		AppVersion:  p.App,
+		Protocol:    p.Version,
 		Status:      p.Status,
 		StatusText:  p.StatusText,
 		Fingerprint: p.Fingerprint,
@@ -99,7 +109,7 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 		udp:         src,
 	}
 	changed := cur.Name != updated.Name || cur.Hostname != updated.Hostname || cur.IP != updated.IP ||
-		cur.HTTPPort != updated.HTTPPort || cur.AppVersion != updated.AppVersion ||
+		cur.HTTPPort != updated.HTTPPort || cur.AppVersion != updated.AppVersion || cur.Protocol != updated.Protocol ||
 		cur.Status != updated.Status || cur.StatusText != updated.StatusText ||
 		cur.Fingerprint != updated.Fingerprint
 	cameOnline = !cur.Online

@@ -32,11 +32,11 @@ type wirePeer struct {
 	UDPPort int    `json:"udp_port"`
 }
 
-// handlePeers entrega los equipos en línea que conoce este equipo.
+// handlePeers entrega los equipos en línea y compatibles que conoce este equipo.
 func (a *App) handlePeers(w http.ResponseWriter, r *http.Request) {
 	out := []wirePeer{}
 	for _, p := range a.disc.Peers() {
-		if p.Online && p.UDPAddr().IsValid() && len(out) < protocol.MaxSharedPeers {
+		if p.Online && p.Compatible() && p.UDPAddr().IsValid() && len(out) < protocol.MaxSharedPeers {
 			out = append(out, wirePeer{ID: p.ID, IP: p.IP.String(), UDPPort: int(p.UDPAddr().Port())})
 		}
 	}
@@ -106,7 +106,11 @@ func (a *App) fetchPeers(ctx context.Context, p discovery.Peer) ([]wirePeer, err
 }
 
 // gossip pregunta a un equipo en segundo plano; wg permite esperarlo al cerrar.
+// A uno incompatible no se le pregunta: no entendería la petición.
 func (a *App) gossip(ctx context.Context, wg *sync.WaitGroup, p discovery.Peer) {
+	if !p.Compatible() {
+		return
+	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

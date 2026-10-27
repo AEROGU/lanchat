@@ -190,6 +190,8 @@ type Service struct {
 	mu       sync.Mutex
 	closed   bool
 	flushing map[string]*sync.Mutex // un envío a la vez por destinatario, para respetar el orden
+	// noticeTried: último intento de avisar a cada equipo incompatible.
+	noticeTried map[string]time.Time
 
 	// previews dice si se guardan las miniaturas que llegan con las ofertas
 	// (nil = sí).
@@ -214,15 +216,16 @@ func (s *Service) previewsEnabled() bool { return s.previews == nil || s.preview
 func New(self Identity, st *store.Store, dir Directory, client *http.Client, log *slog.Logger) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{
-		self:     self,
-		store:    st,
-		dir:      dir,
-		client:   client,
-		log:      log,
-		events:   make(chan Event, eventBuffer),
-		ctx:      ctx,
-		cancel:   cancel,
-		flushing: map[string]*sync.Mutex{},
+		self:        self,
+		store:       st,
+		dir:         dir,
+		client:      client,
+		log:         log,
+		events:      make(chan Event, eventBuffer),
+		ctx:         ctx,
+		cancel:      cancel,
+		flushing:    map[string]*sync.Mutex{},
+		noticeTried: map[string]time.Time{},
 	}
 }
 
@@ -319,8 +322,9 @@ func (s *Service) flush(peerID string) {
 	l.Lock()
 	defer l.Unlock()
 
+	// A uno incompatible no: lo pendiente se le entrega cuando actualice.
 	p, ok := s.dir.Peer(peerID)
-	if !ok || !p.Online {
+	if !ok || !p.Online || !p.Compatible() {
 		return
 	}
 	msgs, err := s.store.Pending(s.ctx, peerID)

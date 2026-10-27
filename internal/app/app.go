@@ -27,6 +27,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/transfer"
+	"github.com/AEROGU/lanchat/internal/version"
 )
 
 const (
@@ -261,7 +262,12 @@ func (a *App) onPeer(ev discovery.Event) {
 	}); err != nil {
 		a.log.Error("guardando contacto", "peer", p.ID, "err", err)
 	}
-	if ev.Type == discovery.PeerOnline {
+	// Al actualizar, el otro equipo se reinicia y vuelve como PeerOnline: ahí
+	// se le entrega lo que esperaba mientras era incompatible.
+	switch {
+	case !p.Compatible():
+		a.chat.NotifyIncompatible(p)
+	case ev.Type == discovery.PeerOnline:
 		a.chat.Flush(p.ID)
 	}
 }
@@ -308,8 +314,10 @@ type Contact struct {
 	Alias    string
 	// Group es el grupo local ("" = sin grupo).
 	Group string
-	// AppVersion solo se conoce si el equipo se vio desde que arrancó LanChat.
+	// AppVersion y Protocol solo se conocen si el equipo se vio desde que
+	// arrancó LanChat (Protocol 0 = no se sabe).
 	AppVersion string
+	Protocol   int
 	Online     bool
 	LastSeen   time.Time
 	// Unread es la cantidad de mensajes suyos sin leer.
@@ -335,7 +343,7 @@ func contactFromStore(r store.Peer) Contact {
 // el alias es local y se conserva.
 func (c *Contact) overlay(p discovery.Peer) {
 	c.ID, c.Name, c.Hostname, c.IP = p.ID, p.Name, p.Hostname, p.IP.String()
-	c.AppVersion, c.Online, c.LastSeen = p.AppVersion, p.Online, p.LastSeen
+	c.AppVersion, c.Protocol, c.Online, c.LastSeen = p.AppVersion, p.Protocol, p.Online, p.LastSeen
 	c.Status, c.StatusText, c.AnnouncedFingerprint = "", "", ""
 	if p.Online {
 		c.Status, c.StatusText, c.AnnouncedFingerprint = p.Status, p.StatusText, p.Fingerprint
@@ -347,6 +355,19 @@ func (c *Contact) overlay(p discovery.Peer) {
 // que el usuario confíe en la nueva (TrustIdentity) no se le envía nada.
 func (c Contact) IdentityChanged() bool {
 	return c.Fingerprint != "" && c.AnnouncedFingerprint != "" && c.Fingerprint != c.AnnouncedFingerprint
+}
+
+// Incompatible indica que el contacto usa otra versión del protocolo: no se
+// le envía ni se le recibe nada hasta que uno de los dos actualice.
+func (c Contact) Incompatible() bool { return c.Protocol != 0 && c.Protocol != protocol.Version }
+
+// incompatibleError explica por qué no se le puede enviar nada al contacto.
+func (c Contact) incompatibleError() error {
+	if c.Protocol < protocol.Version {
+		return fmt.Errorf("%s usa una versión anterior de LanChat que ya no es compatible: necesita actualizar a la última (%s)",
+			c.DisplayName(), version.Releases)
+	}
+	return fmt.Errorf("%s usa una versión más nueva de LanChat: actualiza la tuya (%s)", c.DisplayName(), version.Releases)
 }
 
 // DisplayName: alias local > nombre elegido por el otro > hostname > IP.
@@ -621,7 +642,15 @@ func (a *App) Upload(ctx context.Context, peerID string, next func() (name, dir 
 	return m, err
 }
 
-func (a *App) AcceptTransfer(ctx context.Context, id string) error { return a.transfer.Accept(ctx, id) }
+// AcceptTransfer empieza (o reintenta) la descarga de una oferta recibida.
+func (a *App) AcceptTransfer(ctx context.Context, id string) error {
+	if t, ok, err := a.store.Transfer(ctx, id); err == nil && ok {
+		if err := a.requireContact(ctx, t.PeerID); err != nil {
+			return err
+		}
+	}
+	return a.transfer.Accept(ctx, id)
+}
 func (a *App) RejectTransfer(ctx context.Context, id string) error { return a.transfer.Reject(ctx, id) }
 func (a *App) CancelTransfer(ctx context.Context, id string) error { return a.transfer.Cancel(ctx, id) }
 
@@ -675,12 +704,19 @@ func (a *App) SetDownloadDir(dir string) error {
 	return a.cfg.Save(a.dir)
 }
 
+// requireContact falla si el contacto no existe o usa un protocolo
+// incompatible (no se le puede enviar nada).
 func (a *App) requireContact(ctx context.Context, peerID string) error {
-	_, ok, err := a.Contact(ctx, peerID)
-	if err == nil && !ok {
-		err = fmt.Errorf("contacto %s desconocido", peerID)
+	c, ok, err := a.Contact(ctx, peerID)
+	switch {
+	case err != nil:
+		return err
+	case !ok:
+		return fmt.Errorf("contacto %s desconocido", peerID)
+	case c.Incompatible():
+		return c.incompatibleError()
 	}
-	return err
+	return nil
 }
 
 // SetupDone indica si el usuario ya respondió las preguntas de la primera

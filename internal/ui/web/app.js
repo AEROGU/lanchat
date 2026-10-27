@@ -11,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   self: null,
-  limits: { maxName: 64, maxMessageBytes: 65536, deleteWindowMs: 600000 },
+  limits: { maxName: 64, maxMessageBytes: 65536, deleteWindowMs: 900000 },
   contacts: new Map(), // id -> contacto
   rooms: new Map(), // id -> sala
   // current es la conversación abierta: el id del contacto o ROOM + id de la sala.
@@ -382,10 +382,41 @@ function hiddenHint(n) {
   return li;
 }
 
+// versionLabel acorta la versión de LanChat para la lista: "v0.18.0", o
+// "v0.18.0-dev" si es un compilado de pruebas ("0.18.0-3-gabc1234-dirty").
+function versionLabel(v) {
+  const m = /^v?(\d+\.\d+\.\d+(?:-rc\.\d+)?)(-.+)?$/.exec(v);
+  if (!m) return v;
+  return `v${m[1]}${m[2] ? "-dev" : ""}`;
+}
+
+// incompatibleText explica por qué no se puede escribir a un contacto con
+// otra versión del protocolo ("" si es compatible).
+function incompatibleText(c) {
+  const url = `${state.self.repository}/releases`;
+  const theirs = c.appVersion ? ` (${c.appVersion})` : "";
+  if (c.incompatible === "older") {
+    return `${c.displayName} usa una versión anterior de LanChat${theirs} que ya no es compatible con la tuya: no puedes enviarle ni recibir sus mensajes hasta que actualice. LanChat le envía un aviso automático para que instale la última desde ${url}`;
+  }
+  if (c.incompatible === "newer") {
+    return `${c.displayName} usa una versión más nueva de LanChat${theirs} que ya no es compatible con la tuya: para volver a escribirse, actualiza desde ${url}`;
+  }
+  return "";
+}
+
+// incompatibleBadge es la marca roja "incompatible" de la lista.
+function incompatibleBadge() {
+  const span = document.createElement("span");
+  span.className = "incompatible";
+  span.textContent = "incompatible";
+  return span;
+}
+
 function contactItem(c) {
   const li = document.createElement("li");
   li.className = "contact" + (c.online ? "" : " offline") + (c.id === state.current ? " selected" : "");
   li.title = c.online ? statusLabel(c.status, c.statusText) : "Desconectado";
+  if (c.appVersion) li.title += `\nLanChat ${c.appVersion}`;
 
   const dot = document.createElement("span");
   dot.className = dotClass(c.online, c.status);
@@ -402,8 +433,16 @@ function contactItem(c) {
   const detail = document.createElement("span");
   detail.className = "detail";
   detail.textContent = c.detail;
+  if (c.appVersion) detail.append(` · ${versionLabel(c.appVersion)}`);
   text.append(name, detail);
-  if (c.online && c.statusText) {
+  if (c.incompatible) {
+    // En su propia línea para que no la corte el ancho de la lista.
+    const line = document.createElement("span");
+    line.className = "status-line";
+    line.append(incompatibleBadge(), c.incompatible === "older" ? " · debe actualizar" : " · actualiza tu LanChat");
+    text.append(line);
+    li.title = incompatibleText(c);
+  } else if (c.online && c.statusText) {
     const st = document.createElement("span");
     st.className = "status-line";
     st.textContent = c.statusText;
@@ -481,6 +520,7 @@ function renderRoomHeader(r) {
   $("peer-detail").textContent = r.members.map(memberName).join(", ");
   $("peer-dot").hidden = true;
   $("identity-note").hidden = true;
+  $("incompatible-note").hidden = true;
   for (const id of ["room-rename-btn", "room-leave-btn"]) $(id).disabled = r.left;
   $("composer").hidden = r.left;
   const note = $("offline-note");
@@ -498,7 +538,10 @@ function renderHeader() {
   if (!c) return;
   showFor(false);
   $("peer-dot").hidden = false;
-  $("composer").hidden = false;
+  // A un contacto incompatible no se le puede escribir.
+  $("composer").hidden = Boolean(c.incompatible);
+  $("incompatible-note").hidden = !c.incompatible;
+  $("incompatible-note").textContent = incompatibleText(c);
   $("peer-name").textContent = c.displayName;
   let detail = c.detail;
   if (c.online) detail += ` · ${statusLabel(c.status, c.statusText)}`;
@@ -728,10 +771,11 @@ const MORE_REACTIONS = ["👏", "🎉", "🔥", "✅", "👌", "💪", "🙌", "
 const myReaction = (m) => (m.reactions ?? []).find((r) => r.peer === "")?.emoji ?? "";
 
 // canDelete: un mensaje propio dentro del plazo se elimina para todos, si es
-// de texto o un envío de archivos que no llegó a nada.
+// de texto o un envío de archivos que ya terminó (descargado o que no llegó
+// a nada). Lo descargado se queda en la carpeta del otro.
 function canDelete(m) {
   if (!m.outgoing || m.deleted || Date.now() - m.at > state.limits.deleteWindowMs) return false;
-  return m.kind === "text" || canDeleteHere(m);
+  return m.kind === "text" || canDeleteHere(m) || (m.kind === "files" && m.transfer?.state === "completed");
 }
 
 // canDeleteHere: un envío de archivos que no llegó a nada se borra de este
@@ -838,7 +882,8 @@ async function deleteForEveryone(m) {
   closeMsgMenu();
   const where = m.roomId ? "todos los miembros de la sala" : memberName(m.peerId);
   const what = m.kind === "files" ? "este envío" : "este mensaje";
-  if (!confirm(`¿Eliminar ${what} para todos? También se borrará en el equipo de ${where}.`)) return;
+  const kept = m.transfer?.state === "completed" ? " Los archivos que ya descargó se quedan en su carpeta." : "";
+  if (!confirm(`¿Eliminar ${what} para todos? También se borrará en el equipo de ${where}.${kept}`)) return;
   try {
     addMessage(await api.deleteMessage(m.id));
   } catch (e) {
@@ -1452,6 +1497,7 @@ function showEmpty() {
   $("composer").hidden = true;
   $("offline-note").hidden = true;
   $("identity-note").hidden = true;
+  $("incompatible-note").hidden = true;
   $("messages").replaceChildren();
   renderContacts();
 }
@@ -1751,6 +1797,12 @@ function pickItem(c) {
   const detail = document.createElement("small");
   detail.className = "help-inline";
   detail.textContent = c.detail;
+  // A un contacto incompatible no se le puede enviar ni agregar a una sala.
+  if (c.incompatible) {
+    box.disabled = true;
+    detail.append(" · ", incompatibleBadge());
+    label.title = incompatibleText(c);
+  }
   label.append(box, dot, name, detail);
   li.append(label);
   return li;
@@ -1758,9 +1810,9 @@ function pickItem(c) {
 
 function selectMany(which, group) {
   for (const box of $("many-list").querySelectorAll("input")) {
-    box.checked = which === "all" ||
+    box.checked = !box.disabled && (which === "all" ||
       (which === "online" && box.dataset.online === "true") ||
-      (which === "group" && box.dataset.group === group);
+      (which === "group" && box.dataset.group === group));
   }
 }
 

@@ -715,7 +715,7 @@ func (f *fakeBackend) SetRoomAdmin(_ context.Context, room, member string, admin
 }
 func (f *fakeBackend) DeleteForEveryone(_ context.Context, id string) (store.Message, error) {
 	if id != "m1" {
-		return store.Message{}, errors.New("ya pasaron más de 10 minutos")
+		return store.Message{}, errors.New("ya pasaron más de 15 minutos")
 	}
 	return store.Message{ID: id, PeerID: "c1", Outgoing: true, Deleted: true, At: time.Now(), Reactions: []store.Reaction{}}, nil
 }
@@ -1184,6 +1184,21 @@ func TestEmojiData(t *testing.T) {
 	for _, bad := range []string{skinTone, string(rune(0x200D)), string(rune(0xFE0F))} {
 		if strings.Contains(js, bad) {
 			t.Errorf("emoji.js no debía contener %q", bad)
+		}
+	}
+}
+
+// La página distingue a quien usa un protocolo anterior (debe actualizar) del
+// que usa uno más nuevo (este equipo debe actualizar).
+func TestContactIncompatible(t *testing.T) {
+	for proto, want := range map[int]string{
+		0:                      "", // no se ha visto: no se sabe
+		protocol.Version:       "",
+		protocol.LegacyVersion: "older",
+		protocol.Version + 1:   "newer",
+	} {
+		if got := toContactJSON(app.Contact{ID: "c", Protocol: proto}).Incompatible; got != want {
+			t.Errorf("protocolo %d: incompatible = %q, quería %q", proto, got, want)
 		}
 	}
 }

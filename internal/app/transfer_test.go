@@ -248,7 +248,7 @@ func TestRejectAndCancel(t *testing.T) {
 // Una oferta que no llegó a nada se borra de un equipo (mensaje, archivos y
 // miniaturas); una pendiente no. El otro equipo conserva la suya.
 func TestDeleteTransfer(t *testing.T) {
-	a, b, _ := pair(t)
+	a, b, downloads := pair(t)
 	src := testutil.TempDir(t)
 	photo := filepath.Join(src, "foto.png")
 	var buf bytes.Buffer
@@ -323,6 +323,24 @@ func TestDeleteTransfer(t *testing.T) {
 		if c, _, _ := n.app.ThumbsUsage(ctx); c != want {
 			t.Errorf("%s tiene %d miniaturas, quería %d", n.app.Self().Hostname, c, want)
 		}
+	}
+
+	// Una ya descargada también: desaparece de la conversación de ambos,
+	// pero el archivo se queda en la carpeta de B.
+	m3 := offer(t, a, b, photo)
+	if err := b.app.AcceptTransfer(ctx, m3.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, a, "A ve completada", transferState(m3.ID, store.TransferCompleted))
+	if _, err := a.app.DeleteForEveryone(ctx, m3.ID); err != nil {
+		t.Fatalf("eliminar para todos una descargada: %v", err)
+	}
+	waitFor(t, b, "B la ve eliminada", msgEvent(chat.MessageDeleted, m3.ID))
+	if _, ok, _ := b.app.Transfer(ctx, m3.ID); ok {
+		t.Error("B conserva la oferta descargada")
+	}
+	if _, err := os.Stat(filepath.Join(downloads, "foto.png")); err != nil {
+		t.Errorf("el archivo descargado debía quedarse en la carpeta de B: %v", err)
 	}
 }
 

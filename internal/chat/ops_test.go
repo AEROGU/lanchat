@@ -195,9 +195,10 @@ func TestHandleOps(t *testing.T) {
 	}
 }
 
-// Una oferta de archivos se elimina para todos si no llegó a nada: quien la
-// envió, una vez cancelada (o rechazada o caducada); quien la recibió, si no
-// la terminó de descargar. Se limpia en disco y se borra con sus miniaturas.
+// Una oferta de archivos se elimina para todos cuando ya terminó: quien la
+// envió, descargada, cancelada, rechazada o caducada (no mientras sigue
+// pendiente); quien la recibió, en cualquier estado (lo descargado se queda
+// en su carpeta). Se limpia en disco y se borra con sus miniaturas.
 func TestDeleteFilesForEveryone(t *testing.T) {
 	s := newTestService(t)
 	ctx := context.Background()
@@ -221,23 +222,23 @@ func TestDeleteFilesForEveryone(t *testing.T) {
 		return m.Deleted && !ok
 	}
 
-	// Enviadas: la pendiente o la completada no; la cancelada sí.
+	// Enviadas: la pendiente no; la completada y la cancelada sí.
 	offer("pendiente", true, store.TransferOffered)
 	offer("completa", true, store.TransferCompleted)
 	offer("cancelada", true, store.TransferCanceled)
-	for _, id := range []string{"pendiente", "completa"} {
-		if _, err := s.DeleteForEveryone(ctx, id); err == nil {
-			t.Errorf("%s: eliminar para todos debía fallar", id)
+	if _, err := s.DeleteForEveryone(ctx, "pendiente"); err == nil {
+		t.Error("eliminar para todos una oferta pendiente debía fallar")
+	}
+	for _, id := range []string{"completa", "cancelada"} {
+		if _, err := s.DeleteForEveryone(ctx, id); err != nil || !gone(id) {
+			t.Errorf("eliminar %s: %v", id, err)
 		}
 	}
-	if _, err := s.DeleteForEveryone(ctx, "cancelada"); err != nil || !gone("cancelada") {
-		t.Errorf("eliminar la cancelada: %v", err)
-	}
-	if ops, _ := s.store.PendingOps(ctx, "otro", 10); len(ops) != 1 || !strings.Contains(ops[0].Payload, `"msg":"cancelada"`) {
-		t.Errorf("aviso pendiente para el otro equipo: %+v", ops)
+	if ops, _ := s.store.PendingOps(ctx, "otro", 10); len(ops) != 2 {
+		t.Errorf("avisos pendientes para el otro equipo: %+v", ops)
 	}
 
-	// Recibidas: se elimina la que no se descargó; la descargada se conserva.
+	// Recibidas: se eliminan la pendiente y la descargada.
 	offer("recibida", false, store.TransferOffered)
 	offer("descargada", false, store.TransferCompleted)
 	now := time.Now().UnixMilli()
@@ -247,16 +248,15 @@ func TestDeleteFilesForEveryone(t *testing.T) {
 	); code != http.StatusNoContent {
 		t.Fatalf("avisos: %d", code)
 	}
-	if !gone("recibida") {
-		t.Error("la oferta recibida debía eliminarse")
+	for _, id := range []string{"recibida", "descargada"} {
+		if !gone(id) {
+			t.Errorf("%s debía eliminarse", id)
+		}
 	}
-	if m, _, _ := s.store.Message(ctx, "descargada"); m.Deleted {
-		t.Error("la descargada no debía eliminarse")
+	if n, _, _ := s.store.ThumbsUsage(ctx); n != 1 { // solo la pendiente
+		t.Errorf("quedan %d miniaturas, quería 1", n)
 	}
-	if n, _, _ := s.store.ThumbsUsage(ctx); n != 3 { // pendiente, completa y descargada
-		t.Errorf("quedan %d miniaturas, quería 3", n)
-	}
-	if strings.Join(discarded, ",") != "cancelada,recibida" {
+	if strings.Join(discarded, ",") != "completa,cancelada,recibida,descargada" {
 		t.Errorf("limpiadas en disco: %v", discarded)
 	}
 }

@@ -235,15 +235,13 @@ func (s *Service) recvLoop() {
 		src = netip.AddrPortFrom(src.Addr().Unmap(), src.Port())
 		p, err := decodePacket(buf[:n])
 		if err != nil {
-			var inc incompatibleError
-			if errors.As(err, &inc) && !incompatWarned[src.Addr()] {
-				incompatWarned[src.Addr()] = true
-				s.log.Warn("equipo con otra versión de LanChat; hay que actualizar uno de los dos",
-					"ip", src.Addr(), "app", p.App, "err", err)
-				continue
-			}
 			s.log.Debug("paquete descartado", "src", src, "err", err)
 			continue
+		}
+		if p.Version != protocol.Version && !incompatWarned[src.Addr()] {
+			incompatWarned[src.Addr()] = true
+			s.log.Warn("equipo con otra versión del protocolo; hay que actualizar uno de los dos",
+				"ip", src.Addr(), "app", p.App, "protocolo", p.Version)
 		}
 		s.handle(p, src)
 	}
@@ -274,8 +272,9 @@ func (s *Service) handle(p packet, src netip.AddrPort) {
 			s.events <- *ev
 		}
 		// Responder por unicast para que el otro nos vea sin esperar al
-		// siguiente anuncio (y para que funcione entre subredes).
-		if p.Type == typeHello || cameOnline {
+		// siguiente anuncio (y para que funcione entre subredes). A uno
+		// incompatible no: descartaría la respuesta.
+		if (p.Type == typeHello || cameOnline) && p.Version == protocol.Version {
 			s.send(typeAnnounce, src)
 		}
 	}

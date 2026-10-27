@@ -94,6 +94,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 
 .who small, .contact .detail { color: var(--muted); font-size: 12px; }
+/* Contacto con otra versión del protocolo: no se le puede escribir. */
+.incompatible { color: var(--danger); font-weight: 600; }
 
 .search-row { display: flex; align-items: center; gap: 4px; margin: 10px 8px 10px 12px; }
 

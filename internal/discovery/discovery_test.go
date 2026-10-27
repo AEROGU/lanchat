@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -225,9 +224,31 @@ func TestDecodePacketRejectsForeign(t *testing.T) {
 		t.Errorf("paquete válido rechazado: %+v, %v", p, err)
 	}
 
-	_, err = decodePacket([]byte(`{"m":"lanchat","v":99,"t":"hello","id":"x","host":"h","port":50001}`))
-	var inc incompatibleError
-	if !errors.As(err, &inc) || inc.version != 99 {
-		t.Errorf("protocolo v99 debía ser incompatible, err = %v", err)
+	// Otra versión del protocolo se entiende, para listar al equipo como
+	// incompatible.
+	p, err = decodePacket([]byte(`{"m":"lanchat","v":99,"app":"9.0.0","t":"hello","id":"x","host":"h","port":50001,"fp":"abababababababababababababababababababababababababababababababab"}`))
+	if err != nil || p.Version != 99 {
+		t.Errorf("protocolo v99: %+v, %v", p, err)
+	}
+	if _, err := decodePacket([]byte(`{"m":"lanchat","t":"hello","id":"x","host":"h","port":50001,"fp":"abababababababababababababababababababababababababababababababab"}`)); err == nil {
+		t.Error("sin versión de protocolo debía rechazarse")
+	}
+}
+
+// Un equipo con otro protocolo aparece en la lista, marcado incompatible; si
+// actualiza, pasa a compatible con un PeerUpdated.
+func TestIncompatiblePeer(t *testing.T) {
+	r := newRegistry()
+	src := netip.MustParseAddrPort("192.168.1.30:50000")
+	old := packet{Magic: protocol.Magic, Version: protocol.LegacyVersion, App: "0.17.0", Type: typeAnnounce,
+		ID: "viejo", Hostname: "PC-VIEJA", HTTPPort: 50001}
+	ev, _ := r.seen(old, src, time.Now())
+	if ev == nil || ev.Type != PeerOnline || ev.Peer.Compatible() || ev.Peer.Protocol != protocol.LegacyVersion {
+		t.Fatalf("equipo viejo: %+v", ev)
+	}
+	updated := old
+	updated.Version, updated.App = protocol.Version, "0.18.0"
+	if ev, _ := r.seen(updated, src, time.Now()); ev == nil || ev.Type != PeerUpdated || !ev.Peer.Compatible() {
+		t.Errorf("tras actualizar: %+v", ev)
 	}
 }

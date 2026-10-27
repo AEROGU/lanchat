@@ -16,10 +16,21 @@ import (
 	"unicode/utf8"
 )
 
-// Version es la versión del protocolo (paquetes UDP y API HTTP). Solo se
-// incrementa con cambios incompatibles: agregar un campo nuevo al JSON no lo
-// es, porque los equipos viejos ignoran los campos que no conocen.
-const Version = 2 // 2: comunicación cifrada con TLS (ver internal/identity)
+// Version es la versión del protocolo (paquetes UDP y API HTTP). Se
+// incrementa con cambios incompatibles, y también cuando hay que dejar de
+// comunicarse con versiones que ya no cumplen algo importante: agregar un
+// campo nuevo al JSON no lo es, porque los equipos viejos ignoran los campos
+// que no conocen. Los equipos con otra versión se listan como incompatibles y
+// no se les envía nada.
+//
+//   - 2: comunicación cifrada con TLS (ver internal/identity).
+//   - 3: todos respetan "eliminar para todos" también en los envíos de
+//     archivos (LanChat 0.18).
+const Version = 3
+
+// LegacyVersion es la versión anterior del protocolo. A esos equipos solo se
+// les manda, una vez, un mensaje para que actualicen (chat.NotifyIncompatible).
+const LegacyVersion = Version - 1
 
 // APIPrefix es el prefijo de las rutas HTTP entre equipos, p. ej. "/v1".
 var APIPrefix = "/v" + strconv.Itoa(Version)

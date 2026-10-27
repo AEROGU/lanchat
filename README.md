@@ -33,7 +33,10 @@
 - **Mensajes** 1 a 1 con historial, entrega a los desconectados cuando se
   conectan, ✓ entregado y ✓✓ leído (desactivable).
 - **Reacciones** con emoji a cualquier mensaje y **eliminar para todos** un
-  mensaje propio durante los 10 minutos siguientes a enviarlo.
+  mensaje propio durante los 15 minutos siguientes a enviarlo. Un envío de
+  archivos también, una vez descargado, cancelado, rechazado o caducado: lo
+  descargado se queda en la carpeta del otro. Un envío que no llegó a nada
+  se puede **borrar de este equipo** en cualquier momento.
 - **Selector de emojis** 😊 junto a la caja de texto, con todos los de
   Unicode por categoría y los usados recientemente, en la PC y en el
   teléfono.
@@ -158,8 +161,15 @@ P-256 en `identity.key`) y los demás la reconocen por su **huella**:
   descargados con un navegador, y LanChat pide confirmación antes de abrir
   programas o scripts.
 
-Desde la 0.10 se usa el protocolo v2 (cifrado), que no se comunica con
-versiones anteriores: hay que actualizar todas las PCs.
+Desde la 0.18 se usa el protocolo v3, que no se comunica con versiones
+anteriores: así todos los equipos respetan "Eliminar para todos" (también en
+los envíos de archivos). En la lista, junto a la IP, se ve la versión de
+LanChat de cada contacto; uno con una versión anterior (o más nueva) aparece
+como **incompatible** en rojo y no se le puede escribir ni se reciben sus
+mensajes. LanChat le envía una sola vez un aviso automático para que
+actualice desde https://github.com/AEROGU/lanchat/releases. Lo que estaba en
+cola para él se entrega cuando actualice. Hay que actualizar todas las PCs y
+teléfonos.
 
 ## Privacidad
 

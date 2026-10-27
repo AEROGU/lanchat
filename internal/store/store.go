@@ -155,6 +155,13 @@ var migrations = [][]string{
 		// conversación; guarda quién era ("Angelika · OPPO · 192.168.1.149").
 		`ALTER TABLE messages ADD COLUMN merged_from TEXT NOT NULL DEFAULT ''`,
 	},
+	{
+		// notified_protocol: versión del protocolo que se le pidió instalar a
+		// este contacto porque usaba una anterior (0 = nunca se le avisó).
+		// Empieza en 0 también para los contactos de antes: a todos se les
+		// avisa una vez.
+		`ALTER TABLE peers ADD COLUMN notified_protocol INTEGER NOT NULL DEFAULT 0`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -266,6 +273,23 @@ func (s *Store) SetAlias(ctx context.Context, id, alias string) error {
 // SetFingerprint reemplaza la huella fijada (el usuario confió en la nueva).
 func (s *Store) SetFingerprint(ctx context.Context, id, fp string) error {
 	return peerNotFound(id, s.execOne(ctx, `UPDATE peers SET fingerprint = ? WHERE id = ?`, fp, id))
+}
+
+// NotifiedProtocol es la versión del protocolo que ya se le pidió instalar al
+// contacto (0 = ninguna).
+func (s *Store) NotifiedProtocol(ctx context.Context, id string) (int, error) {
+	var v int
+	err := s.db.QueryRowContext(ctx, `SELECT notified_protocol FROM peers WHERE id = ?`, id).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return v, err
+}
+
+// SetNotifiedProtocol recuerda que ya se le pidió al contacto instalar una
+// versión con el protocolo v.
+func (s *Store) SetNotifiedProtocol(ctx context.Context, id string, v int) error {
+	return peerNotFound(id, s.execOne(ctx, `UPDATE peers SET notified_protocol = ? WHERE id = ?`, v, id))
 }
 
 // SetGroup pone al contacto en un grupo local ("" = sin grupo).

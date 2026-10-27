@@ -6,6 +6,7 @@ import (
 
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/identity"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/thumb"
 	"github.com/AEROGU/lanchat/internal/transfer"
@@ -77,9 +78,13 @@ type contactJSON struct {
 	Hostname    string `json:"hostname"`
 	IP          string `json:"ip"`
 	AppVersion  string `json:"appVersion"`
-	Online      bool   `json:"online"`
-	LastSeen    int64  `json:"lastSeen"`
-	Unread      int    `json:"unread"`
+	// Incompatible: "older" si usa un protocolo anterior (debe actualizar),
+	// "newer" si uno más nuevo (este equipo debe actualizar), "" si es
+	// compatible o no se sabe. No se le envía nada.
+	Incompatible string `json:"incompatible"`
+	Online       bool   `json:"online"`
+	LastSeen     int64  `json:"lastSeen"`
+	Unread       int    `json:"unread"`
 	// Fingerprint es la huella fijada; NewFingerprint, la que anuncia si cambió.
 	Fingerprint     string `json:"fingerprint"`
 	IdentityChanged bool   `json:"identityChanged"`
@@ -110,6 +115,13 @@ func toContactJSON(c app.Contact) contactJSON {
 		Fingerprint:     identity.Format(c.Fingerprint),
 		IdentityChanged: c.IdentityChanged(),
 		Removed:         c.Removed,
+	}
+	switch {
+	case !c.Incompatible():
+	case c.Protocol < protocol.Version:
+		out.Incompatible = "older"
+	default:
+		out.Incompatible = "newer"
 	}
 	if out.IdentityChanged {
 		out.NewFingerprint = identity.Format(c.AnnouncedFingerprint)

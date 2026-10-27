@@ -9,4 +9,6 @@ const (
 	License     = "Software libre bajo la licencia GPL v3, sin ninguna garantía."
 	// Repository es la página del proyecto.
 	Repository = "https://github.com/AEROGU/lanchat"
+	// Releases es donde se descarga la última versión.
+	Releases = Repository + "/releases"
 )

@@ -40,9 +40,10 @@ type wireOps struct {
 const maxOpsRequestBytes = protocol.MaxOpsPerRequest*(protocol.MaxIDLen+protocol.MaxReactionBytes+96) + 256
 
 // DeleteForEveryone elimina para todos un mensaje propio (de texto, o una
-// oferta de archivos que no llegó a nada), si no pasó protocol.DeleteWindow
-// desde que se envió. Quien aún no lo recibió ya no lo recibirá; a los demás
-// se les avisa para que lo eliminen.
+// oferta de archivos que ya terminó), si no pasó protocol.DeleteWindow desde
+// que se envió. Quien aún no lo recibió ya no lo recibirá; a los demás se les
+// avisa para que lo eliminen. Los archivos ya descargados se quedan en la
+// carpeta de quien los recibió.
 func (s *Service) DeleteForEveryone(ctx context.Context, msgID string) (store.Message, error) {
 	m, ok, err := s.store.Message(ctx, msgID)
 	switch {
@@ -78,24 +79,16 @@ func (s *Service) DeleteForEveryone(ctx context.Context, msgID string) (store.Me
 }
 
 // checkFilesDeletable dice si una oferta de archivos puede eliminarse para
-// todos (los demás mensajes, sí). Quien la envió, solo si no llegó a nada
-// (cancelada, rechazada o caducada); quien la recibió, mientras no la haya
-// terminado de descargar.
+// todos (los demás mensajes, sí). Quien la envió, cuando ya terminó:
+// descargada, cancelada, rechazada o caducada. Quien la recibió acepta el
+// aviso en cualquier estado; lo ya descargado se queda en su carpeta.
 func (s *Service) checkFilesDeletable(ctx context.Context, m store.Message) error {
-	if m.Kind != store.KindFiles {
+	if m.Kind != store.KindFiles || !m.Outgoing {
 		return nil
 	}
 	t, ok, err := s.store.Transfer(ctx, m.ID)
-	if err != nil || !ok {
+	if err != nil || !ok || t.State.Final() {
 		return err
-	}
-	switch {
-	case t.State == store.TransferCompleted:
-		return errors.New("los archivos ya se recibieron: solo se eliminan para todos los envíos que no llegaron")
-	case !m.Outgoing:
-		return nil
-	case t.State == store.TransferCanceled, t.State == store.TransferRejected, t.State == store.TransferExpired:
-		return nil
 	}
 	return errors.New("cancela el envío antes de eliminarlo para todos")
 }

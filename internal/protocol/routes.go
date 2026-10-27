@@ -25,6 +25,10 @@ var (
 	RouteFileDone = APIPrefix + "/transfers/{id}/files/{idx}/done"
 	// RouteTransferState avisa al otro equipo de un rechazo o cancelación (POST).
 	RouteTransferState = APIPrefix + "/transfers/{id}/state"
+
+	// LegacyRouteMessage es RouteMessage en el protocolo LegacyVersion: solo
+	// sirve para pedir a esos equipos que actualicen.
+	LegacyRouteMessage = "/v" + strconv.Itoa(LegacyVersion) + "/msg"
 )
 
 func PathFile(id string, idx int) string {

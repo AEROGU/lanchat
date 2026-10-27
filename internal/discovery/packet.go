@@ -3,17 +3,9 @@ package discovery
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/AEROGU/lanchat/internal/protocol"
 )
-
-// incompatibleError: el paquete es de LanChat pero de otra versión del protocolo.
-type incompatibleError struct{ version int }
-
-func (e incompatibleError) Error() string {
-	return fmt.Sprintf("protocolo v%d incompatible con v%d", e.version, protocol.Version)
-}
 
 type packetType string
 
@@ -46,6 +38,9 @@ type packet struct {
 	Fingerprint string `json:"fp"`
 }
 
+// decodePacket lee y valida un paquete. Uno de otra versión del protocolo se
+// acepta si se entiende (para listar al equipo como incompatible): quien lo
+// usa debe comprobar p.Version.
 func decodePacket(b []byte) (packet, error) {
 	var p packet
 	if err := json.Unmarshal(b, &p); err != nil {
@@ -54,8 +49,8 @@ func decodePacket(b []byte) (packet, error) {
 	if p.Magic != protocol.Magic {
 		return p, errors.New("paquete ajeno a lanchat")
 	}
-	if p.Version != protocol.Version {
-		return p, incompatibleError{p.Version}
+	if p.Version < 1 {
+		return p, errors.New("versión de protocolo inválida")
 	}
 	switch p.Type {
 	case typeHello, typeAnnounce, typeBye:

@@ -27,7 +27,7 @@ const (
 	// eliminar un mensaje para todos. Lo comprueban quien elimina y quien
 	// recibe el aviso (con las horas del remitente, así no dependen de que
 	// los relojes de los equipos coincidan).
-	DeleteWindow = 10 * time.Minute
+	DeleteWindow = 15 * time.Minute
 	// MaxOpsPerRequest: avisos por petición (se envían en tandas).
 	MaxOpsPerRequest = 200
 	// MaxReactionBytes acota una reacción: un emoji puede ser una secuencia
