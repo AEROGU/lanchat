@@ -194,11 +194,20 @@ type Service struct {
 	// previews dice si se guardan las miniaturas que llegan con las ofertas
 	// (nil = sí).
 	previews func() bool
+	// discardFiles detiene y limpia en disco una transferencia antes de
+	// eliminar su oferta para todos (nil = nada que limpiar).
+	discardFiles func(ctx context.Context, id string)
 }
 
 // SetPreviews indica de dónde leer si se guardan las miniaturas recibidas.
 // Se llama antes de Start.
 func (s *Service) SetPreviews(enabled func() bool) { s.previews = enabled }
+
+// SetDiscardFiles indica cómo detener y limpiar en disco una transferencia
+// cuya oferta se elimina para todos. Se llama antes de Start.
+func (s *Service) SetDiscardFiles(discard func(ctx context.Context, id string)) {
+	s.discardFiles = discard
+}
 
 func (s *Service) previewsEnabled() bool { return s.previews == nil || s.previews() }
 

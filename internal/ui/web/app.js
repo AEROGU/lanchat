@@ -526,7 +526,7 @@ function dayLabel(ts) {
 }
 
 function messageElement(m) {
-  if (m.kind === "files" && m.transfer) return withActions(transferCard(m), m);
+  if (m.kind === "files" && m.transfer && !m.deleted) return withActions(transferCard(m), m);
   const div = document.createElement("div");
   // Un mensaje eliminado no muestra marcas de entrega ni de lectura.
   div.className = m.deleted
@@ -727,10 +727,16 @@ const MORE_REACTIONS = ["👏", "🎉", "🔥", "✅", "👌", "💪", "🙌", "
 // myReaction es el emoji con que este usuario reaccionó ("" = ninguno).
 const myReaction = (m) => (m.reactions ?? []).find((r) => r.peer === "")?.emoji ?? "";
 
-// canDelete: un mensaje de texto propio dentro del plazo se elimina para todos.
+// canDelete: un mensaje propio dentro del plazo se elimina para todos, si es
+// de texto o un envío de archivos que no llegó a nada.
 function canDelete(m) {
-  return m.outgoing && m.kind === "text" && !m.deleted && Date.now() - m.at <= state.limits.deleteWindowMs;
+  if (!m.outgoing || m.deleted || Date.now() - m.at > state.limits.deleteWindowMs) return false;
+  return m.kind === "text" || canDeleteHere(m);
 }
+
+// canDeleteHere: un envío de archivos que no llegó a nada se borra de este
+// equipo (enviado o recibido, sin plazo).
+const canDeleteHere = (m) => m.kind === "files" && !m.deleted && DELETABLE_TRANSFERS.has(m.transfer?.state);
 
 // withActions agrega al globo el botón que abre el menú del mensaje.
 function withActions(div, m) {
@@ -796,6 +802,18 @@ function openMsgMenu(id, anchor, showMore = false) {
     del.addEventListener("click", () => deleteForEveryone(m));
     menu.append(del);
   }
+  if (canDeleteHere(m)) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "menu-item";
+    del.textContent = "Borrar de este equipo";
+    del.addEventListener("click", () => {
+      closeMsgMenu();
+      const who = m.outgoing ? memberName(m.peerId) : "el remitente";
+      transferAction("delete", m.id, `¿Borrar este envío de este equipo, con sus vistas previas? ${who} conserva el suyo.`);
+    });
+    menu.append(del);
+  }
   menu.hidden = false;
   anchor.classList.add("open");
   // Junto al botón, sin salirse de la ventana.
@@ -819,7 +837,8 @@ async function react(m, emoji) {
 async function deleteForEveryone(m) {
   closeMsgMenu();
   const where = m.roomId ? "todos los miembros de la sala" : memberName(m.peerId);
-  if (!confirm(`¿Eliminar este mensaje para todos? También se borrará en el equipo de ${where}.`)) return;
+  const what = m.kind === "files" ? "este envío" : "este mensaje";
+  if (!confirm(`¿Eliminar ${what} para todos? También se borrará en el equipo de ${where}.`)) return;
   try {
     addMessage(await api.deleteMessage(m.id));
   } catch (e) {
@@ -931,8 +950,8 @@ function transferStatus(m, t) {
   return t.state;
 }
 
-// DELETABLE_TRANSFERS: estados en que una oferta no llegó a nada y se puede
-// borrar de este equipo (app.DeleteTransfer).
+// DELETABLE_TRANSFERS: estados en que una oferta no llegó a nada; se borra
+// desde el menú del mensaje (app.DeleteTransfer y app.DeleteForEveryone).
 const DELETABLE_TRANSFERS = new Set(["canceled", "rejected", "expired"]);
 
 function transferCard(m) {
@@ -977,9 +996,6 @@ function transferCard(m) {
   } else if (t.state === "downloading" || (t.outgoing && t.state === "offered")) {
     actions.append(act(t.outgoing ? "Cancelar envío" : "Cancelar", "cancel", false,
       t.outgoing ? "¿Cancelar el envío?" : "¿Cancelar la descarga?"));
-  } else if (DELETABLE_TRANSFERS.has(t.state)) {
-    actions.append(act("Borrar", "delete", false,
-      "¿Borrar este envío de este equipo, con sus vistas previas? El otro equipo conserva el suyo."));
   }
   if (actions.childElementCount) div.append(actions);
 

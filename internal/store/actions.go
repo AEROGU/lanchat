@@ -32,8 +32,10 @@ func (s *Store) Message(ctx context.Context, id string) (Message, bool, error) {
 
 // DeleteMessage deja el mensaje como "eliminado": sin texto, sin reacciones y
 // sin entregas pendientes (quien aún no lo recibió ya no lo recibirá). El
-// renglón se conserva para mostrar que ahí hubo un mensaje. wasUnread indica
-// si contaba como no leído.
+// renglón se conserva para mostrar que ahí hubo un mensaje. De una oferta de
+// archivos se borran la transferencia y sus miniaturas (los archivos en curso
+// o a medias deben descartarse antes). wasUnread indica si contaba como no
+// leído.
 func (s *Store) DeleteMessage(ctx context.Context, id string) (m Message, wasUnread bool, err error) {
 	old, ok, err := s.Message(ctx, id)
 	if err != nil {
@@ -47,6 +49,8 @@ func (s *Store) DeleteMessage(ctx context.Context, id string) (m Message, wasUnr
 			[]any{StatusDelivered, id}},
 		stmt{`DELETE FROM reactions WHERE message_id = ?`, []any{id}},
 		stmt{`DELETE FROM room_deliveries WHERE message_id = ? AND delivered = 0`, []any{id}},
+		stmt{`DELETE FROM transfer_files WHERE transfer_id = ?`, []any{id}},
+		stmt{`DELETE FROM transfers WHERE id = ?`, []any{id}},
 	)
 	if err != nil {
 		return Message{}, false, err

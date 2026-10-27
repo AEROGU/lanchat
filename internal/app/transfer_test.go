@@ -296,6 +296,34 @@ func TestDeleteTransfer(t *testing.T) {
 	if err := b.app.DeleteTransfer(ctx, m.ID); err == nil {
 		t.Error("borrar otra vez debía fallar")
 	}
+
+	// Eliminar para todos: quien la envió, una vez cancelada; en ambos equipos
+	// queda "eliminado", sin la oferta ni sus miniaturas.
+	m2 := offer(t, a, b, photo)
+	if _, err := a.app.DeleteForEveryone(ctx, m2.ID); err == nil {
+		t.Error("eliminar para todos una oferta pendiente debía fallar")
+	}
+	if err := a.app.CancelTransfer(ctx, m2.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B ve la cancelación", transferState(m2.ID, store.TransferCanceled))
+	if _, err := b.app.DeleteForEveryone(ctx, m2.ID); err == nil {
+		t.Error("B no debía poder eliminar para todos la oferta de A")
+	}
+	if del, err := a.app.DeleteForEveryone(ctx, m2.ID); err != nil || !del.Deleted {
+		t.Fatalf("eliminar para todos: %+v, %v", del, err)
+	}
+	waitFor(t, b, "B la ve eliminada", msgEvent(chat.MessageDeleted, m2.ID))
+	// A conserva solo la miniatura de la primera oferta (B la borró solo en
+	// su equipo).
+	for n, want := range map[*node]int{a: 1, b: 0} {
+		if _, ok, _ := n.app.Transfer(ctx, m2.ID); ok {
+			t.Errorf("%s conserva la oferta", n.app.Self().Hostname)
+		}
+		if c, _, _ := n.app.ThumbsUsage(ctx); c != want {
+			t.Errorf("%s tiene %d miniaturas, quería %d", n.app.Self().Hostname, c, want)
+		}
+	}
 }
 
 // Un .part existente se reanuda; si su contenido no coincide con el original,

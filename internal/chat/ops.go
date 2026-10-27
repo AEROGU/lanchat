@@ -39,9 +39,10 @@ type wireOps struct {
 // maxOpsRequestBytes acota el JSON de una tanda de avisos.
 const maxOpsRequestBytes = protocol.MaxOpsPerRequest*(protocol.MaxIDLen+protocol.MaxReactionBytes+96) + 256
 
-// DeleteForEveryone elimina para todos un mensaje de texto propio, si no pasó
-// protocol.DeleteWindow desde que se envió. Quien aún no lo recibió ya no lo
-// recibirá; a los demás se les avisa para que lo eliminen.
+// DeleteForEveryone elimina para todos un mensaje propio (de texto, o una
+// oferta de archivos que no llegó a nada), si no pasó protocol.DeleteWindow
+// desde que se envió. Quien aún no lo recibió ya no lo recibirá; a los demás
+// se les avisa para que lo eliminen.
 func (s *Service) DeleteForEveryone(ctx context.Context, msgID string) (store.Message, error) {
 	m, ok, err := s.store.Message(ctx, msgID)
 	switch {
@@ -53,11 +54,14 @@ func (s *Service) DeleteForEveryone(ctx context.Context, msgID string) (store.Me
 		return store.Message{}, errors.New("solo puedes eliminar para todos tus propios mensajes")
 	case m.Deleted:
 		return m, nil
-	case m.Kind != store.KindText:
-		return store.Message{}, errors.New("solo se pueden eliminar mensajes de texto (un envío de archivos se cancela)")
+	case m.Kind != store.KindText && m.Kind != store.KindFiles:
+		return store.Message{}, errors.New("este mensaje no se puede eliminar")
 	case time.Since(m.SentAt) > protocol.DeleteWindow:
 		return store.Message{}, fmt.Errorf("ya pasaron más de %d minutos desde que lo enviaste",
 			int(protocol.DeleteWindow.Minutes()))
+	}
+	if err := s.checkFilesDeletable(ctx, m); err != nil {
+		return store.Message{}, err
 	}
 	// Antes de eliminar: después ya no se sabe a quién se le iba a entregar.
 	recipients := []string{m.PeerID}
@@ -66,12 +70,49 @@ func (s *Service) DeleteForEveryone(ctx context.Context, msgID string) (store.Me
 			return store.Message{}, err
 		}
 	}
-	deleted, _, err := s.store.DeleteMessage(ctx, msgID)
+	deleted, err := s.deleteMessage(ctx, m)
+	if err != nil {
+		return store.Message{}, err
+	}
+	return deleted, s.enqueue(ctx, recipients, wireOp{Type: protocol.OpDelete, Msg: msgID})
+}
+
+// checkFilesDeletable dice si una oferta de archivos puede eliminarse para
+// todos (los demás mensajes, sí). Quien la envió, solo si no llegó a nada
+// (cancelada, rechazada o caducada); quien la recibió, mientras no la haya
+// terminado de descargar.
+func (s *Service) checkFilesDeletable(ctx context.Context, m store.Message) error {
+	if m.Kind != store.KindFiles {
+		return nil
+	}
+	t, ok, err := s.store.Transfer(ctx, m.ID)
+	if err != nil || !ok {
+		return err
+	}
+	switch {
+	case t.State == store.TransferCompleted:
+		return errors.New("los archivos ya se recibieron: solo se eliminan para todos los envíos que no llegaron")
+	case !m.Outgoing:
+		return nil
+	case t.State == store.TransferCanceled, t.State == store.TransferRejected, t.State == store.TransferExpired:
+		return nil
+	}
+	return errors.New("cancela el envío antes de eliminarlo para todos")
+}
+
+// deleteMessage deja el mensaje como eliminado y avisa a las ventanas. De una
+// oferta de archivos, antes detiene la transferencia y limpia lo que dejó en
+// disco.
+func (s *Service) deleteMessage(ctx context.Context, m store.Message) (store.Message, error) {
+	if m.Kind == store.KindFiles && s.discardFiles != nil {
+		s.discardFiles(ctx, m.ID)
+	}
+	deleted, _, err := s.store.DeleteMessage(ctx, m.ID)
 	if err != nil {
 		return store.Message{}, err
 	}
 	s.emit(Event{Type: MessageDeleted, Message: deleted})
-	return deleted, s.enqueue(ctx, recipients, wireOp{Type: protocol.OpDelete, Msg: msgID})
+	return deleted, nil
 }
 
 // React pone la reacción de este equipo a un mensaje (una por mensaje; emoji
@@ -215,17 +256,16 @@ func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
 		switch {
 		case m.Outgoing || m.PeerID != from:
 			return errors.New("solo el autor puede eliminar su mensaje")
-		case m.Kind != store.KindText:
-			return errors.New("solo se eliminan mensajes de texto")
+		case m.Kind != store.KindText && m.Kind != store.KindFiles:
+			return errors.New("solo se eliminan mensajes de texto y ofertas de archivos")
 		case op.At-m.SentAt.UnixMilli() > protocol.DeleteWindow.Milliseconds():
 			return errors.New("fuera de plazo")
 		}
-		deleted, _, err := s.store.DeleteMessage(ctx, m.ID)
-		if err != nil {
+		if err := s.checkFilesDeletable(ctx, m); err != nil {
 			return err
 		}
-		s.emit(Event{Type: MessageDeleted, Message: deleted})
-		return nil
+		_, err := s.deleteMessage(ctx, m)
+		return err
 	}
 
 	if op.Emoji != "" {

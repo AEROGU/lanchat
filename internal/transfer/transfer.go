@@ -556,6 +556,18 @@ func (s *Service) Cancel(ctx context.Context, id string) error {
 	return nil
 }
 
+// Discard detiene la transferencia si está en curso y borra lo que dejó en
+// este equipo (archivos a medias o copias preparadas para enviar), sin avisar
+// al otro equipo: se usa antes de eliminar su mensaje para todos.
+func (s *Service) Discard(ctx context.Context, id string) {
+	t, ok, err := s.store.Transfer(ctx, id)
+	if err != nil || !ok {
+		return
+	}
+	s.stopActive(id)
+	s.discardLocal(t)
+}
+
 // CancelAll cancela las transferencias sin terminar con peerID ("" = con
 // todos), avisando al otro equipo; se usa antes de borrar conversaciones.
 func (s *Service) CancelAll(ctx context.Context, peerID string) error {

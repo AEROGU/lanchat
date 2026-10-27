@@ -255,6 +255,7 @@ func (d *demoBackend) Upload(context.Context, string, func() (string, string, io
 func (d *demoBackend) AcceptTransfer(context.Context, string) error { return errDemo }
 func (d *demoBackend) RejectTransfer(context.Context, string) error { return errDemo }
 func (d *demoBackend) CancelTransfer(context.Context, string) error { return errDemo }
+func (d *demoBackend) DeleteTransfer(context.Context, string) error { return errDemo }
 func (d *demoBackend) Transfer(_ context.Context, id string) (store.Transfer, bool, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

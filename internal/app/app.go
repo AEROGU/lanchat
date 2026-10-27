@@ -185,6 +185,7 @@ func New(o Options) (a *App, err error) {
 		Previews:    a.previewsEnabled,
 	}, st, disc, ch, o.Log)
 	ch.SetPreviews(a.previewsEnabled)
+	ch.SetDiscardFiles(a.transfer.Discard)
 	a.transfer.Register(srv)
 	return a, nil
 }
