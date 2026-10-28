@@ -73,7 +73,9 @@ USO
   (al volver). En un envío de archivos aparece cuando ya terminó; los
   archivos que el otro ya descargó se quedan en su carpeta. Un envío
   cancelado, rechazado o caducado también se puede "Borrar de este equipo".
-- En el mismo menú: "Editar" un mensaje tuyo durante esos 15 minutos
+- En el mismo menú: "Responder" a un mensaje o envío de archivos (la
+  respuesta lleva arriba la cita del original; tocarla te lleva a él; Esc
+  cancela), "Editar" un mensaje tuyo durante esos 15 minutos
   (Enter guarda, Esc cancela; los demás lo ven "editado"), "Reenviar" a
   otros contactos o salas y "Seleccionar" para marcar varios y reenviarlos
   o eliminarlos para todos. Un archivo recibido se reenvía solo si sigue

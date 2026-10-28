@@ -168,6 +168,13 @@ var migrations = [][]string{
 		// forwarded = 1: es un reenvío de otro mensaje.
 		`ALTER TABLE messages ADD COLUMN forwarded INTEGER NOT NULL DEFAULT 0`,
 	},
+	{
+		// reply_*: el mensaje responde a otro (ver Reply); reply_id = '' si no.
+		`ALTER TABLE messages ADD COLUMN reply_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN reply_author TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN reply_text TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX messages_reply ON messages(reply_id) WHERE reply_id != ''`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -390,8 +397,21 @@ type Message struct {
 	EditedAt time.Time
 	// Forwarded: es un reenvío de otro mensaje.
 	Forwarded bool
+	// Reply: el mensaje responde a otro de la conversación (Reply.ID vacío si no).
+	Reply Reply
 	// Reactions: nil si no se consultaron (Message e historiales sí las traen).
 	Reactions []Reaction
+}
+
+// Reply es la cita del mensaje al que responde otro, como en WhatsApp.
+type Reply struct {
+	// ID es el del mensaje citado (el mismo en todos los equipos).
+	ID string
+	// Author es el ID del equipo que escribió el mensaje citado.
+	Author string
+	// Text es el comienzo del mensaje citado (protocol.ReplySnippet). Se
+	// actualiza si su autor lo edita y queda vacío si lo elimina para todos.
+	Text string
 }
 
 type Kind int
@@ -406,10 +426,17 @@ const (
 
 // messageColumns son las que se escriben al insertar; messageSelect agrega las
 // que solo cambian después.
-const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast, room_id, forwarded`
+const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast, room_id, forwarded,
+	reply_id, reply_author, reply_text`
 
 // messagePlaceholders son los parámetros de un INSERT con messageColumns.
-const messagePlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
+const messagePlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
+
+// messageArgs son los valores de m para un INSERT con messageColumns.
+func messageArgs(m Message) []any {
+	return []any{m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind,
+		m.Broadcast, m.RoomID, m.Forwarded, m.Reply.ID, m.Reply.Author, m.Reply.Text}
+}
 
 const messageSelect = messageColumns + `, read_at, deleted, merged_from, edited_at`
 
@@ -430,8 +457,7 @@ func (s *Store) InsertMessageWithTransfer(ctx context.Context, m Message, t *Tra
 
 	res, err := tx.ExecContext(ctx,
 		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (`+messagePlaceholders+`)`,
-		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind,
-		m.Broadcast, m.RoomID, m.Forwarded)
+		messageArgs(m)...)
 	if err != nil {
 		return false, err
 	}
@@ -556,7 +582,8 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 		var m Message
 		var at, sent, readAt, editedAt int64
 		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread,
-			&m.Kind, &m.Broadcast, &m.RoomID, &m.Forwarded, &readAt, &m.Deleted, &m.MergedFrom, &editedAt); err != nil {
+			&m.Kind, &m.Broadcast, &m.RoomID, &m.Forwarded, &m.Reply.ID, &m.Reply.Author, &m.Reply.Text,
+			&readAt, &m.Deleted, &m.MergedFrom, &editedAt); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)

@@ -58,7 +58,29 @@ const (
 	MaxAppVersionLen = 32
 	// MaxMessageBytes es el tamaño máximo del texto de un mensaje.
 	MaxMessageBytes = 64 << 10
+	// MaxReplyTextLen es el largo máximo (en caracteres) del fragmento del
+	// mensaje citado que viaja con una respuesta.
+	MaxReplyTextLen = 200
 )
+
+// ReplySnippet recorta el texto de un mensaje para citarlo en una respuesta.
+func ReplySnippet(s string) string {
+	s = strings.TrimSpace(s)
+	if utf8.RuneCountInString(s) <= MaxReplyTextLen {
+		return s
+	}
+	r := []rune(s)[:MaxReplyTextLen-1]
+	return strings.TrimSpace(string(r)) + "…"
+}
+
+// ValidateReplyText valida el fragmento citado de una respuesta (vacío es
+// válido: el mensaje citado se eliminó).
+func ValidateReplyText(s string) error {
+	if utf8.RuneCountInString(s) > MaxReplyTextLen || !utf8.ValidString(s) || hasControl(s, true) {
+		return errors.New("cita inválida")
+	}
+	return nil
+}
 
 func ValidateID(s string) error {
 	if s == "" || len(s) > MaxIDLen || hasControl(s, false) {

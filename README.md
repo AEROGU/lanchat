@@ -43,6 +43,11 @@
   eliminarlos para todos. Un archivo se reenvía mientras siga en la carpeta
   de descargas (o, si lo enviaste tú, donde estaba); a las salas solo se
   reenvían textos.
+- **Responder** a un mensaje o envío de archivos anterior, como en
+  WhatsApp: la respuesta lleva arriba la cita del original y, al tocarla,
+  la conversación salta a él. Si el autor edita el original, la cita se
+  actualiza; si lo elimina para todos, la cita queda como "Mensaje
+  eliminado".
 - **Selector de emojis** 😊 junto a la caja de texto, con todos los de
   Unicode por categoría y los usados recientemente, en la PC y en el
   teléfono.

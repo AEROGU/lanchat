@@ -151,13 +151,18 @@ func newDemoBackend() *demoBackend {
 		m.RoomID = room
 		return m
 	}
+	replyTo := func(m store.Message, id, author, text string) store.Message {
+		m.Reply = store.Reply{ID: id, Author: author, Text: text}
+		return m
+	}
 	d.history[roomViewPrefix+"r1"] = []store.Message{
 		ev(outRoom("e1", "r1", today(8, 40), "Laura creó la sala «Cierre de mes»")),
 		react(inRoom("r1a", "r1", "c2", today(8, 42), "Recuerden que el viernes cerramos la contabilidad de septiembre."),
 			"👍", "", "c1", "c3"),
 		inRoom("r1b", "r1", "c1", today(8, 45), "A mí me faltan dos facturas de Ventas."),
 		ev(inRoom("e2", "r1", "c2", today(8, 46), "María Fernanda Ortiz agregó a Jorge Salinas")),
-		react(inRoom("r1c", "r1", "c3", today(8, 51), "Las mando hoy antes de las 3 🙌"), "❤️", "c2"),
+		react(replyTo(inRoom("r1c", "r1", "c3", today(8, 51), "Las mando hoy antes de las 3 🙌"),
+			"r1b", "c1", "A mí me faltan dos facturas de Ventas."), "❤️", "c2"),
 		outRoom("r1d", "r1", today(8, 53), "Gracias a todos. Cualquier duda, aquí estoy."),
 	}
 	return d
@@ -311,6 +316,32 @@ func (d *demoBackend) DeleteForEveryone(context.Context, string) (store.Message,
 }
 func (d *demoBackend) EditMessage(context.Context, string, string) (store.Message, error) {
 	return store.Message{}, errDemo
+}
+
+// Reply responde en la conversación del mensaje id, como app.Reply.
+func (d *demoBackend) Reply(_ context.Context, id, body string) (store.Message, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for key, list := range d.history {
+		for _, o := range list {
+			if o.ID != id {
+				continue
+			}
+			author, peer := o.PeerID, o.PeerID
+			if o.Outgoing {
+				author = d.self.ID
+			}
+			if o.RoomID != "" {
+				peer = ""
+			}
+			m := store.Message{ID: time.Now().Format("150405.000"), PeerID: peer, RoomID: o.RoomID, Outgoing: true,
+				Body: body, At: time.Now(), SentAt: time.Now(), Status: store.StatusDelivered,
+				Reply: store.Reply{ID: o.ID, Author: author, Text: protocol.ReplySnippet(o.Body)}}
+			d.history[key] = append(list, m)
+			return m, nil
+		}
+	}
+	return store.Message{}, errors.New("el mensaje al que respondes ya no existe")
 }
 func (d *demoBackend) Forward(context.Context, []string, []string, []string) ([]store.Message, error) {
 	return nil, errDemo

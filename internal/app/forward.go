@@ -7,13 +7,14 @@ import (
 	"os"
 	"slices"
 
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/transfer"
 )
 
-// Editar y reenviar mensajes, como en WhatsApp. Un reenvío es un mensaje
-// nuevo, marcado como reenviado: el texto se envía otra vez y un envío de
-// archivos se vuelve a ofrecer con los mismos archivos, si siguen en este
+// Editar, responder y reenviar mensajes, como en WhatsApp. Un reenvío es un
+// mensaje nuevo, marcado como reenviado: el texto se envía otra vez y un envío
+// de archivos se vuelve a ofrecer con los mismos archivos, si siguen en este
 // equipo.
 
 const (
@@ -27,6 +28,33 @@ const (
 // protocol.DeleteWindow (el mismo que para eliminarlo para todos).
 func (a *App) EditMessage(ctx context.Context, msgID, body string) (store.Message, error) {
 	return a.chat.Edit(ctx, msgID, body)
+}
+
+// Reply responde al mensaje msgID (texto o envío de archivos) en su misma
+// conversación, contacto o sala: el mensaje nuevo lleva la cita del original,
+// como "Responder" en WhatsApp.
+func (a *App) Reply(ctx context.Context, msgID, body string) (store.Message, error) {
+	orig, ok, err := a.store.Message(ctx, msgID)
+	switch {
+	case err != nil:
+		return store.Message{}, err
+	case !ok || orig.Deleted:
+		return store.Message{}, errors.New("el mensaje al que respondes ya no existe")
+	case orig.Kind == store.KindRoomEvent:
+		return store.Message{}, errors.New("no se puede responder a un aviso de la sala")
+	}
+	author := orig.PeerID
+	if orig.Outgoing {
+		author = a.Self().ID
+	}
+	r := store.Reply{ID: orig.ID, Author: author, Text: protocol.ReplySnippet(orig.Body)}
+	if orig.RoomID != "" {
+		return a.chat.ReplyRoom(ctx, orig.RoomID, body, r)
+	}
+	if err := a.requireContact(ctx, orig.PeerID); err != nil {
+		return store.Message{}, err
+	}
+	return a.chat.SendReply(ctx, orig.PeerID, body, r)
 }
 
 // forwardItem es un mensaje por reenviar: su texto o sus archivos.

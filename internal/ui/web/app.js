@@ -24,6 +24,8 @@ const state = {
   // editDraft: lo que había escrito antes, para devolverlo al terminar.
   editing: null,
   editDraft: "",
+  // replyTo: id del mensaje al que se responde (null = ninguno).
+  replyTo: null,
   // selecting: modo de selección de varios mensajes (selected: sus ids).
   selecting: false,
   selected: new Set(),
@@ -83,6 +85,7 @@ const api = {
   deleteMessage: (id) => request("POST", "/api/messages/delete", { id }),
   react: (id, emoji) => request("POST", "/api/messages/react", { id, emoji }),
   editMessage: (id, body) => request("POST", "/api/messages/edit", { id, body }),
+  reply: (id, body) => request("POST", "/api/messages/reply", { id, body }),
   forward: (ids, peers, rooms) => request("POST", "/api/messages/forward", { ids, peers, rooms }),
   readReceipts: (enabled) => request("POST", "/api/read-receipts", { enabled }),
   previews: (enabled) => request("POST", "/api/previews", { enabled }),
@@ -605,8 +608,58 @@ function messageElement(m) {
     div.append(tag);
   }
   if (m.forwarded) div.append(forwardedTag());
+  if (m.reply) div.append(quoteElement(m.reply));
   div.append(document.createTextNode(m.body), metaElement(m));
   return withActions(div, m);
+}
+
+// quoteText es lo que se muestra de un mensaje citado: su texto o, de un
+// envío de archivos, su resumen ("📎 informe.pdf (2 MB)").
+function quoteText(m) {
+  return m.deleted ? "🚫 Mensaje eliminado" : m.body;
+}
+
+// quoteElement es la cita dentro de una respuesta. Si el original está
+// cargado se muestra tal como está ahora; si no, lo que guardó el servidor.
+// Al tocarla se salta al original.
+function quoteElement(r) {
+  const orig = findMessage(r.id);
+  const q = document.createElement("button");
+  q.type = "button";
+  q.className = "quote";
+  q.title = "Ir al mensaje original";
+  const who = document.createElement("strong");
+  who.textContent = memberName(r.author);
+  const text = document.createElement("span");
+  text.textContent = orig ? quoteText(orig) : r.deleted ? "🚫 Mensaje eliminado" : r.text;
+  q.append(who, text);
+  q.addEventListener("click", (e) => {
+    if (state.selecting) return; // al seleccionar, tocarla marca el mensaje
+    e.stopPropagation();
+    jumpToMessage(r.id);
+  });
+  return q;
+}
+
+// jumpToMessage lleva la vista al mensaje id y lo resalta un momento. Si es
+// antiguo, carga páginas anteriores hasta encontrarlo.
+async function jumpToMessage(id) {
+  const key = state.current;
+  const conv = state.messages.get(key);
+  for (let i = 0; conv && !findMessage(id) && !conv.complete && i < 50; i++) {
+    await loadHistory(key, conv.list[0]?.id);
+    if (state.current !== key) return;
+  }
+  const el = [...$("messages").querySelectorAll("[data-id]")].find((x) => x.dataset.id === id);
+  if (!el) {
+    showBanner("El mensaje original ya no está en esta conversación.", 4000);
+    return;
+  }
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  el.classList.remove("flash");
+  void el.offsetWidth; // reinicia la animación si ya estaba resaltado
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), 1600);
 }
 
 function forwardedTag() {
@@ -794,6 +847,10 @@ function canEdit(m) {
   return !m.roomId || !state.rooms.get(m.roomId)?.left;
 }
 
+// canReply: se responde a textos y envíos de archivos en una conversación
+// donde se puede escribir.
+const canReply = (m) => !m.deleted && m.kind !== "event" && canWrite();
+
 // canForward: se reenvían los textos y los envíos de archivos propios o ya
 // descargados (el servidor comprueba que los archivos sigan en el equipo).
 function canForward(m) {
@@ -821,6 +878,30 @@ function withActions(div, m) {
 // findMessage busca en la conversación abierta (el mensaje pudo cambiar
 // desde que se dibujó).
 const findMessage = (id) => state.messages.get(state.current)?.list.find((x) => x.id === id);
+
+// ICONS son los trazos (viewBox 24×24) de los íconos de las acciones sobre
+// mensajes; se dibujan con el color del texto, así siguen al tema.
+const ICONS = {
+  reply: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v4",
+  forward: "m15 14 5-5-5-5M20 9H10a6 6 0 0 0-6 6v4",
+  edit: "M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4",
+  select: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 12l3 3 5-6",
+  trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6",
+  // Un monitor con una X: borrar solo en este equipo.
+  erase: "M5 4h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM8 20h8M12 16v4M10 8l4 4M14 8l-4 4",
+};
+
+function iconElement(name) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", ICONS[name]);
+  svg.append(path);
+  return svg;
+}
 
 function closeMsgMenu() {
   $("msg-menu").hidden = true;
@@ -858,25 +939,26 @@ function openMsgMenu(id, anchor, showMore = false) {
     row.append(more);
   }
   menu.replaceChildren(row);
-  const item = (label, onClick, danger = false) => {
+  const item = (icon, label, onClick, danger = false) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "menu-item" + (danger ? " danger" : "");
-    b.textContent = label;
+    b.append(iconElement(icon), label);
     b.addEventListener("click", onClick);
     menu.append(b);
   };
-  if (canEdit(m)) item("Editar", () => startEdit(m));
+  if (canReply(m)) item("reply", "Responder", () => startReply(m));
+  if (canEdit(m)) item("edit", "Editar", () => startEdit(m));
   if (canForward(m)) {
-    item("Reenviar", () => {
+    item("forward", "Reenviar", () => {
       closeMsgMenu();
       openForward([m.id]);
     });
   }
-  item("Seleccionar", () => startSelect(m));
-  if (canDelete(m)) item("Eliminar para todos", () => deleteForEveryone(m), true);
+  item("select", "Seleccionar", () => startSelect(m));
+  if (canDelete(m)) item("trash", "Eliminar para todos", () => deleteForEveryone(m), true);
   if (canDeleteHere(m)) {
-    item("Borrar de este equipo", () => {
+    item("erase", "Borrar de este equipo", () => {
       closeMsgMenu();
       const who = m.outgoing ? memberName(m.peerId) : "el remitente";
       transferAction("delete", m.id, `¿Borrar este envío de este equipo, con sus vistas previas? ${who} conserva el suyo.`);
@@ -1505,6 +1587,10 @@ window.lanchatBack = () => {
     cancelEdit();
     return true;
   }
+  if (state.replyTo) {
+    cancelReply();
+    return true;
+  }
   if (!$("emoji-panel").hidden) {
     closeEmojiPanel();
     return true;
@@ -1521,6 +1607,7 @@ async function openChat(id) {
   closeEmojiPanel();
   endSelect();
   cancelEdit();
+  cancelReply();
   window.LanChatAndroid?.chatOpened(id); // en el teléfono, quita su aviso
   state.current = id;
   $("app").classList.add("chatting");
@@ -1541,6 +1628,7 @@ function closeChat() {
   setMenu(false);
   endSelect();
   cancelEdit();
+  cancelReply();
   state.current = null;
   $("app").classList.remove("chatting");
   reportPresence();
@@ -1616,9 +1704,11 @@ async function sendMessage() {
   if (!body.trim()) return;
   try {
     const room = roomId(state.current);
-    const m = await (room ? api.roomSend(room, body) : api.send(state.current, body));
+    const m = await (state.replyTo ? api.reply(state.replyTo, body)
+      : room ? api.roomSend(room, body) : api.send(state.current, body));
     input.value = "";
     autoGrow();
+    cancelReply();
     addMessage(m);
   } catch (e) {
     err.textContent = e.message;
@@ -1663,6 +1753,7 @@ function autoGrow() {
 function startEdit(m) {
   closeMsgMenu();
   endSelect();
+  cancelReply();
   const input = $("input");
   if (!state.editing) state.editDraft = input.value;
   state.editing = m.id;
@@ -1704,6 +1795,28 @@ async function saveEdit(body) {
   }
 }
 
+// ---------- Responder a un mensaje ----------
+
+// startReply pone la cita del mensaje sobre la caja de escribir: lo que se
+// envíe a continuación será la respuesta (como en WhatsApp).
+function startReply(m) {
+  closeMsgMenu();
+  endSelect();
+  cancelEdit();
+  state.replyTo = m.id;
+  $("reply-who").textContent = m.outgoing ? "Responder a tu mensaje" : `Responder a ${memberName(m.peerId)}`;
+  $("reply-original").textContent = quoteText(m);
+  $("send-error").hidden = true;
+  syncComposer();
+  $("input").focus();
+}
+
+function cancelReply() {
+  if (!state.replyTo) return;
+  state.replyTo = null;
+  syncComposer();
+}
+
 // canWrite: se puede escribir en la conversación abierta.
 function canWrite() {
   if (roomId(state.current)) return Boolean(currentRoom() && !currentRoom().left);
@@ -1717,6 +1830,7 @@ function syncComposer() {
   $("select-bar").hidden = !state.selecting;
   $("composer").hidden = state.selecting || !canWrite();
   $("edit-bar").hidden = $("composer").hidden || !state.editing;
+  $("reply-bar").hidden = $("composer").hidden || !state.replyTo;
   $("send-btn").textContent = state.editing ? "Guardar" : "Enviar";
   if (state.selecting) updateSelectBar();
 }
@@ -2728,9 +2842,15 @@ function bind() {
       sendMessage();
     } else if (e.key === "Escape" && state.editing) {
       cancelEdit();
+    } else if (e.key === "Escape" && state.replyTo) {
+      cancelReply();
     }
   });
   $("edit-cancel").addEventListener("click", cancelEdit);
+  $("reply-cancel").addEventListener("click", () => {
+    cancelReply();
+    $("input").focus();
+  });
   // Al seleccionar, tocar un mensaje lo marca o desmarca (y no hace nada más:
   // ni abrir archivos ni aceptar envíos).
   $("messages").addEventListener("click", (e) => {
@@ -2741,6 +2861,8 @@ function bind() {
     if (el) toggleSelected(el.dataset.id);
   }, true);
   $("select-cancel").addEventListener("click", endSelect);
+  $("select-delete").prepend(iconElement("trash"));
+  $("select-forward").prepend(iconElement("forward"));
   $("select-delete").addEventListener("click", deleteSelected);
   $("select-forward").addEventListener("click", () => openForward(selectedMessages().map((m) => m.id)));
   document.addEventListener("keydown", (e) => {

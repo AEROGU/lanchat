@@ -100,6 +100,34 @@ type wireMessage struct {
 	// Forwarded: es un reenvío de otro mensaje. Las versiones que no lo
 	// conocen lo muestran como un mensaje normal.
 	Forwarded bool `json:"forwarded,omitempty"`
+	// Reply: responde a otro mensaje de la conversación. Las versiones que no
+	// lo conocen lo muestran como un mensaje normal, sin la cita.
+	Reply *wireReply `json:"reply,omitempty"`
+}
+
+// wireReply es la cita del mensaje al que se responde (ver store.Reply).
+type wireReply struct {
+	ID     string `json:"id"`
+	Author string `json:"author"`
+	Text   string `json:"text"`
+}
+
+func toWireReply(r store.Reply) *wireReply {
+	if r.ID == "" {
+		return nil
+	}
+	return &wireReply{ID: r.ID, Author: r.Author, Text: r.Text}
+}
+
+// reply devuelve la cita que trae el mensaje. Una cita inválida se descarta
+// sin rechazar el mensaje: lo importante es el texto.
+func (m wireMessage) reply() store.Reply {
+	r := m.Reply
+	if r == nil || protocol.ValidateID(r.ID) != nil || protocol.ValidateID(r.Author) != nil ||
+		protocol.ValidateReplyText(r.Text) != nil {
+		return store.Reply{}
+	}
+	return store.Reply{ID: r.ID, Author: r.Author, Text: r.Text}
 }
 
 // wireOffer acompaña a un mensaje que ofrece archivos.
@@ -276,6 +304,11 @@ func (s *Service) SendForwarded(ctx context.Context, peerID, body string) (store
 	return s.send(ctx, store.Message{ID: ids.New(), PeerID: peerID, Body: body, Forwarded: true}, nil)
 }
 
+// SendReply es como Send pero el mensaje responde a otro y lleva su cita.
+func (s *Service) SendReply(ctx context.Context, peerID, body string, r store.Reply) (store.Message, error) {
+	return s.send(ctx, store.Message{ID: ids.New(), PeerID: peerID, Body: body, Reply: r}, nil)
+}
+
 // SendOffer envía una oferta de archivos como un mensaje con resumen body
 // (forwarded: es un reenvío). El ID de la transferencia es el del mensaje;
 // t.ID y t.PeerID se completan aquí.
@@ -375,6 +408,7 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 		SentAt:    m.SentAt.UnixMilli(),
 		Broadcast: m.Broadcast,
 		Forwarded: m.Forwarded,
+		Reply:     toWireReply(m.Reply),
 	}
 	if m.Kind == store.KindFiles {
 		t, ok, err := s.store.Transfer(s.ctx, m.ID)
@@ -470,6 +504,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 		Unread:    true,
 		Broadcast: wm.Broadcast,
 		Forwarded: wm.Forwarded,
+		Reply:     wm.reply(),
 	}
 	var t *store.Transfer
 	if wm.Offer != nil {

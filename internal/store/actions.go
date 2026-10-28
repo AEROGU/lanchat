@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"strings"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/protocol"
 )
 
 // Acciones sobre mensajes ya enviados: borrarlos para todos, editarlos y
@@ -52,6 +54,8 @@ func (s *Store) DeleteMessage(ctx context.Context, id string) (m Message, wasUnr
 		stmt{`DELETE FROM room_deliveries WHERE message_id = ? AND delivered = 0`, []any{id}},
 		stmt{`DELETE FROM transfer_files WHERE transfer_id = ?`, []any{id}},
 		stmt{`DELETE FROM transfers WHERE id = ?`, []any{id}},
+		// Las respuestas dejan de citar su texto.
+		stmt{`UPDATE messages SET reply_text = '' WHERE reply_id = ?`, []any{id}},
 	)
 	if err != nil {
 		return Message{}, false, err
@@ -62,15 +66,27 @@ func (s *Store) DeleteMessage(ctx context.Context, id string) (m Message, wasUnr
 
 // EditMessage cambia el texto de un mensaje no eliminado. at es la hora de la
 // edición según su autor: gana la más reciente, así una edición atrasada no
-// pisa a una posterior. changed es false si no cambió nada.
+// pisa a una posterior. changed es false si no cambió nada. Las respuestas
+// que lo citan pasan a citar el texto nuevo.
 func (s *Store) EditMessage(ctx context.Context, id, body string, at time.Time) (changed bool, err error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE messages SET body = ?, edited_at = ?
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE messages SET body = ?, edited_at = ?
 		WHERE id = ? AND deleted = 0 AND edited_at < ?`, body, at.UnixMilli(), id, at.UnixMilli())
 	if err != nil {
 		return false, err
 	}
-	n, err := res.RowsAffected()
-	return n > 0, err
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET reply_text = ? WHERE reply_id = ?`,
+		protocol.ReplySnippet(body), id); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 // RoomRecipients devuelve a quiénes se envió (o se iba a enviar) un mensaje

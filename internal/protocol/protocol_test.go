@@ -3,6 +3,7 @@ package protocol
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestValidateName(t *testing.T) {
@@ -63,5 +64,22 @@ func TestValidateRelDir(t *testing.T) {
 		if ValidateRelDir(bad) == nil {
 			t.Errorf("%q debía rechazarse", bad)
 		}
+	}
+}
+
+func TestReplySnippet(t *testing.T) {
+	if got := ReplySnippet("  hola\n"); got != "hola" {
+		t.Errorf("corto: %q", got)
+	}
+	long := strings.Repeat("ñ", MaxReplyTextLen+10)
+	got := ReplySnippet(long)
+	if n := utf8.RuneCountInString(got); n != MaxReplyTextLen || !strings.HasSuffix(got, "…") {
+		t.Errorf("largo: %d caracteres, %q", n, got)
+	}
+	if ValidateReplyText(got) != nil || ValidateReplyText("") != nil {
+		t.Error("el recorte y la cita vacía debían ser válidos")
+	}
+	if ValidateReplyText(long) == nil || ValidateReplyText("a\x1bb") == nil {
+		t.Error("debía rechazar una cita demasiado larga o con caracteres de control")
 	}
 }

@@ -173,6 +173,18 @@ type messageJSON struct {
 	Edited bool `json:"edited"`
 	// Forwarded: es un reenvío de otro mensaje.
 	Forwarded bool `json:"forwarded"`
+	// Reply: la cita del mensaje al que responde (ausente si no responde a nada).
+	Reply *replyJSON `json:"reply,omitempty"`
+}
+
+// replyJSON es la cita de una respuesta (ver store.Reply).
+type replyJSON struct {
+	ID string `json:"id"`
+	// Author es el ID de quien escribió el mensaje citado.
+	Author string `json:"author"`
+	Text   string `json:"text"`
+	// Deleted: el mensaje citado se eliminó para todos (Text viene vacío).
+	Deleted bool `json:"deleted"`
 }
 
 // reactionJSON es la reacción de un equipo a un mensaje.
@@ -218,7 +230,16 @@ func toMessageJSON(m store.Message) messageJSON {
 		MergedFrom: m.MergedFrom,
 		Edited:     !m.EditedAt.IsZero() && !m.Deleted,
 		Forwarded:  m.Forwarded,
+		Reply:      toReplyJSON(m),
 	}
+}
+
+func toReplyJSON(m store.Message) *replyJSON {
+	if m.Reply.ID == "" || m.Deleted {
+		return nil
+	}
+	r := m.Reply
+	return &replyJSON{ID: r.ID, Author: r.Author, Text: r.Text, Deleted: r.Text == ""}
 }
 
 // unixMilli es 0 para la hora cero (en vez de un número negativo).

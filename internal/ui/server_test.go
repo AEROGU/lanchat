@@ -728,6 +728,13 @@ func (f *fakeBackend) EditMessage(_ context.Context, id, body string) (store.Mes
 	}
 	return store.Message{ID: id, PeerID: "c1", Outgoing: true, Body: body, At: time.Now(), EditedAt: time.Now()}, nil
 }
+func (f *fakeBackend) Reply(_ context.Context, id, body string) (store.Message, error) {
+	if id != "m1" {
+		return store.Message{}, errors.New("el mensaje al que respondes ya no existe")
+	}
+	return store.Message{ID: "r1", PeerID: "c1", Outgoing: true, Body: body, At: time.Now(),
+		Reply: store.Reply{ID: id, Author: "c1", Text: "hola"}}, nil
+}
 func (f *fakeBackend) Forward(_ context.Context, ids, peers, rooms []string) ([]store.Message, error) {
 	if err := f.record("forward", fmt.Sprintf("%v→%v%v", ids, peers, rooms)); err != nil {
 		return nil, err
@@ -1146,6 +1153,15 @@ func TestMessageActions(t *testing.T) {
 	fail.Error = ""
 	if code := do("/api/messages/edit", `{"id":"viejo","body":"x"}`, &fail); code != http.StatusBadRequest || fail.Error == "" {
 		t.Errorf("editar fuera de plazo: %d %+v", code, fail)
+	}
+	m = messageJSON{}
+	if code := do("/api/messages/reply", `{"id":"m1","body":"de acuerdo"}`, &m); code != http.StatusCreated ||
+		m.Body != "de acuerdo" || m.Reply == nil || m.Reply.ID != "m1" || m.Reply.Text != "hola" || m.Reply.Deleted {
+		t.Errorf("responder: %d %+v", code, m)
+	}
+	fail.Error = ""
+	if code := do("/api/messages/reply", `{"id":"borrado","body":"x"}`, &fail); code != http.StatusBadRequest || fail.Error == "" {
+		t.Errorf("responder a uno que no existe: %d %+v", code, fail)
 	}
 	var fw struct {
 		Messages []messageJSON

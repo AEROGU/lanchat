@@ -141,8 +141,7 @@ func (s *Store) InsertRoomMessage(ctx context.Context, m Message, recipients []s
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO messages (`+messageColumns+`) VALUES (`+messagePlaceholders+`)`,
-		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind,
-		m.Broadcast, m.RoomID, m.Forwarded); err != nil {
+		messageArgs(m)...); err != nil {
 		return err
 	}
 	for _, p := range recipients {

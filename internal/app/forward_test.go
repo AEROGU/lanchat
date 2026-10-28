@@ -199,3 +199,74 @@ func TestForwardStagedFiles(t *testing.T) {
 		t.Errorf("quedaron copias temporales: %v", entries)
 	}
 }
+
+func TestReply(t *testing.T) {
+	ctx := context.Background()
+	a, b, _ := pair(t)
+	idA, idB := a.app.Self().ID, b.app.Self().ID
+
+	m, err := a.app.Send(ctx, idB, "nos vemos a las 5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B recibe", msgEvent(chat.MessageReceived, m.ID))
+	r, err := b.app.Reply(ctx, m.ID, "ahí estaré")
+	want := store.Reply{ID: m.ID, Author: idA, Text: "nos vemos a las 5"}
+	if err != nil || r.PeerID != idA || r.Reply != want {
+		t.Fatalf("responder: %+v, %v", r, err)
+	}
+	ev := waitFor(t, a, "A recibe la respuesta", msgEvent(chat.MessageReceived, r.ID)).(chat.Event)
+	if ev.Message.Body != "ahí estaré" || ev.Message.Reply != want {
+		t.Errorf("respuesta en A: %+v", ev.Message)
+	}
+	quote := func(n *node) string {
+		got, _, _ := n.app.store.Message(ctx, r.ID)
+		return got.Reply.Text
+	}
+
+	// Si el autor edita el original, las dos citas muestran el texto nuevo.
+	if _, err := a.app.EditMessage(ctx, m.ID, "nos vemos a las 6"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B ve la edición", msgEvent(chat.MessageEdited, m.ID))
+	if quote(a) != "nos vemos a las 6" || quote(b) != "nos vemos a las 6" {
+		t.Errorf("cita tras editar: A %q, B %q", quote(a), quote(b))
+	}
+
+	// Si lo elimina para todos, ya no se cita su texto ni se le responde.
+	if _, err := a.app.DeleteForEveryone(ctx, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B ve la eliminación", msgEvent(chat.MessageDeleted, m.ID))
+	if quote(a) != "" || quote(b) != "" {
+		t.Errorf("cita tras eliminar: A %q, B %q", quote(a), quote(b))
+	}
+	if _, err := b.app.Reply(ctx, m.ID, "¿y ahora?"); err == nil {
+		t.Error("no debía poder responder a un mensaje eliminado")
+	}
+
+	// En una sala, la cita lleva al autor original; responder a uno propio
+	// lo cita como de este equipo.
+	room, err := a.app.CreateRoom(ctx, "Proyecto", []string{idB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B conoce la sala", roomEvent(func(r store.Room) bool { return r.ID == room.ID }))
+	rm, err := b.app.SendRoom(ctx, room.ID, "¿quién trae el proyector?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, a, "A recibe en la sala", msgEvent(chat.MessageReceived, rm.ID))
+	ra, err := a.app.Reply(ctx, rm.ID, "yo")
+	if err != nil || ra.RoomID != room.ID || ra.Reply.Author != idB {
+		t.Fatalf("responder en la sala: %+v, %v", ra, err)
+	}
+	ev = waitFor(t, b, "B recibe la respuesta en la sala", msgEvent(chat.MessageReceived, ra.ID)).(chat.Event)
+	if ev.Message.RoomID != room.ID || ev.Message.Reply != (store.Reply{ID: rm.ID, Author: idB, Text: "¿quién trae el proyector?"}) {
+		t.Errorf("respuesta de sala en B: %+v", ev.Message)
+	}
+	own, err := b.app.Reply(ctx, rm.ID, "lo traigo yo también")
+	if err != nil || own.Reply.Author != idB {
+		t.Errorf("responder a uno propio: %+v, %v", own, err)
+	}
+}

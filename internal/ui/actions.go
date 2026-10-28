@@ -53,6 +53,24 @@ func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toMessageJSON(m))
 }
 
+// handleReply envía un mensaje que responde a otro, en la conversación de ese
+// otro (contacto o sala).
+func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID   string `json:"id"`
+		Body string `json:"body"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	m, err := s.b.Reply(r.Context(), req.ID, req.Body)
+	if err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toMessageJSON(m))
+}
+
 // handleForward reenvía mensajes a contactos y salas. Si falló con algunos
 // destinos, responde lo que sí se envió y el error.
 func (s *Server) handleForward(w http.ResponseWriter, r *http.Request) {

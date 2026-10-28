@@ -75,15 +75,20 @@ func toWireRoom(r store.Room) *wireRoom {
 // aviso de la sala ("Ana agregó a Luis"); se puede enviar aunque este equipo
 // ya haya salido (para avisar que salió).
 func (s *Service) SendRoom(ctx context.Context, roomID, body string, event bool, extra ...string) (store.Message, error) {
-	return s.sendRoom(ctx, roomID, body, event, false, extra)
+	return s.sendRoom(ctx, roomID, body, event, false, store.Reply{}, extra)
 }
 
 // ForwardRoom reenvía body a la sala (llega marcado como reenviado).
 func (s *Service) ForwardRoom(ctx context.Context, roomID, body string) (store.Message, error) {
-	return s.sendRoom(ctx, roomID, body, false, true, nil)
+	return s.sendRoom(ctx, roomID, body, false, true, store.Reply{}, nil)
 }
 
-func (s *Service) sendRoom(ctx context.Context, roomID, body string, event, forwarded bool, extra []string) (store.Message, error) {
+// ReplyRoom envía a la sala body como respuesta a otro mensaje, con su cita.
+func (s *Service) ReplyRoom(ctx context.Context, roomID, body string, r store.Reply) (store.Message, error) {
+	return s.sendRoom(ctx, roomID, body, false, false, r, nil)
+}
+
+func (s *Service) sendRoom(ctx context.Context, roomID, body string, event, forwarded bool, reply store.Reply, extra []string) (store.Message, error) {
 	if err := protocol.ValidateMessage(body); err != nil {
 		return store.Message{}, err
 	}
@@ -106,7 +111,7 @@ func (s *Service) sendRoom(ctx context.Context, roomID, body string, event, forw
 	now := time.Now()
 	m := store.Message{
 		ID: ids.New(), Outgoing: true, Body: body, At: now, SentAt: now,
-		Status: store.StatusPending, RoomID: roomID, Forwarded: forwarded,
+		Status: store.StatusPending, RoomID: roomID, Forwarded: forwarded, Reply: reply,
 	}
 	if event {
 		m.Kind = store.KindRoomEvent
@@ -142,6 +147,7 @@ func (s *Service) flushRoom(p discovery.Peer) bool {
 				ID: m.ID, From: s.self.ID, FromName: s.self.Name(), FromHost: s.self.Hostname,
 				Body: m.Body, SentAt: m.SentAt.UnixMilli(),
 				Room: toWireRoom(room), Event: m.Kind == store.KindRoomEvent, Forwarded: m.Forwarded,
+				Reply: toWireReply(m.Reply),
 			})
 			switch {
 			case err != nil || status >= 500:
@@ -263,6 +269,8 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 	}
 	if wm.Event {
 		m.Kind = store.KindRoomEvent
+	} else {
+		m.Reply = wm.reply()
 	}
 	inserted, err := s.store.InsertMessage(ctx, m)
 	if err != nil {
