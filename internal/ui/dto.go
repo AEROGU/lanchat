@@ -154,6 +154,10 @@ type messageJSON struct {
 	Reactions *[]reactionJSON `json:"reactions,omitempty"`
 	// MergedFrom: era de otro contacto y se combinó en esta conversación.
 	MergedFrom string `json:"mergedFrom,omitempty"`
+	// Edited: su autor cambió el texto después de enviarlo.
+	Edited bool `json:"edited"`
+	// Forwarded: es un reenvío de otro mensaje.
+	Forwarded bool `json:"forwarded"`
 }
 
 // reactionJSON es la reacción de un equipo a un mensaje.
@@ -197,6 +201,8 @@ func toMessageJSON(m store.Message) messageJSON {
 		Broadcast:  m.Broadcast,
 		ReadAt:     unixMilli(m.ReadAt),
 		MergedFrom: m.MergedFrom,
+		Edited:     !m.EditedAt.IsZero() && !m.Deleted,
+		Forwarded:  m.Forwarded,
 	}
 }
 

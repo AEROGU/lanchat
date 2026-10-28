@@ -260,3 +260,114 @@ func TestDeleteFilesForEveryone(t *testing.T) {
 		t.Errorf("limpiadas en disco: %v", discarded)
 	}
 }
+
+// Solo el autor edita su mensaje de texto, dentro del plazo; gana la edición
+// más reciente.
+func TestEditOps(t *testing.T) {
+	s := newTestService(t)
+	ctx := context.Background()
+	stranger := mustIdentity("extraño")
+	sent := time.Now().Add(-time.Minute)
+	msgs := []store.Message{
+		{ID: "m1", PeerID: "otro", Body: "hola", At: sent, SentAt: sent, Status: store.StatusDelivered},
+		{ID: "m2", PeerID: "otro", Outgoing: true, Body: "mío", At: sent, SentAt: sent, Status: store.StatusDelivered},
+		{ID: "m3", PeerID: "otro", Body: "viejo", At: sent, SentAt: sent.Add(-time.Hour), Status: store.StatusDelivered},
+		{ID: "m4", PeerID: "otro", Outgoing: true, Body: "tarde", At: sent,
+			SentAt: time.Now().Add(-protocol.DeleteWindow - time.Minute), Status: store.StatusDelivered},
+		{ID: "m5", PeerID: "otro", Body: "📎 foto.jpg", Kind: store.KindFiles, At: sent, SentAt: sent, Status: store.StatusDelivered},
+	}
+	for _, m := range msgs {
+		s.store.InsertMessage(ctx, m)
+	}
+	s.store.UpsertPeer(ctx, store.Peer{ID: "otro", Fingerprint: senderID.Fingerprint})
+	now := time.Now().UnixMilli()
+	body := func(id string) string {
+		m, _, _ := s.store.Message(ctx, id)
+		return m.Body
+	}
+
+	ignored := map[string]struct {
+		from string
+		id   *identity.Identity
+		op   wireOp
+	}{
+		"otro equipo edita un mensaje ajeno": {"extraño", stranger, wireOp{Type: protocol.OpEdit, Msg: "m1", Body: "x", At: now}},
+		"editar un mensaje de este equipo":   {"otro", senderID, wireOp{Type: protocol.OpEdit, Msg: "m2", Body: "x", At: now}},
+		"editar fuera de plazo":              {"otro", senderID, wireOp{Type: protocol.OpEdit, Msg: "m3", Body: "x", At: now}},
+		"editar una oferta de archivos":      {"otro", senderID, wireOp{Type: protocol.OpEdit, Msg: "m5", Body: "x", At: now}},
+		"dejarlo vacío":                      {"otro", senderID, wireOp{Type: protocol.OpEdit, Msg: "m1", Body: "  ", At: now}},
+		"con caracteres de control":          {"otro", senderID, wireOp{Type: protocol.OpEdit, Msg: "m1", Body: "a\x1b[2J", At: now}},
+	}
+	for name, c := range ignored {
+		if code := postOps(t, s, c.from, c.id, c.op); code != http.StatusNoContent {
+			t.Errorf("%s: código %d", name, code)
+		}
+	}
+	for _, m := range msgs {
+		if got, _, _ := s.store.Message(ctx, m.ID); got.Body != m.Body || !got.EditedAt.IsZero() {
+			t.Errorf("%s no debía cambiar: %+v", m.ID, got)
+		}
+	}
+
+	// La edición legítima, y una atrasada que no la pisa.
+	if code := postOps(t, s, "otro", senderID,
+		wireOp{Type: protocol.OpEdit, Msg: "m1", Body: "hola, corregido", At: now},
+		wireOp{Type: protocol.OpEdit, Msg: "m1", Body: "atrasada", At: now - 1000},
+	); code != http.StatusNoContent {
+		t.Fatalf("edición: %d", code)
+	}
+	if m, _, _ := s.store.Message(ctx, "m1"); m.Body != "hola, corregido" || m.EditedAt.UnixMilli() != now {
+		t.Errorf("mensaje editado: %+v", m)
+	}
+	// Una edición del largo máximo cabe en una tanda, aunque al escaparla en
+	// JSON ocupe varias veces más.
+	long := strings.Repeat("<", protocol.MaxMessageBytes)
+	if code := postOps(t, s, "otro", senderID, wireOp{Type: protocol.OpEdit, Msg: "m1", Body: long, At: now + 1}); code != http.StatusNoContent {
+		t.Fatalf("edición larga: %d", code)
+	}
+	if body("m1") != long {
+		t.Error("la edición larga no se aplicó")
+	}
+
+	// Este equipo edita lo suyo, de texto y dentro del plazo.
+	for _, id := range []string{"m1", "m4", "m5"} {
+		if _, err := s.Edit(ctx, id, "nuevo"); err == nil {
+			t.Errorf("editar %s debía fallar", id)
+		}
+	}
+	if _, err := s.Edit(ctx, "m2", " "); err == nil {
+		t.Error("no se deja vacío")
+	}
+	if m, err := s.Edit(ctx, "m2", "mío"); err != nil || !m.EditedAt.IsZero() {
+		t.Errorf("sin cambios no es una edición: %+v, %v", m, err)
+	}
+	m, err := s.Edit(ctx, "m2", "mío, corregido")
+	if err != nil || m.Body != "mío, corregido" || m.EditedAt.IsZero() {
+		t.Fatalf("editar el propio: %+v, %v", m, err)
+	}
+	ops, _ := s.store.PendingOps(ctx, "otro", 10)
+	if len(ops) != 1 || !strings.Contains(ops[0].Payload, `"type":"edit"`) || !strings.Contains(ops[0].Payload, "mío, corregido") {
+		t.Errorf("aviso pendiente para el otro equipo: %+v", ops)
+	}
+}
+
+// Las tandas de avisos no pasan de protocol.OpsBatchBytes, salvo un aviso
+// que solo ya es más grande.
+func TestBatchLen(t *testing.T) {
+	op := func(n int) store.Op { return store.Op{Payload: strings.Repeat("x", n)} }
+	big := protocol.OpsBatchBytes + 1
+	cases := []struct {
+		ops  []store.Op
+		want int
+	}{
+		{[]store.Op{op(10), op(10), op(10)}, 3},
+		{[]store.Op{op(big), op(10)}, 1},
+		{[]store.Op{op(10), op(big)}, 1},
+		{[]store.Op{op(protocol.OpsBatchBytes / 2), op(protocol.OpsBatchBytes / 2), op(10)}, 1},
+	}
+	for i, c := range cases {
+		if got := batchLen(c.ops); got != c.want {
+			t.Errorf("caso %d: %d avisos, quería %d", i, got, c.want)
+		}
+	}
+}

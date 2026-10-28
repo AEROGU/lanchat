@@ -14,18 +14,20 @@ import (
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
-// Avisos sobre mensajes ya enviados: eliminarlos para todos y reaccionar.
-// Cada aviso espera en la cola (store.EnqueueOps) hasta que su destinatario
+// Avisos sobre mensajes ya enviados: eliminarlos para todos, editarlos y
+// reaccionar. Cada aviso espera en la cola (store.EnqueueOps) hasta que su destinatario
 // lo confirma, igual que los mensajes: si está desconectado, le llega al
 // volver. Se envían después de los mensajes pendientes, así un aviso nunca
 // llega antes que el mensaje al que se refiere.
 
 // wireOp es un aviso tal como viaja y como se guarda en la cola.
 type wireOp struct {
-	Type string `json:"type"` // protocol.OpDelete u OpReact
+	Type string `json:"type"` // protocol.OpDelete, OpReact u OpEdit
 	Msg  string `json:"msg"`  // ID del mensaje
 	// Emoji de OpReact; vacío quita la reacción.
 	Emoji string `json:"emoji,omitempty"`
+	// Body es el texto nuevo de OpEdit.
+	Body string `json:"body,omitempty"`
 	// At es la hora del remitente (Unix en milisegundos).
 	At int64 `json:"at"`
 }
@@ -36,8 +38,11 @@ type wireOps struct {
 	Ops  []json.RawMessage `json:"ops"`
 }
 
-// maxOpsRequestBytes acota el JSON de una tanda de avisos.
-const maxOpsRequestBytes = protocol.MaxOpsPerRequest*(protocol.MaxIDLen+protocol.MaxReactionBytes+96) + 256
+// maxOpsRequestBytes acota el JSON de una tanda de avisos: las tandas pesan
+// hasta protocol.OpsBatchBytes, o son un aviso solo con una edición del largo
+// máximo (escapada en JSON, cada byte puede ocupar hasta 6).
+const maxOpsRequestBytes = protocol.OpsBatchBytes + 6*protocol.MaxMessageBytes +
+	protocol.MaxOpsPerRequest*8 + 1024
 
 // DeleteForEveryone elimina para todos un mensaje propio (de texto, o una
 // oferta de archivos que ya terminó), si no pasó protocol.DeleteWindow desde
@@ -106,6 +111,56 @@ func (s *Service) deleteMessage(ctx context.Context, m store.Message) (store.Mes
 	}
 	s.emit(Event{Type: MessageDeleted, Message: deleted})
 	return deleted, nil
+}
+
+// Edit cambia el texto de un mensaje de texto propio, si no pasó
+// protocol.DeleteWindow desde que se envió (el mismo plazo que para
+// eliminarlo para todos). Quien aún no lo recibió lo recibe ya editado; a los
+// demás se les avisa.
+func (s *Service) Edit(ctx context.Context, msgID, body string) (store.Message, error) {
+	if err := protocol.ValidateMessage(body); err != nil {
+		return store.Message{}, err
+	}
+	m, ok, err := s.store.Message(ctx, msgID)
+	switch {
+	case err != nil:
+		return store.Message{}, err
+	case !ok:
+		return store.Message{}, errors.New("mensaje inexistente")
+	case !m.Outgoing:
+		return store.Message{}, errors.New("solo puedes editar tus propios mensajes")
+	case m.Deleted:
+		return store.Message{}, errors.New("el mensaje se eliminó")
+	case m.Kind != store.KindText:
+		return store.Message{}, errors.New("solo se pueden editar los mensajes de texto")
+	case time.Since(m.SentAt) > protocol.DeleteWindow:
+		return store.Message{}, fmt.Errorf("ya pasaron más de %d minutos desde que lo enviaste",
+			int(protocol.DeleteWindow.Minutes()))
+	case m.Body == body:
+		return m, nil
+	}
+	recipients := []string{m.PeerID}
+	if m.RoomID != "" {
+		room, ok, err := s.store.Room(ctx, m.RoomID)
+		switch {
+		case err != nil:
+			return store.Message{}, err
+		case !ok || room.Left:
+			return store.Message{}, errors.New("ya no estás en esta sala")
+		}
+		if recipients, err = s.store.RoomRecipients(ctx, msgID); err != nil {
+			return store.Message{}, err
+		}
+	}
+	now := time.Now()
+	if _, err := s.store.EditMessage(ctx, msgID, body, now); err != nil {
+		return store.Message{}, err
+	}
+	if m, _, err = s.store.Message(ctx, msgID); err != nil {
+		return store.Message{}, err
+	}
+	s.emit(Event{Type: MessageEdited, Message: m})
+	return m, s.enqueue(ctx, recipients, wireOp{Type: protocol.OpEdit, Msg: msgID, Body: body, At: now.UnixMilli()})
 }
 
 // React pone la reacción de este equipo a un mensaje (una por mensaje; emoji
@@ -179,6 +234,7 @@ func (s *Service) sendOps(p discovery.Peer) bool {
 		if len(ops) == 0 {
 			return true
 		}
+		ops = ops[:batchLen(ops)]
 		req := wireOps{From: s.self.ID, Ops: make([]json.RawMessage, len(ops))}
 		for i, op := range ops {
 			req.Ops[i] = json.RawMessage(op.Payload)
@@ -197,6 +253,17 @@ func (s *Service) sendOps(p discovery.Peer) bool {
 			return false
 		}
 	}
+}
+
+// batchLen dice cuántos de los primeros avisos caben en una tanda de hasta
+// protocol.OpsBatchBytes (al menos uno, aunque solo ya pase de ese tamaño).
+func batchLen(ops []store.Op) int {
+	n, size := 0, 0
+	for n < len(ops) && (n == 0 || size+len(ops[n].Payload) <= protocol.OpsBatchBytes) {
+		size += len(ops[n].Payload) + 1 // más la coma
+		n++
+	}
+	return n
 }
 
 func (s *Service) handleOps(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +296,7 @@ func (s *Service) handleOps(w http.ResponseWriter, r *http.Request) {
 
 // applyOp aplica un aviso de from, cuya identidad ya se verificó por TLS.
 func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
-	if op.Type != protocol.OpDelete && op.Type != protocol.OpReact {
+	if op.Type != protocol.OpDelete && op.Type != protocol.OpReact && op.Type != protocol.OpEdit {
 		return nil // de una versión futura
 	}
 	if err := protocol.ValidateID(op.Msg); err != nil {
@@ -259,6 +326,9 @@ func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
 		}
 		_, err := s.deleteMessage(ctx, m)
 		return err
+	}
+	if op.Type == protocol.OpEdit {
+		return s.applyEdit(ctx, from, m, op)
 	}
 
 	if op.Emoji != "" {
@@ -291,5 +361,29 @@ func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
 		return err
 	}
 	s.emit(Event{Type: MessageReaction, Message: m})
+	return nil
+}
+
+// applyEdit aplica la edición que from hizo de su mensaje m.
+func (s *Service) applyEdit(ctx context.Context, from string, m store.Message, op wireOp) error {
+	switch {
+	case m.Outgoing || m.PeerID != from:
+		return errors.New("solo el autor puede editar su mensaje")
+	case m.Kind != store.KindText:
+		return errors.New("solo se editan mensajes de texto")
+	case op.At-m.SentAt.UnixMilli() > protocol.DeleteWindow.Milliseconds():
+		return errors.New("fuera de plazo")
+	}
+	if err := protocol.ValidateMessage(op.Body); err != nil {
+		return err
+	}
+	changed, err := s.store.EditMessage(ctx, m.ID, op.Body, time.UnixMilli(op.At))
+	if err != nil || !changed {
+		return err
+	}
+	if m, _, err = s.store.Message(ctx, m.ID); err != nil {
+		return err
+	}
+	s.emit(Event{Type: MessageEdited, Message: m})
 	return nil
 }

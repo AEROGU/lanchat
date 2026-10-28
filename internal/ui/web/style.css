@@ -765,7 +765,14 @@ dialog input, dialog textarea, dialog select {
   background: var(--panel);
   box-shadow: 0 6px 20px rgb(0 0 0 / 25%);
 }
-.msg-menu .emoji-row { display: flex; flex-wrap: wrap; gap: 2px; }
+.msg-menu .emoji-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
 .msg-menu .emoji {
   padding: 4px 6px;
   border: none;
@@ -779,16 +786,72 @@ dialog input, dialog textarea, dialog select {
 .msg-menu .menu-item {
   display: block;
   width: 100%;
-  margin-top: 4px;
   padding: 8px 10px;
   border: none;
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 8px 8px;
+  border-radius: 8px;
   background: none;
-  color: var(--danger);
+  color: var(--text);
   text-align: left;
 }
+.msg-menu .menu-item.danger { color: var(--danger); }
 .msg-menu .menu-item:hover { background: var(--bg); }
+
+/* ---------- Editar, seleccionar y reenviar ---------- */
+
+.edit-bar, .select-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+.edit-bar:not([hidden]) ~ #composer { border-top: none; }
+.edit-what {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-left: 8px;
+  border-left: 3px solid var(--brand);
+  font-size: 12px;
+}
+.edit-what strong { color: var(--brand); }
+.edit-what span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.select-bar { padding: 10px 12px; }
+#select-count { flex: 1; font-weight: 600; }
+.select-bar .primary { padding: 8px 14px; }
+.select-bar button:disabled { opacity: 0.45; cursor: default; }
+
+/* Al seleccionar, cada mensaje lleva un círculo que se marca. */
+#messages.selecting .msg-act { display: none; }
+.msg.selectable { cursor: pointer; user-select: none; }
+.msg.selectable::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: var(--panel);
+  color: #fff;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 16px;
+  text-align: center;
+}
+.msg.in.selectable::after { right: -30px; }
+.msg.out.selectable::after { left: -30px; }
+.msg.selected { outline: 2px solid var(--brand); outline-offset: 2px; }
+.msg.selected::after { content: "✓"; border-color: var(--brand); background: var(--brand); }
+
+#forward-what { white-space: pre-line; }
+#forward-search { width: 100%; margin-top: 8px; }
+.pick-list .room-icon { font-size: 12px; }
 
 /* ---------- Miembros de una sala ---------- */
 

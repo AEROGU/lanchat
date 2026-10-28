@@ -162,6 +162,12 @@ var migrations = [][]string{
 		// avisa una vez.
 		`ALTER TABLE peers ADD COLUMN notified_protocol INTEGER NOT NULL DEFAULT 0`,
 	},
+	{
+		// edited_at: hora del remitente (ms) de la última edición; 0 = sin editar.
+		`ALTER TABLE messages ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0`,
+		// forwarded = 1: es un reenvío de otro mensaje.
+		`ALTER TABLE messages ADD COLUMN forwarded INTEGER NOT NULL DEFAULT 0`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -379,6 +385,11 @@ type Message struct {
 	// MergedFrom: era de otro contacto, combinado aquí al quitarlo
 	// (RemovePeer); describe a ese contacto. Vacío si no.
 	MergedFrom string
+	// EditedAt: cuándo lo editó su autor por última vez, con la hora del
+	// autor (cero si no se editó).
+	EditedAt time.Time
+	// Forwarded: es un reenvío de otro mensaje.
+	Forwarded bool
 	// Reactions: nil si no se consultaron (Message e historiales sí las traen).
 	Reactions []Reaction
 }
@@ -395,9 +406,12 @@ const (
 
 // messageColumns son las que se escriben al insertar; messageSelect agrega las
 // que solo cambian después.
-const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast, room_id`
+const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast, room_id, forwarded`
 
-const messageSelect = messageColumns + `, read_at, deleted, merged_from`
+// messagePlaceholders son los parámetros de un INSERT con messageColumns.
+const messagePlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
+
+const messageSelect = messageColumns + `, read_at, deleted, merged_from, edited_at`
 
 // InsertMessage guarda el mensaje; inserted es false si ese ID ya existía
 // (un reenvío del mismo mensaje).
@@ -415,9 +429,9 @@ func (s *Store) InsertMessageWithTransfer(ctx context.Context, m Message, t *Tra
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR IGNORE INTO messages (`+messageColumns+`) VALUES (`+messagePlaceholders+`)`,
 		m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind,
-		m.Broadcast, m.RoomID)
+		m.Broadcast, m.RoomID, m.Forwarded)
 	if err != nil {
 		return false, err
 	}
@@ -540,15 +554,18 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 	var out []Message
 	for rows.Next() {
 		var m Message
-		var at, sent, readAt int64
+		var at, sent, readAt, editedAt int64
 		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread,
-			&m.Kind, &m.Broadcast, &m.RoomID, &readAt, &m.Deleted, &m.MergedFrom); err != nil {
+			&m.Kind, &m.Broadcast, &m.RoomID, &m.Forwarded, &readAt, &m.Deleted, &m.MergedFrom, &editedAt); err != nil {
 			return nil, err
 		}
 		m.At = time.UnixMilli(at)
 		m.SentAt = time.UnixMilli(sent)
 		if readAt > 0 {
 			m.ReadAt = time.UnixMilli(readAt)
+		}
+		if editedAt > 0 {
+			m.EditedAt = time.UnixMilli(editedAt)
 		}
 		out = append(out, m)
 	}

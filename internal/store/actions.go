@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-// Acciones sobre mensajes ya enviados: borrarlos para todos y reaccionar. Los
+// Acciones sobre mensajes ya enviados: borrarlos para todos, editarlos y
+// reaccionar. Los
 // avisos a los demás equipos esperan en la tabla outbox hasta entregarse.
 
 // Reaction es la reacción de un equipo a un mensaje.
@@ -57,6 +58,19 @@ func (s *Store) DeleteMessage(ctx context.Context, id string) (m Message, wasUnr
 	}
 	m, _, err = s.Message(ctx, id)
 	return m, old.Unread, err
+}
+
+// EditMessage cambia el texto de un mensaje no eliminado. at es la hora de la
+// edición según su autor: gana la más reciente, así una edición atrasada no
+// pisa a una posterior. changed es false si no cambió nada.
+func (s *Store) EditMessage(ctx context.Context, id, body string, at time.Time) (changed bool, err error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE messages SET body = ?, edited_at = ?
+		WHERE id = ? AND deleted = 0 AND edited_at < ?`, body, at.UnixMilli(), id, at.UnixMilli())
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // RoomRecipients devuelve a quiénes se envió (o se iba a enviar) un mensaje

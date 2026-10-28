@@ -25,9 +25,9 @@
 
 ## Características
 
-- **Sin servidor ni configuración**: las PCs de la red se encuentran solas. Las
-  de otra subred se agregan una vez (por IP o nombre de equipo) y las demás
-  las conocen a través de ella.
+- **Sin servidor ni configuración**: las PCs de la red se encuentran solas. De
+  otra subred basta agregar una sola PC (por IP o nombre de equipo): las
+  demás de esa subred llegan a través de ella ([detalles](#equipos-de-otras-subredes)).
 - **Sin cuentas**: cada quien elige su nombre; siempre se ve también el nombre
   del equipo y su IP. A cada contacto le puedes poner un alias y un grupo.
 - **Mensajes** 1 a 1 con historial, entrega a los desconectados cuando se
@@ -37,6 +37,12 @@
   archivos también, una vez descargado, cancelado, rechazado o caducado: lo
   descargado se queda en la carpeta del otro. Un envío que no llegó a nada
   se puede **borrar de este equipo** en cualquier momento.
+- **Editar** un mensaje propio en el mismo plazo de 15 minutos (aparece
+  "editado"), y **reenviar** mensajes a otros contactos o salas (aparecen
+  "Reenviado"). Se pueden **seleccionar varios** para reenviarlos o
+  eliminarlos para todos. Un archivo se reenvía mientras siga en la carpeta
+  de descargas (o, si lo enviaste tú, donde estaba); a las salas solo se
+  reenvían textos.
 - **Selector de emojis** 😊 junto a la caja de texto, con todos los de
   Unicode por categoría y los usados recientemente, en la PC y en el
   teléfono.
@@ -68,7 +74,8 @@
 
 Requisitos: Windows 10 u 11 de 64 bits con Microsoft Edge (viene con
 Windows). La red debe estar marcada como **privada** en Windows y permitir
-UDP 50000 y TCP 50001 entre las PCs.
+UDP 50000 y TCP 50001 entre las PCs. Si ves a alguien pero no le llegan los
+mensajes, mira [esta sección](#se-ve-a-alguien-pero-no-le-llegan-los-mensajes).
 
 ### En Android
 
@@ -118,6 +125,39 @@ cierra LanChat. Abrirlo de nuevo con LanChat ya abierto solo muestra la ventana.
 La primera vez Windows pedirá permiso de red: hay que permitirlo en **redes
 privadas** (UDP 50000 y TCP 50001). También se puede crear la regla desde
 Ajustes > Firewall de Windows, o con `lanchat.exe -firewall add`.
+
+### Equipos de otras subredes
+
+Basta con agregar **una sola PC** de la otra subred, y en **una sola PC** de
+la tuya: Ajustes > "Equipos de otras subredes", con su IP o su nombre de
+equipo. Los equipos comparten cada 2 minutos la lista de los que conocen, así
+que llegan todas las PCs de esa subred y tus compañeros también las ven.
+Conviene elegir una PC que casi siempre esté encendida y con IP fija (o
+agregar dos). El nombre de equipo sigue a la PC aunque cambie de IP, pero solo
+si la red resuelve nombres entre subredes (`ping NOMBRE` lo comprueba). Los
+routers deben dejar pasar el tráfico entre las dos subredes; si no, LanChat no
+puede llegar.
+
+### Se ve a alguien pero no le llegan los mensajes
+
+Que aparezca en la lista solo prueba el descubrimiento (UDP 50000, que sale de
+cada PC). Los mensajes y archivos **entran** por TCP 50001, y eso lo bloquea el
+firewall del equipo que recibe. Pasa sobre todo si su red está como "Pública"
+o si la PC tiene varias redes (p. ej. Ethernet y Wi-Fi). La solución es una
+regla **de entrada** para `lanchat.exe` en **todas las redes** (privada,
+pública y dominio); no hace falta regla de salida. En una ventana de
+comandos como administrador, con la ruta de ese equipo:
+
+```bat
+netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\lanchat.exe"
+```
+
+La regla va ligada a la ruta del `.exe`: si se mueve de carpeta, hay que
+crearla de nuevo. Si existe una regla de **bloqueo** para `lanchat.exe` (se
+crea si alguna vez se canceló el aviso de Windows), bórrala en *Firewall de
+Windows > Configuración avanzada > Reglas de entrada*. Para comprobarlo desde
+otra PC: `Test-NetConnection <IP> -Port 50001` en PowerShell debe decir
+`TcpTestSucceeded : True`.
 
 La primera vez LanChat pregunta si debe iniciar con Windows (en la bandeja); se
 desactiva en Ajustes. Con `-dir` no se toca, para no reemplazar el de la

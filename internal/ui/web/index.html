@@ -79,6 +79,23 @@
 
       <div id="drop-overlay" hidden></div>
 
+      <!-- Editar un mensaje propio: el composer muestra su texto. -->
+      <div id="edit-bar" class="edit-bar" hidden>
+        <div class="edit-what">
+          <strong>Editar mensaje</strong>
+          <span id="edit-original"></span>
+        </div>
+        <button type="button" id="edit-cancel" class="icon-btn" title="Cancelar la edición (Esc)" aria-label="Cancelar la edición">✕</button>
+      </div>
+
+      <!-- Varios mensajes seleccionados: reemplaza al composer. -->
+      <div id="select-bar" class="select-bar" hidden>
+        <button type="button" id="select-cancel" class="icon-btn" title="Terminar la selección (Esc)" aria-label="Terminar la selección">✕</button>
+        <span id="select-count"></span>
+        <button type="button" id="select-delete" class="text-btn danger-btn">Eliminar para todos</button>
+        <button type="button" id="select-forward" class="primary">Reenviar</button>
+      </div>
+
       <form id="composer" hidden>
         <button type="button" id="attach-btn" class="icon-btn contact-only" title="Enviar archivos (también puedes arrastrarlos aquí)" aria-label="Enviar archivos">📎</button>
         <button type="button" id="folder-btn" class="icon-btn contact-only desktop-only" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
@@ -92,7 +109,7 @@
           <div id="emoji-grid" class="emoji-grid"></div>
         </div>
         <textarea id="input" rows="1" placeholder="Escribe un mensaje (Enter envía, Shift+Enter nueva línea)"></textarea>
-        <button type="submit" class="primary">Enviar</button>
+        <button type="submit" class="primary" id="send-btn">Enviar</button>
       </form>
       <p id="send-error" class="error" hidden></p>
     </main>
@@ -271,6 +288,21 @@
     </form>
   </dialog>
 
+  <dialog id="forward-dialog">
+    <form method="dialog" id="forward-form">
+      <h2 id="forward-title"></h2>
+      <p id="forward-what" class="help share-files"></p>
+      <input id="forward-search" type="search" placeholder="Buscar contacto o sala" autocomplete="off">
+      <ul id="forward-list" class="pick-list"></ul>
+      <small id="forward-help" class="help"></small>
+      <p id="forward-error" class="error" hidden></p>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="save" class="primary" id="forward-send">Reenviar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="room-dialog">
     <form method="dialog" id="room-form">
       <h2 id="room-title"></h2>
@@ -415,7 +447,7 @@
     <p id="viewer-name"></p>
   </dialog>
 
-  <!-- Menú de un mensaje: reacciones y "Eliminar para todos". -->
+  <!-- Menú de un mensaje: reacciones, editar, reenviar, seleccionar y eliminar. -->
   <div id="msg-menu" class="msg-menu" role="menu" hidden></div>
 
   <script type="module" src="/app.js"></script>

@@ -7,7 +7,8 @@ import (
 	"unicode/utf8"
 )
 
-// Avisos sobre mensajes ya enviados: eliminarlos para todos y reaccionar.
+// Avisos sobre mensajes ya enviados: eliminarlos para todos, editarlos y
+// reaccionar.
 // Viajan por RouteOps en tandas; un equipo con una versión que no conoce la
 // ruta responde 404 y el aviso se descarta.
 
@@ -20,16 +21,24 @@ const (
 	OpDelete = "delete"
 	// OpReact: el remitente reaccionó a un mensaje (emoji vacío = quitó su reacción).
 	OpReact = "react"
+	// OpEdit: el autor cambió el texto de su mensaje. Las versiones que no lo
+	// conocen lo ignoran (conservan el texto original).
+	OpEdit = "edit"
 )
 
 const (
 	// DeleteWindow es cuánto tiempo después de enviarlo puede el autor
-	// eliminar un mensaje para todos. Lo comprueban quien elimina y quien
-	// recibe el aviso (con las horas del remitente, así no dependen de que
-	// los relojes de los equipos coincidan).
+	// eliminar un mensaje para todos o editarlo. Lo comprueban quien lo hace
+	// y quien recibe el aviso (con las horas del remitente, así no dependen
+	// de que los relojes de los equipos coincidan).
 	DeleteWindow = 15 * time.Minute
 	// MaxOpsPerRequest: avisos por petición (se envían en tandas).
 	MaxOpsPerRequest = 200
+	// OpsBatchBytes: el remitente arma cada tanda de avisos para que no pase
+	// de este tamaño, salvo un aviso que solo ya es más grande (una edición
+	// larga), que va solo. Así las versiones anteriores, que aceptan tandas
+	// de unos 40 KB, reciben completas las de avisos cortos.
+	OpsBatchBytes = 32 << 10
 	// MaxReactionBytes acota una reacción: un emoji puede ser una secuencia
 	// (familia, bandera, tono de piel) de varios caracteres.
 	MaxReactionBytes = 40

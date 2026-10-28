@@ -115,6 +115,8 @@ type Backend interface {
 
 	DeleteForEveryone(ctx context.Context, msgID string) (store.Message, error)
 	React(ctx context.Context, msgID, emoji string) (store.Message, error)
+	EditMessage(ctx context.Context, msgID, body string) (store.Message, error)
+	Forward(ctx context.Context, msgIDs, peers, rooms []string) ([]store.Message, error)
 
 	ExportData(ctx context.Context, path string) error
 	DeleteConversation(ctx context.Context, peerID string) error
@@ -276,6 +278,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/messages/many", s.handleSendMany)
 	mux.HandleFunc("POST /api/messages/delete", s.handleDeleteMessage)
 	mux.HandleFunc("POST /api/messages/react", s.handleReact)
+	mux.HandleFunc("POST /api/messages/edit", s.handleEditMessage)
+	mux.HandleFunc("POST /api/messages/forward", s.handleForward)
 	mux.HandleFunc("POST /api/read", s.handleRead)
 	mux.HandleFunc("POST /api/name", s.handleName)
 	mux.HandleFunc("POST /api/status", s.handleStatus)

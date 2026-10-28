@@ -75,6 +75,15 @@ func toWireRoom(r store.Room) *wireRoom {
 // aviso de la sala ("Ana agregó a Luis"); se puede enviar aunque este equipo
 // ya haya salido (para avisar que salió).
 func (s *Service) SendRoom(ctx context.Context, roomID, body string, event bool, extra ...string) (store.Message, error) {
+	return s.sendRoom(ctx, roomID, body, event, false, extra)
+}
+
+// ForwardRoom reenvía body a la sala (llega marcado como reenviado).
+func (s *Service) ForwardRoom(ctx context.Context, roomID, body string) (store.Message, error) {
+	return s.sendRoom(ctx, roomID, body, false, true, nil)
+}
+
+func (s *Service) sendRoom(ctx context.Context, roomID, body string, event, forwarded bool, extra []string) (store.Message, error) {
 	if err := protocol.ValidateMessage(body); err != nil {
 		return store.Message{}, err
 	}
@@ -97,7 +106,7 @@ func (s *Service) SendRoom(ctx context.Context, roomID, body string, event bool,
 	now := time.Now()
 	m := store.Message{
 		ID: ids.New(), Outgoing: true, Body: body, At: now, SentAt: now,
-		Status: store.StatusPending, RoomID: roomID,
+		Status: store.StatusPending, RoomID: roomID, Forwarded: forwarded,
 	}
 	if event {
 		m.Kind = store.KindRoomEvent
@@ -132,7 +141,7 @@ func (s *Service) flushRoom(p discovery.Peer) bool {
 			status, err := s.post(p, protocol.RouteMessage, wireMessage{
 				ID: m.ID, From: s.self.ID, FromName: s.self.Name(), FromHost: s.self.Hostname,
 				Body: m.Body, SentAt: m.SentAt.UnixMilli(),
-				Room: toWireRoom(room), Event: m.Kind == store.KindRoomEvent,
+				Room: toWireRoom(room), Event: m.Kind == store.KindRoomEvent, Forwarded: m.Forwarded,
 			})
 			switch {
 			case err != nil || status >= 500:
@@ -250,7 +259,7 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 	now := time.Now()
 	m := store.Message{
 		ID: wm.ID, PeerID: wm.From, Body: wm.Body, At: now, SentAt: time.UnixMilli(wm.SentAt),
-		Status: store.StatusDelivered, Unread: !wm.Event, RoomID: wr.ID,
+		Status: store.StatusDelivered, Unread: !wm.Event, RoomID: wr.ID, Forwarded: wm.Forwarded && !wm.Event,
 	}
 	if wm.Event {
 		m.Kind = store.KindRoomEvent

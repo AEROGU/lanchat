@@ -20,6 +20,13 @@ const state = {
   progress: new Map(), // id de transferencia -> { done, total, rate }
   downloadDir: "",
   expired: false,
+  // editing: id del mensaje propio que se está editando (null = ninguno);
+  // editDraft: lo que había escrito antes, para devolverlo al terminar.
+  editing: null,
+  editDraft: "",
+  // selecting: modo de selección de varios mensajes (selected: sus ids).
+  selecting: false,
+  selected: new Set(),
 };
 
 // Extensiones de programas o scripts: se pide confirmación antes de abrirlos.
@@ -75,6 +82,8 @@ const api = {
   sendMany: (peers, body) => request("POST", "/api/messages/many", { peers, body }),
   deleteMessage: (id) => request("POST", "/api/messages/delete", { id }),
   react: (id, emoji) => request("POST", "/api/messages/react", { id, emoji }),
+  editMessage: (id, body) => request("POST", "/api/messages/edit", { id, body }),
+  forward: (ids, peers, rooms) => request("POST", "/api/messages/forward", { ids, peers, rooms }),
   readReceipts: (enabled) => request("POST", "/api/read-receipts", { enabled }),
   previews: (enabled) => request("POST", "/api/previews", { enabled }),
   thumbsUsage: () => request("GET", "/api/previews/stored"),
@@ -522,7 +531,7 @@ function renderRoomHeader(r) {
   $("identity-note").hidden = true;
   $("incompatible-note").hidden = true;
   for (const id of ["room-rename-btn", "room-leave-btn"]) $(id).disabled = r.left;
-  $("composer").hidden = r.left;
+  syncComposer();
   const note = $("offline-note");
   note.hidden = !r.left;
   note.textContent = "Ya no estás en esta sala: no recibes sus mensajes. Para volver, pide a un miembro que te agregue.";
@@ -538,8 +547,7 @@ function renderHeader() {
   if (!c) return;
   showFor(false);
   $("peer-dot").hidden = false;
-  // A un contacto incompatible no se le puede escribir.
-  $("composer").hidden = Boolean(c.incompatible);
+  syncComposer(); // a un contacto incompatible no se le puede escribir
   $("incompatible-note").hidden = !c.incompatible;
   $("incompatible-note").textContent = incompatibleText(c);
   $("peer-name").textContent = c.displayName;
@@ -597,8 +605,16 @@ function messageElement(m) {
     tag.textContent = "📢 Mensaje a varios";
     div.append(tag);
   }
+  if (m.forwarded) div.append(forwardedTag());
   div.append(document.createTextNode(m.body), metaElement(m));
   return withActions(div, m);
+}
+
+function forwardedTag() {
+  const tag = document.createElement("span");
+  tag.className = "broadcast-tag forwarded-tag";
+  tag.textContent = "↪ Reenviado";
+  return tag;
 }
 
 // ---------- Selector de emojis ----------
@@ -782,6 +798,21 @@ function canDelete(m) {
 // equipo (enviado o recibido, sin plazo).
 const canDeleteHere = (m) => m.kind === "files" && !m.deleted && DELETABLE_TRANSFERS.has(m.transfer?.state);
 
+// canEdit: un mensaje de texto propio se edita dentro del mismo plazo que
+// para eliminarlo para todos (protocol.DeleteWindow).
+function canEdit(m) {
+  if (!m.outgoing || m.deleted || m.kind !== "text" || Date.now() - m.at > state.limits.deleteWindowMs) return false;
+  return !m.roomId || !state.rooms.get(m.roomId)?.left;
+}
+
+// canForward: se reenvían los textos y los envíos de archivos propios o ya
+// descargados (el servidor comprueba que los archivos sigan en el equipo).
+function canForward(m) {
+  if (m.deleted) return false;
+  if (m.kind === "text") return true;
+  return m.kind === "files" && Boolean(m.transfer) && (m.transfer.outgoing || m.transfer.state === "completed");
+}
+
 // withActions agrega al globo el botón que abre el menú del mensaje.
 function withActions(div, m) {
   const btn = document.createElement("button");
@@ -838,25 +869,29 @@ function openMsgMenu(id, anchor, showMore = false) {
     row.append(more);
   }
   menu.replaceChildren(row);
-  if (canDelete(m)) {
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "menu-item";
-    del.textContent = "Eliminar para todos";
-    del.addEventListener("click", () => deleteForEveryone(m));
-    menu.append(del);
+  const item = (label, onClick, danger = false) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "menu-item" + (danger ? " danger" : "");
+    b.textContent = label;
+    b.addEventListener("click", onClick);
+    menu.append(b);
+  };
+  if (canEdit(m)) item("Editar", () => startEdit(m));
+  if (canForward(m)) {
+    item("Reenviar", () => {
+      closeMsgMenu();
+      openForward([m.id]);
+    });
   }
+  item("Seleccionar", () => startSelect(m));
+  if (canDelete(m)) item("Eliminar para todos", () => deleteForEveryone(m), true);
   if (canDeleteHere(m)) {
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "menu-item";
-    del.textContent = "Borrar de este equipo";
-    del.addEventListener("click", () => {
+    item("Borrar de este equipo", () => {
       closeMsgMenu();
       const who = m.outgoing ? memberName(m.peerId) : "el remitente";
       transferAction("delete", m.id, `¿Borrar este envío de este equipo, con sus vistas previas? ${who} conserva el suyo.`);
-    });
-    menu.append(del);
+    }, true);
   }
   menu.hidden = false;
   anchor.classList.add("open");
@@ -920,6 +955,7 @@ function metaElement(m) {
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = timeFmt.format(new Date(m.at));
+  if (m.edited && !m.deleted) meta.prepend("editado · ");
   if (m.mergedFrom) meta.prepend(mergedElement(m));
   if (m.status === "pending" && m.roomId) meta.title = "Pendiente: falta entregarlo a algún miembro desconectado";
   else if (m.status === "pending") meta.title = "Pendiente: se entregará cuando el contacto se conecte";
@@ -1004,6 +1040,7 @@ function transferCard(m) {
   const div = document.createElement("div");
   div.className = `${msgClass(m)} files ${t.state}`;
   div.dataset.id = m.id;
+  if (m.forwarded) div.append(forwardedTag());
 
   const title = document.createElement("div");
   title.className = "files-title";
@@ -1404,6 +1441,19 @@ function renderMessages({ keepScroll = false, toBottom = false } = {}) {
   const prevTop = box.scrollTop;
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
 
+  // Los seleccionados que ya no están (o se eliminaron) dejan de estarlo.
+  if (state.selecting) {
+    for (const id of state.selected) {
+      const m = conv?.list.find((x) => x.id === id);
+      if (!m || !selectable(m)) state.selected.delete(id);
+    }
+    if (state.selected.size === 0) {
+      state.selecting = false;
+      syncComposer();
+    }
+  }
+  box.classList.toggle("selecting", state.selecting);
+
   box.replaceChildren();
   let lastDay = "";
   for (const m of conv?.list ?? []) {
@@ -1415,11 +1465,17 @@ function renderMessages({ keepScroll = false, toBottom = false } = {}) {
       box.append(sep);
       lastDay = day;
     }
-    box.append(messageElement(m));
+    const el = messageElement(m);
+    if (state.selecting && selectable(m)) {
+      el.classList.add("selectable");
+      el.classList.toggle("selected", state.selected.has(m.id));
+    }
+    box.append(el);
     const reactions = reactionsElement(m);
     if (reactions) box.append(reactions);
   }
   closeMsgMenu();
+  if (state.selecting) updateSelectBar();
 
   if (keepScroll) box.scrollTop = box.scrollHeight - prevHeight + prevTop;
   else if (toBottom || nearBottom) box.scrollTop = box.scrollHeight;
@@ -1452,6 +1508,14 @@ window.lanchatBack = () => {
     closeMsgMenu();
     return true;
   }
+  if (state.selecting) {
+    endSelect();
+    return true;
+  }
+  if (state.editing) {
+    cancelEdit();
+    return true;
+  }
   if (!$("emoji-panel").hidden) {
     closeEmojiPanel();
     return true;
@@ -1466,6 +1530,8 @@ window.lanchatBack = () => {
 async function openChat(id) {
   setMenu(false);
   closeEmojiPanel();
+  endSelect();
+  cancelEdit();
   window.LanChatAndroid?.chatOpened(id); // en el teléfono, quita su aviso
   state.current = id;
   $("app").classList.add("chatting");
@@ -1484,6 +1550,8 @@ async function openChat(id) {
 
 function closeChat() {
   setMenu(false);
+  endSelect();
+  cancelEdit();
   state.current = null;
   $("app").classList.remove("chatting");
   reportPresence();
@@ -1495,6 +1563,8 @@ function showEmpty() {
   $("empty").hidden = false;
   $("chat-header").hidden = true;
   $("composer").hidden = true;
+  $("edit-bar").hidden = true;
+  $("select-bar").hidden = true;
   $("offline-note").hidden = true;
   $("identity-note").hidden = true;
   $("incompatible-note").hidden = true;
@@ -1547,12 +1617,14 @@ async function sendMessage() {
   const err = $("send-error");
   err.hidden = true;
   closeEmojiPanel();
-  if (!body.trim() || !state.current) return;
+  if (!state.current) return;
   if (encoder.encode(body).length > state.limits.maxMessageBytes) {
     err.textContent = `El mensaje es demasiado largo (máximo ${state.limits.maxMessageBytes / 1024} KB).`;
     err.hidden = false;
     return;
   }
+  if (state.editing) return saveEdit(body);
+  if (!body.trim()) return;
   try {
     const room = roomId(state.current);
     const m = await (room ? api.roomSend(room, body) : api.send(state.current, body));
@@ -1593,6 +1665,255 @@ function autoGrow() {
   const t = $("input");
   t.style.height = "auto";
   t.style.height = `${t.scrollHeight}px`;
+}
+
+// ---------- Editar un mensaje ----------
+
+// startEdit pone el texto del mensaje en la caja de escribir; Enter guarda
+// y Esc cancela (como en WhatsApp).
+function startEdit(m) {
+  closeMsgMenu();
+  endSelect();
+  const input = $("input");
+  if (!state.editing) state.editDraft = input.value;
+  state.editing = m.id;
+  $("edit-original").textContent = m.body;
+  $("send-error").hidden = true;
+  input.value = m.body;
+  autoGrow();
+  syncComposer();
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+// cancelEdit deja la caja como estaba antes de editar.
+function cancelEdit() {
+  if (!state.editing) return;
+  state.editing = null;
+  $("input").value = state.editDraft;
+  state.editDraft = "";
+  autoGrow();
+  syncComposer();
+}
+
+async function saveEdit(body) {
+  const err = $("send-error");
+  const m = findMessage(state.editing);
+  if (!m) return cancelEdit();
+  if (!body.trim()) {
+    err.textContent = "El mensaje no puede quedar vacío. Para quitarlo, usa «Eliminar para todos».";
+    err.hidden = false;
+    return;
+  }
+  if (body === m.body) return cancelEdit();
+  try {
+    addMessage(await api.editMessage(m.id, body));
+    cancelEdit();
+  } catch (e) {
+    err.textContent = e.message;
+    err.hidden = false;
+  }
+}
+
+// canWrite: se puede escribir en la conversación abierta.
+function canWrite() {
+  if (roomId(state.current)) return Boolean(currentRoom() && !currentRoom().left);
+  const c = state.contacts.get(state.current);
+  return Boolean(c && !c.incompatible);
+}
+
+// syncComposer muestra la caja de escribir (con la barra de edición) o, al
+// seleccionar mensajes, la barra de la selección.
+function syncComposer() {
+  $("select-bar").hidden = !state.selecting;
+  $("composer").hidden = state.selecting || !canWrite();
+  $("edit-bar").hidden = $("composer").hidden || !state.editing;
+  $("send-btn").textContent = state.editing ? "Guardar" : "Enviar";
+  if (state.selecting) updateSelectBar();
+}
+
+// ---------- Seleccionar varios mensajes ----------
+
+// selectable: lo que se puede seleccionar (no los eliminados ni los avisos).
+const selectable = (m) => !m.deleted && m.kind !== "event";
+
+// selectedMessages devuelve los seleccionados en el orden de la conversación.
+const selectedMessages = () =>
+  (state.messages.get(state.current)?.list ?? []).filter((m) => state.selected.has(m.id));
+
+function startSelect(m) {
+  closeMsgMenu();
+  closeEmojiPanel();
+  cancelEdit();
+  state.selecting = true;
+  state.selected = new Set([m.id]);
+  renderMessages({ keepScroll: true });
+  syncComposer();
+}
+
+function endSelect() {
+  if (!state.selecting) return;
+  state.selecting = false;
+  state.selected.clear();
+  renderMessages({ keepScroll: true });
+  syncComposer();
+}
+
+// toggleSelected marca o desmarca un mensaje; sin ninguno, termina la selección.
+function toggleSelected(id) {
+  const m = findMessage(id);
+  if (!m || !selectable(m)) return;
+  if (!state.selected.delete(id)) state.selected.add(id);
+  if (state.selected.size === 0) return endSelect();
+  document.querySelector(`#messages .msg[data-id="${CSS.escape(id)}"]`)
+    ?.classList.toggle("selected", state.selected.has(id));
+  updateSelectBar();
+}
+
+function updateSelectBar() {
+  const msgs = selectedMessages();
+  const n = msgs.length;
+  $("select-count").textContent = n === 1 ? "1 seleccionado" : `${n} seleccionados`;
+  const forward = n > 0 && msgs.every(canForward);
+  $("select-forward").disabled = !forward;
+  $("select-forward").title = forward ? "" : "Solo se reenvían los mensajes de texto y los archivos enviados o ya descargados";
+  const del = n > 0 && msgs.every(canDelete);
+  $("select-delete").disabled = !del;
+  $("select-delete").title = del ? ""
+    : `Solo se eliminan para todos tus propios mensajes de los últimos ${Math.round(state.limits.deleteWindowMs / 60000)} minutos`;
+}
+
+async function deleteSelected() {
+  const msgs = selectedMessages();
+  if (msgs.length === 0) return;
+  // El plazo pudo vencer mientras estaban seleccionados.
+  if (!msgs.every(canDelete)) {
+    updateSelectBar();
+    return showBanner($("select-delete").title, 5000);
+  }
+  const where = msgs[0].roomId ? "todos los miembros de la sala" : memberName(msgs[0].peerId);
+  const what = msgs.length === 1 ? "este mensaje" : `estos ${msgs.length} mensajes`;
+  const kept = msgs.some((m) => m.transfer?.state === "completed")
+    ? " Los archivos que ya se descargaron se quedan en su carpeta." : "";
+  if (!confirm(`¿Eliminar ${what} para todos? También se borrarán en el equipo de ${where}.${kept}`)) return;
+  const errors = [];
+  for (const m of msgs) {
+    try {
+      addMessage(await api.deleteMessage(m.id));
+    } catch (e) {
+      errors.push(e.message);
+    }
+  }
+  endSelect();
+  if (errors.length) {
+    showBanner(`${errors.length === 1 ? "Uno no se pudo eliminar" : `${errors.length} no se pudieron eliminar`}: ${errors[0]}`, 6000);
+  }
+}
+
+// ---------- Reenviar ----------
+
+// forwardIds: los mensajes que se van a reenviar (del diálogo abierto).
+let forwardIds = [];
+
+function openForward(ids) {
+  const msgs = ids.map(findMessage).filter((m) => m && canForward(m));
+  if (msgs.length === 0) return;
+  forwardIds = msgs.map((m) => m.id);
+  const withFiles = msgs.some((m) => m.kind === "files");
+  $("forward-title").textContent = msgs.length === 1 ? "Reenviar mensaje" : `Reenviar ${msgs.length} mensajes`;
+  $("forward-what").textContent = forwardSummary(msgs);
+  const rooms = sortedRooms().filter((r) => !r.left).map((r) => roomPickItem(r, withFiles));
+  $("forward-list").replaceChildren(...rooms, ...sortedContacts().map(pickItem));
+  $("forward-help").textContent = withFiles
+    ? "Los archivos se ofrecen otra vez y cada quien decide si los acepta. A las salas no se envían archivos."
+    : "Cada uno lo recibe marcado como reenviado. Los desconectados lo reciben al conectarse.";
+  $("forward-search").value = "";
+  $("forward-error").hidden = true;
+  $("forward-send").disabled = false;
+  $("forward-dialog").showModal();
+  if (!state.mobile) $("forward-search").focus();
+}
+
+// forwardSummary resume lo que se reenvía: el inicio de cada texto o los
+// nombres de los archivos.
+function forwardSummary(msgs) {
+  const cut = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
+  const lines = msgs.slice(0, 3).map((m) => {
+    if (m.kind !== "files") return cut(m.body.replace(/\s+/g, " "), 80);
+    const files = m.transfer?.files ?? [];
+    return `📎 ${cut(files.slice(0, 3).map((f) => f.name).join(", "), 80)}${files.length > 3 ? ` y ${files.length - 3} más` : ""}`;
+  });
+  if (msgs.length > 3) lines.push(`… y ${msgs.length - 3} más`);
+  return lines.join("\n");
+}
+
+// roomPickItem es una casilla para elegir una sala; con archivos no se puede.
+function roomPickItem(r, withFiles) {
+  const li = document.createElement("li");
+  const label = document.createElement("label");
+  label.className = "check";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.value = r.id;
+  box.dataset.room = "true";
+  const icon = document.createElement("span");
+  icon.className = "room-icon";
+  icon.textContent = "👥";
+  const name = document.createElement("span");
+  name.textContent = r.name;
+  const detail = document.createElement("small");
+  detail.className = "help-inline";
+  detail.textContent = roomDetail(r);
+  if (withFiles) {
+    box.disabled = true;
+    detail.append(" · no recibe archivos");
+    label.title = "A las salas no se pueden enviar archivos";
+  }
+  label.append(box, icon, name, detail);
+  li.append(label);
+  return li;
+}
+
+function filterForward() {
+  const q = $("forward-search").value.trim().toLocaleLowerCase("es");
+  for (const li of $("forward-list").children) {
+    li.hidden = q !== "" && !li.textContent.toLocaleLowerCase("es").includes(q);
+  }
+}
+
+async function sendForward(ev) {
+  if (ev.submitter?.value !== "save") return;
+  ev.preventDefault();
+  const checked = [...$("forward-list").querySelectorAll("input:checked")];
+  const peers = checked.filter((b) => !b.dataset.room).map((b) => b.value);
+  const rooms = checked.filter((b) => b.dataset.room).map((b) => b.value);
+  const err = $("forward-error");
+  err.hidden = true;
+  if (checked.length === 0) {
+    err.textContent = "Elige al menos un contacto o una sala.";
+    err.hidden = false;
+    return;
+  }
+  $("forward-send").disabled = true;
+  try {
+    const res = await api.forward(forwardIds, peers, rooms);
+    for (const m of res.messages) addMessage(m);
+    endSelect();
+    if (res.error) {
+      // Lo que sí se envió no se repite: el botón queda desactivado.
+      err.textContent = `Se reenvió solo en parte: ${res.error}`;
+      err.hidden = false;
+      return;
+    }
+    $("forward-dialog").close();
+    const targets = [...peers, ...rooms.map((r) => ROOM + r)];
+    if (targets.length === 1) openChat(targets[0]);
+    else showBanner(`Reenviado a ${targets.length} conversaciones.`, 3000);
+  } catch (e) {
+    err.textContent = e.message;
+    err.hidden = false;
+    $("forward-send").disabled = false;
+  }
 }
 
 // ---------- Diálogos ----------
@@ -2416,8 +2737,28 @@ function bind() {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       sendMessage();
+    } else if (e.key === "Escape" && state.editing) {
+      cancelEdit();
     }
   });
+  $("edit-cancel").addEventListener("click", cancelEdit);
+  // Al seleccionar, tocar un mensaje lo marca o desmarca (y no hace nada más:
+  // ni abrir archivos ni aceptar envíos).
+  $("messages").addEventListener("click", (e) => {
+    if (!state.selecting) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.target.closest(".msg[data-id]");
+    if (el) toggleSelected(el.dataset.id);
+  }, true);
+  $("select-cancel").addEventListener("click", endSelect);
+  $("select-delete").addEventListener("click", deleteSelected);
+  $("select-forward").addEventListener("click", () => openForward(selectedMessages().map((m) => m.id)));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.selecting && !document.querySelector("dialog[open]")) endSelect();
+  });
+  $("forward-form").addEventListener("submit", sendForward);
+  $("forward-search").addEventListener("input", filterForward);
   $("input").addEventListener("input", autoGrow);
   $("attach-btn").addEventListener("click", (e) =>
     state.mobile ? $("file-input").click() : pickAndSend(e.currentTarget, api.pickFiles));

@@ -355,6 +355,10 @@ func (c *console) printEvent(ev any) {
 			}
 		case chat.MessageDelivered:
 			fmt.Printf("  ✓ entregado a %s\n", ct.DisplayName())
+		case chat.MessageEdited:
+			if !e.Message.Outgoing {
+				fmt.Printf("[%s] %s editó un mensaje: %s\n", e.Message.At.Format("15:04"), ct.DisplayName(), e.Message.Body)
+			}
 		}
 	}
 }

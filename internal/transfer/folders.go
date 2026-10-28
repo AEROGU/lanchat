@@ -19,6 +19,9 @@ import (
 type Item struct {
 	Path string
 	Dir  string
+	// Name es el nombre con que se ofrece ("" = el del archivo). Al reenviar
+	// uno recibido, el original aunque se haya guardado como "x (1).pdf".
+	Name string
 }
 
 // errTooManyFiles: la carpeta tiene más archivos de los que admite una oferta.

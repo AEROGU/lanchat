@@ -306,6 +306,12 @@ func (d *demoBackend) SetRoomAdmin(context.Context, string, string, bool) error 
 func (d *demoBackend) DeleteForEveryone(context.Context, string) (store.Message, error) {
 	return store.Message{}, errDemo
 }
+func (d *demoBackend) EditMessage(context.Context, string, string) (store.Message, error) {
+	return store.Message{}, errDemo
+}
+func (d *demoBackend) Forward(context.Context, []string, []string, []string) ([]store.Message, error) {
+	return nil, errDemo
+}
 func (d *demoBackend) React(context.Context, string, string) (store.Message, error) {
 	return store.Message{}, errDemo
 }

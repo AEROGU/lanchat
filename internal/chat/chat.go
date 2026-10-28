@@ -71,6 +71,8 @@ const (
 	MessageDeleted
 	// MessageReaction: cambiaron las reacciones de un mensaje (Message las trae).
 	MessageReaction
+	// MessageEdited: su autor cambió el texto (Message trae el nuevo).
+	MessageEdited
 )
 
 type Event struct {
@@ -95,6 +97,9 @@ type wireMessage struct {
 	Room *wireRoom `json:"room,omitempty"`
 	// Event: es un aviso de la sala ("Ana agregó a Luis"), no un mensaje.
 	Event bool `json:"event,omitempty"`
+	// Forwarded: es un reenvío de otro mensaje. Las versiones que no lo
+	// conocen lo muestran como un mensaje normal.
+	Forwarded bool `json:"forwarded,omitempty"`
 }
 
 // wireOffer acompaña a un mensaje que ofrece archivos.
@@ -266,11 +271,18 @@ func (s *Service) SendBroadcast(ctx context.Context, peerID, body string) (store
 	return s.send(ctx, store.Message{ID: ids.New(), PeerID: peerID, Body: body, Broadcast: true}, nil)
 }
 
-// SendOffer envía una oferta de archivos como un mensaje con resumen body. El
-// ID de la transferencia es el del mensaje; t.ID y t.PeerID se completan aquí.
-func (s *Service) SendOffer(ctx context.Context, peerID, body string, t store.Transfer) (store.Message, error) {
+// SendForwarded es como Send pero marca el mensaje como reenviado.
+func (s *Service) SendForwarded(ctx context.Context, peerID, body string) (store.Message, error) {
+	return s.send(ctx, store.Message{ID: ids.New(), PeerID: peerID, Body: body, Forwarded: true}, nil)
+}
+
+// SendOffer envía una oferta de archivos como un mensaje con resumen body
+// (forwarded: es un reenvío). El ID de la transferencia es el del mensaje;
+// t.ID y t.PeerID se completan aquí.
+func (s *Service) SendOffer(ctx context.Context, peerID, body string, t store.Transfer, forwarded bool) (store.Message, error) {
 	t.ID, t.PeerID, t.Outgoing = ids.New(), peerID, true
-	return s.send(ctx, store.Message{ID: t.ID, PeerID: peerID, Body: body, Kind: store.KindFiles}, &t)
+	m := store.Message{ID: t.ID, PeerID: peerID, Body: body, Kind: store.KindFiles, Forwarded: forwarded}
+	return s.send(ctx, m, &t)
 }
 
 func (s *Service) send(ctx context.Context, m store.Message, t *store.Transfer) (store.Message, error) {
@@ -362,6 +374,7 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 		Body:      m.Body,
 		SentAt:    m.SentAt.UnixMilli(),
 		Broadcast: m.Broadcast,
+		Forwarded: m.Forwarded,
 	}
 	if m.Kind == store.KindFiles {
 		t, ok, err := s.store.Transfer(s.ctx, m.ID)
@@ -456,6 +469,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 		Status:    store.StatusDelivered,
 		Unread:    true,
 		Broadcast: wm.Broadcast,
+		Forwarded: wm.Forwarded,
 	}
 	var t *store.Transfer
 	if wm.Offer != nil {

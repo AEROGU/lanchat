@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,7 +74,7 @@ type Directory interface {
 
 // OfferSender envía la oferta como mensaje de chat; lo implementa chat.Service.
 type OfferSender interface {
-	SendOffer(ctx context.Context, peerID, body string, t store.Transfer) (store.Message, error)
+	SendOffer(ctx context.Context, peerID, body string, t store.Transfer, forwarded bool) (store.Message, error)
 }
 
 type Config struct {
@@ -204,6 +205,53 @@ func (s *Service) Close() {
 
 // Offer ofrece archivos a peerID (ver ExpandPaths para carpetas).
 func (s *Service) Offer(ctx context.Context, peerID string, items []Item) (store.Message, error) {
+	return s.offer(ctx, peerID, items, false)
+}
+
+// Forward reenvía a peerID archivos de otro envío, enviado o recibido. Los
+// que solo existen como copia temporal de otra oferta (los arrastrados a la
+// ventana) se copian otra vez: cada oferta borra sus copias al terminar.
+func (s *Service) Forward(ctx context.Context, peerID string, items []Item) (store.Message, error) {
+	items = slices.Clone(items)
+	staging := ""
+	discard := func() {
+		if staging != "" {
+			s.DiscardStaging(staging)
+		}
+	}
+	for i, it := range items {
+		if s.stagingRoot(it.Path) == "" {
+			continue
+		}
+		var err error
+		if staging == "" {
+			if staging, err = s.NewStaging(); err != nil {
+				return store.Message{}, err
+			}
+		}
+		if items[i].Path, err = s.copyToStaging(staging, it); err != nil {
+			discard()
+			return store.Message{}, err
+		}
+	}
+	m, err := s.offer(ctx, peerID, items, true)
+	if err != nil {
+		discard()
+	}
+	return m, err
+}
+
+// copyToStaging copia el archivo de it a la carpeta temporal dir.
+func (s *Service) copyToStaging(dir string, it Item) (string, error) {
+	f, err := os.Open(it.Path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	return s.SaveStaged(dir, it.Dir, cmp.Or(it.Name, filepath.Base(it.Path)), f)
+}
+
+func (s *Service) offer(ctx context.Context, peerID string, items []Item, forwarded bool) (store.Message, error) {
 	if len(items) == 0 {
 		return store.Message{}, errors.New("no hay archivos para enviar")
 	}
@@ -220,20 +268,21 @@ func (s *Service) Offer(ctx context.Context, peerID string, items []Item) (store
 		if err != nil {
 			return store.Message{}, err
 		}
+		name := cmp.Or(it.Name, fi.Name())
 		if !fi.Mode().IsRegular() {
-			return store.Message{}, fmt.Errorf("%s no es un archivo", fi.Name())
+			return store.Message{}, fmt.Errorf("%s no es un archivo", name)
 		}
-		if err := errors.Join(protocol.ValidateFileName(fi.Name()), protocol.ValidateRelDir(it.Dir)); err != nil {
-			return store.Message{}, fmt.Errorf("%s: %w", fi.Name(), err)
+		if err := errors.Join(protocol.ValidateFileName(name), protocol.ValidateRelDir(it.Dir)); err != nil {
+			return store.Message{}, fmt.Errorf("%s: %w", name, err)
 		}
 		t.Files = append(t.Files, store.TransferFile{
-			Index: i, Name: fi.Name(), Size: fi.Size(), ModTime: fi.ModTime(), Path: it.Path, Dir: it.Dir,
+			Index: i, Name: name, Size: fi.Size(), ModTime: fi.ModTime(), Path: it.Path, Dir: it.Dir,
 		})
 	}
 	if s.previewsEnabled() {
 		addThumbs(t.Files)
 	}
-	return s.sender.SendOffer(ctx, peerID, offerSummary(t.Files, t.TotalSize()), t)
+	return s.sender.SendOffer(ctx, peerID, offerSummary(t.Files, t.TotalSize()), t, forwarded)
 }
 
 // NewStaging crea una carpeta temporal para los archivos arrastrados a la ventana.

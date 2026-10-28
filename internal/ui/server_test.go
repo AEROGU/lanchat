@@ -719,6 +719,25 @@ func (f *fakeBackend) DeleteForEveryone(_ context.Context, id string) (store.Mes
 	}
 	return store.Message{ID: id, PeerID: "c1", Outgoing: true, Deleted: true, At: time.Now(), Reactions: []store.Reaction{}}, nil
 }
+func (f *fakeBackend) EditMessage(_ context.Context, id, body string) (store.Message, error) {
+	if id != "m1" {
+		return store.Message{}, errors.New("ya pasaron más de 15 minutos")
+	}
+	return store.Message{ID: id, PeerID: "c1", Outgoing: true, Body: body, At: time.Now(), EditedAt: time.Now()}, nil
+}
+func (f *fakeBackend) Forward(_ context.Context, ids, peers, rooms []string) ([]store.Message, error) {
+	if err := f.record("forward", fmt.Sprintf("%v→%v%v", ids, peers, rooms)); err != nil {
+		return nil, err
+	}
+	var out []store.Message
+	for _, p := range peers {
+		out = append(out, store.Message{ID: "fw-" + p, PeerID: p, Outgoing: true, Body: "hola", Forwarded: true, At: time.Now()})
+	}
+	if len(rooms) > 0 {
+		return out, errors.New("sala «X»: ya no estás en esta sala")
+	}
+	return out, nil
+}
 func (f *fakeBackend) React(_ context.Context, id, emoji string) (store.Message, error) {
 	m := store.Message{ID: id, PeerID: "c1", Body: "hola", At: time.Now(), Reactions: []store.Reaction{}}
 	if emoji != "" {
@@ -1115,6 +1134,29 @@ func TestMessageActions(t *testing.T) {
 	b.mu.Unlock()
 	if got != "kick:r1/c1,admin:r1/c1/true" {
 		t.Errorf("acciones = %q", got)
+	}
+
+	m = messageJSON{}
+	if code := do("/api/messages/edit", `{"id":"m1","body":"corregido"}`, &m); code != http.StatusOK || m.Body != "corregido" || !m.Edited {
+		t.Errorf("editar: %d %+v", code, m)
+	}
+	fail.Error = ""
+	if code := do("/api/messages/edit", `{"id":"viejo","body":"x"}`, &fail); code != http.StatusBadRequest || fail.Error == "" {
+		t.Errorf("editar fuera de plazo: %d %+v", code, fail)
+	}
+	var fw struct {
+		Messages []messageJSON
+		Error    string
+	}
+	if code := do("/api/messages/forward", `{"ids":["m1"],"peers":["c1"]}`, &fw); code != http.StatusCreated ||
+		len(fw.Messages) != 1 || !fw.Messages[0].Forwarded || fw.Error != "" {
+		t.Errorf("reenviar: %d %+v", code, fw)
+	}
+	// Si falló con algún destino, se responde lo que sí se envió y el error.
+	fw.Messages, fw.Error = nil, ""
+	if code := do("/api/messages/forward", `{"ids":["m1"],"peers":["c1"],"rooms":["r1"]}`, &fw); code != http.StatusCreated ||
+		len(fw.Messages) != 1 || fw.Error == "" {
+		t.Errorf("reenviar en parte: %d %+v", code, fw)
 	}
 
 	var st stateJSON
