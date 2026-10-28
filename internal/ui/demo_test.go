@@ -230,13 +230,16 @@ func (d *demoBackend) History(_ context.Context, key, before string, _ int) ([]s
 	defer d.mu.Unlock()
 	return append([]store.Message(nil), d.history[key]...), nil
 }
-func (d *demoBackend) SetName(string) error           { return errDemo }
-func (d *demoBackend) SetStatus(string, string) error { return errDemo }
-func (d *demoBackend) SetAutoAway(bool) error         { return errDemo }
-func (d *demoBackend) SetupDone() bool                { return true }
-func (d *demoBackend) MarkSetupDone() error           { return nil }
-func (d *demoBackend) SetReadReceipts(bool) error     { return errDemo }
-func (d *demoBackend) SetPreviews(bool) error         { return errDemo }
+func (d *demoBackend) SetName(string) error              { return errDemo }
+func (d *demoBackend) SetStatus(string, string) error    { return errDemo }
+func (d *demoBackend) SetAutoAway(bool) error            { return errDemo }
+func (d *demoBackend) SetupDone() bool                   { return true }
+func (d *demoBackend) MarkSetupDone() error              { return nil }
+func (d *demoBackend) SetReadReceipts(bool) error        { return errDemo }
+func (d *demoBackend) SetPreviews(bool) error            { return errDemo }
+func (d *demoBackend) SetHideOffline(bool) error         { return nil }
+func (d *demoBackend) SetCollapsedGroups([]string) error { return nil }
+func (d *demoBackend) SetRecentEmoji([]string) error     { return nil }
 func (d *demoBackend) ThumbsUsage(context.Context) (int, int64, error) {
 	return 0, 0, nil
 }

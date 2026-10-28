@@ -79,6 +79,9 @@ type Backend interface {
 	SetAutoAway(enabled bool) error
 	SetReadReceipts(enabled bool) error
 	SetPreviews(enabled bool) error
+	SetHideOffline(hide bool) error
+	SetCollapsedGroups(groups []string) error
+	SetRecentEmoji(list []string) error
 	ThumbsUsage(ctx context.Context) (count int, bytes int64, err error)
 	ClearThumbs(ctx context.Context) error
 	SetAlias(ctx context.Context, peerID, alias string) error
@@ -285,6 +288,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/status", s.handleStatus)
 	mux.HandleFunc("POST /api/read-receipts", s.handleReadReceipts)
 	mux.HandleFunc("POST /api/previews", s.handlePreviews)
+	mux.HandleFunc("POST /api/hide-offline", s.handleHideOffline)
+	mux.HandleFunc("POST /api/collapsed-groups", s.handleList(s.b.SetCollapsedGroups))
+	mux.HandleFunc("POST /api/recent-emoji", s.handleList(s.b.SetRecentEmoji))
 	mux.HandleFunc("GET /api/previews/stored", s.handleThumbsUsage)
 	mux.HandleFunc("POST /api/previews/clear", s.handleClearThumbs)
 	mux.HandleFunc("POST /api/alias", s.handleAlias)
@@ -707,6 +713,38 @@ func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
+}
+
+func (s *Server) handleHideOffline(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Hide bool `json:"hide"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	if err := s.b.SetHideOffline(req.Hide); err != nil {
+		s.fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
+}
+
+// handleList atiende las preferencias que son una lista de textos
+// ({"list": [...]}), como los grupos plegados o los emojis recientes.
+func (s *Server) handleList(set func([]string) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			List []string `json:"list"`
+		}
+		if !s.decode(w, r, &req) {
+			return
+		}
+		if err := set(req.List); err != nil {
+			s.fail(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, toSelfJSON(s.b.Self()))
+	}
 }
 
 // handleThumbsUsage dice cuántas miniaturas hay guardadas y cuánto ocupan.

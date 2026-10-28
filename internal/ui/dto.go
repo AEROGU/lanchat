@@ -53,8 +53,14 @@ type selfJSON struct {
 	// ReadReceipts: se avisa a los demás cuando se leen sus mensajes.
 	ReadReceipts bool `json:"readReceipts"`
 	// Previews: se muestran miniaturas de las imágenes.
-	Previews    bool   `json:"previews"`
-	Fingerprint string `json:"fingerprint"`
+	Previews bool `json:"previews"`
+	// HideOffline: la lista de contactos oculta a los desconectados.
+	HideOffline bool `json:"hideOffline"`
+	// CollapsedGroups son los grupos plegados en la lista de contactos.
+	CollapsedGroups []string `json:"collapsedGroups"`
+	// RecentEmoji son los últimos emojis usados, el más reciente primero.
+	RecentEmoji []string `json:"recentEmoji"`
+	Fingerprint string   `json:"fingerprint"`
 }
 
 func toSelfJSON(s app.Self) selfJSON {
@@ -63,9 +69,18 @@ func toSelfJSON(s app.Self) selfJSON {
 		AppName: version.Name, Copyright: version.Copyright, License: version.License,
 		LicenseName: version.LicenseName, Repository: version.Repository,
 		Status: s.Status, StatusText: s.StatusText, Idle: s.Idle, AutoAway: s.AutoAwayEnabled,
-		ReadReceipts: s.ReadReceipts, Previews: s.Previews,
+		ReadReceipts: s.ReadReceipts, Previews: s.Previews, HideOffline: s.HideOffline,
+		CollapsedGroups: nonNil(s.CollapsedGroups), RecentEmoji: nonNil(s.RecentEmoji),
 		Fingerprint: identity.Format(s.Fingerprint),
 	}
+}
+
+// nonNil hace que una lista vacía llegue al navegador como [] y no como null.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 type contactJSON struct {

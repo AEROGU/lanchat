@@ -663,8 +663,11 @@ func TestSendManyRoute(t *testing.T) {
 		t.Errorf("mensaje a varios: %d %+v %v", resp.StatusCode, out, b.sent)
 	}
 }
-func (f *fakeBackend) SetReadReceipts(bool) error { return nil }
-func (f *fakeBackend) SetPreviews(bool) error     { return nil }
+func (f *fakeBackend) SetReadReceipts(bool) error        { return nil }
+func (f *fakeBackend) SetPreviews(bool) error            { return nil }
+func (f *fakeBackend) SetHideOffline(bool) error         { return nil }
+func (f *fakeBackend) SetCollapsedGroups([]string) error { return nil }
+func (f *fakeBackend) SetRecentEmoji([]string) error     { return nil }
 func (f *fakeBackend) ThumbsUsage(context.Context) (int, int64, error) {
 	return 0, 0, nil
 }

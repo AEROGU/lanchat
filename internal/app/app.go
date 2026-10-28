@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/config"
@@ -288,6 +290,12 @@ type Self struct {
 	ReadReceipts bool
 	// Previews: se generan, guardan y muestran miniaturas de las imágenes.
 	Previews bool
+	// HideOffline: la lista de contactos oculta a los desconectados.
+	HideOffline bool
+	// CollapsedGroups son los grupos plegados en la lista de contactos.
+	CollapsedGroups []string
+	// RecentEmoji son los últimos emojis usados, el más reciente primero.
+	RecentEmoji []string
 	// Fingerprint es la huella de la identidad TLS de este equipo.
 	Fingerprint string
 }
@@ -299,9 +307,12 @@ func (a *App) Self() Self {
 		ID: a.cfg.ID, Name: a.cfg.Name, Hostname: a.host, Dir: a.dir,
 		Status: a.cfg.Status, StatusText: a.cfg.StatusText,
 		Idle: a.idle, AutoAwayEnabled: !a.cfg.DisableAutoAway,
-		ReadReceipts: !a.cfg.NoReadReceipts,
-		Previews:     !a.cfg.NoPreviews,
-		Fingerprint:  a.identity.Fingerprint,
+		ReadReceipts:    !a.cfg.NoReadReceipts,
+		Previews:        !a.cfg.NoPreviews,
+		HideOffline:     a.cfg.HideOffline,
+		CollapsedGroups: slices.Clone(a.cfg.CollapsedGroups),
+		RecentEmoji:     slices.Clone(a.cfg.RecentEmoji),
+		Fingerprint:     a.identity.Fingerprint,
 	}
 }
 
@@ -475,6 +486,57 @@ func (a *App) SetReadReceipts(enabled bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cfg.NoReadReceipts = !enabled
+	return a.cfg.Save(a.dir)
+}
+
+// SetHideOffline recuerda si la lista de contactos oculta a los desconectados.
+func (a *App) SetHideOffline(hide bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.HideOffline = hide
+	return a.cfg.Save(a.dir)
+}
+
+const (
+	// maxCollapsedGroups y maxRecentEmoji acotan lo que la interfaz guarda
+	// en la configuración.
+	maxCollapsedGroups = 200
+	maxRecentEmoji     = 32
+	// maxEmojiBytes: un emoji compuesto (familia, bandera, tono de piel)
+	// ocupa varios puntos de código.
+	maxEmojiBytes = 64
+)
+
+// SetCollapsedGroups recuerda qué grupos están plegados en la lista de contactos.
+func (a *App) SetCollapsedGroups(groups []string) error {
+	if len(groups) > maxCollapsedGroups {
+		return fmt.Errorf("se admiten máximo %d grupos plegados", maxCollapsedGroups)
+	}
+	for _, g := range groups {
+		if err := protocol.ValidateName(g); err != nil {
+			return err
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.CollapsedGroups = slices.Clone(groups)
+	return a.cfg.Save(a.dir)
+}
+
+// SetRecentEmoji recuerda los últimos emojis usados (el más reciente primero).
+func (a *App) SetRecentEmoji(list []string) error {
+	if len(list) > maxRecentEmoji {
+		return fmt.Errorf("se admiten máximo %d emojis recientes", maxRecentEmoji)
+	}
+	for _, e := range list {
+		if e == "" || len(e) > maxEmojiBytes || !utf8.ValidString(e) ||
+			strings.ContainsFunc(e, unicode.IsControl) {
+			return errors.New("emoji no válido")
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.RecentEmoji = slices.Clone(list)
 	return a.cfg.Save(a.dir)
 }
 

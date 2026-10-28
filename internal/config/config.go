@@ -41,6 +41,12 @@ type Config struct {
 	NoReadReceipts bool `json:"no_read_receipts"`
 	// NoPreviews: no generar, guardar ni mostrar miniaturas de imágenes.
 	NoPreviews bool `json:"no_previews"`
+	// HideOffline: la lista de contactos oculta a los desconectados.
+	HideOffline bool `json:"hide_offline"`
+	// CollapsedGroups son los grupos plegados en la lista de contactos.
+	CollapsedGroups []string `json:"collapsed_groups,omitempty"`
+	// RecentEmoji son los últimos emojis usados, el más reciente primero.
+	RecentEmoji []string `json:"recent_emoji,omitempty"`
 }
 
 // DefaultDir devuelve %APPDATA%\LanChat (o su equivalente en otros sistemas).

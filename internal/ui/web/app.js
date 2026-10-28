@@ -86,6 +86,9 @@ const api = {
   forward: (ids, peers, rooms) => request("POST", "/api/messages/forward", { ids, peers, rooms }),
   readReceipts: (enabled) => request("POST", "/api/read-receipts", { enabled }),
   previews: (enabled) => request("POST", "/api/previews", { enabled }),
+  hideOffline: (hide) => request("POST", "/api/hide-offline", { hide }),
+  collapsedGroups: (list) => request("POST", "/api/collapsed-groups", { list }),
+  recentEmoji: (list) => request("POST", "/api/recent-emoji", { list }),
   thumbsUsage: () => request("GET", "/api/previews/stored"),
   clearThumbs: () => request("POST", "/api/previews/clear", {}),
   group: (peer, group) => request("POST", "/api/group", { peer, group }),
@@ -267,24 +270,26 @@ async function saveStatus(ev) {
 
 // ---------- Grupos ----------
 
-const COLLAPSED_KEY = "lanchat.collapsedGroups";
-const HIDE_OFFLINE_KEY = "lanchat.hideOffline";
+// Las preferencias de la ventana (ocultar desconectados, grupos plegados,
+// emojis recientes) se guardan en la configuración para que se conserven al
+// reiniciar LanChat: localStorage no sirve porque el puerto cambia en cada inicio.
+let prefQueue = Promise.resolve();
 
-// Ocultar desconectados se recuerda solo en esta ventana (localStorage).
+// savePref cambia la preferencia en el acto y la guarda. Las peticiones van
+// en fila para que, con varios clics seguidos, el último valor sea el guardado.
+function savePref(field, value, save) {
+  state.self = { ...state.self, [field]: value };
+  prefQueue = prefQueue
+    .then(() => save(value))
+    .catch((e) => showBanner(`No se pudo guardar la preferencia: ${e.message}`, 5000));
+}
+
 function hideOffline() {
-  try {
-    return localStorage.getItem(HIDE_OFFLINE_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return state.self?.hideOffline ?? false;
 }
 
 function setHideOffline(hide) {
-  try {
-    localStorage.setItem(HIDE_OFFLINE_KEY, hide ? "1" : "0");
-  } catch {
-    // sin almacenamiento: vale hasta que se cierre la ventana
-  }
+  savePref("hideOffline", hide, api.hideOffline);
   renderContacts();
 }
 
@@ -297,23 +302,17 @@ const NO_GROUP = "Sin grupo";
 const ROOMS_GROUP = "Salas";
 const CONTACTS_GROUP = "Contactos";
 
-// Los grupos plegados se recuerdan solo en esta ventana (localStorage).
 function collapsedGroups() {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]"));
-  } catch {
-    return new Set();
-  }
+  return new Set(state.self?.collapsedGroups ?? []);
 }
 
+// toggleGroup pliega o despliega un grupo. De paso olvida los grupos que ya
+// no existen, para que la lista guardada no crezca sin fin.
 function toggleGroup(name) {
   const set = collapsedGroups();
   if (!set.delete(name)) set.add(name);
-  try {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...set]));
-  } catch {
-    // sin almacenamiento: el grupo solo cambia hasta que se redibuje
-  }
+  const existing = new Set([...groupNames(), NO_GROUP, ROOMS_GROUP, CONTACTS_GROUP]);
+  savePref("collapsedGroups", [...set].filter((g) => existing.has(g)), api.collapsedGroups);
   renderContacts();
 }
 
@@ -623,7 +622,6 @@ function forwardedTag() {
 // sistema sabe dibujar solo una parte (Windows 10 no tiene los más nuevos ni
 // las banderas de países): el selector muestra los que aquí sí se ven.
 
-const RECENT_KEY = "lanchat.recentEmoji";
 // MAX_RECENT: cuántos emojis recuerda la pestaña Recientes (cuatro renglones).
 const MAX_RECENT = 32;
 const RECENT_TAB = { name: "Recientes", icon: "🕒" };
@@ -694,21 +692,12 @@ function drawable(emoji) {
 }
 
 function recentEmoji() {
-  try {
-    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
-    return Array.isArray(list) ? list.filter((e) => typeof e === "string") : [];
-  } catch {
-    return [];
-  }
+  return state.self?.recentEmoji ?? [];
 }
 
 function rememberEmoji(emoji) {
   const list = [emoji, ...recentEmoji().filter((e) => e !== emoji)].slice(0, MAX_RECENT);
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
-  } catch {
-    // sin almacenamiento no hay Recientes
-  }
+  savePref("recentEmoji", list, api.recentEmoji);
 }
 
 function renderEmojiPanel() {

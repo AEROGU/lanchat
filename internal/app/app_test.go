@@ -8,6 +8,8 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -294,6 +296,41 @@ func TestReadReceipts(t *testing.T) {
 
 // B y C solo conocen a A (como dos PCs de otra subred configuradas en una
 // sola PC); B descubre a C a través de la lista que comparte A.
+func TestViewPrefsSurviveRestart(t *testing.T) {
+	dir := testutil.TempDir(t)
+	a := startNode(t, dir, "PC-A")
+	if s := a.app.Self(); s.HideOffline || len(s.CollapsedGroups) > 0 || len(s.RecentEmoji) > 0 {
+		t.Fatalf("valores por defecto incorrectos: %+v", s)
+	}
+	groups, emoji := []string{"Ventas", "Salas"}, []string{"👍", "👨‍👩‍👧", "🇲🇽"}
+	if err := a.app.SetHideOffline(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.app.SetCollapsedGroups(groups); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.app.SetRecentEmoji(emoji); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lo que no cabe o no es válido se rechaza sin tocar lo guardado.
+	if a.app.SetRecentEmoji(make([]string, maxRecentEmoji+1)) == nil {
+		t.Error("debía rechazar demasiados emojis")
+	}
+	if a.app.SetRecentEmoji([]string{"a\nb"}) == nil {
+		t.Error("debía rechazar caracteres de control")
+	}
+	if a.app.SetCollapsedGroups([]string{strings.Repeat("g", protocol.MaxNameLen+1)}) == nil {
+		t.Error("debía rechazar un grupo con nombre demasiado largo")
+	}
+	a.stop()
+
+	s := startNode(t, dir, "PC-A").app.Self()
+	if !s.HideOffline || !slices.Equal(s.CollapsedGroups, groups) || !slices.Equal(s.RecentEmoji, emoji) {
+		t.Errorf("no se conservaron las preferencias al reiniciar: %+v", s)
+	}
+}
+
 func TestSharedPeerLists(t *testing.T) {
 	a := startNode(t, testutil.TempDir(t), "PC-A")
 	c := startNode(t, testutil.TempDir(t), "PC-C", a.udpPort())
