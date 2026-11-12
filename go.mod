@@ -7,9 +7,9 @@ require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/magefile/mage v1.17.2
 	github.com/tc-hib/winres v0.3.1
-	golang.org/x/image v0.47.0
-	golang.org/x/sys v0.49.0
-	modernc.org/sqlite v1.61.0
+	golang.org/x/image v0.48.0
+	golang.org/x/sys v0.50.0
+	modernc.org/sqlite v1.62.0
 )
 
 require (
@@ -30,7 +30,7 @@ require (
 	golang.org/x/tools v0.52.0 // indirect
 	golang.org/x/vuln v1.8.0 // indirect
 	honnef.co/go/tools v0.8.1 // indirect
-	modernc.org/libc v1.79.0 // indirect
+	modernc.org/libc v1.80.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
