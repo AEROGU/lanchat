@@ -71,14 +71,15 @@
 
 ## Descargar
 
-1. Descarga `LanChat-<versión>.zip` de la [última versión](https://github.com/AEROGU/lanchat/releases/latest).
+1. Descarga `LanChat-<versión>.zip` de la [última versión](https://github.com/AEROGU/lanchat/releases/latest)
+   (`LanChat-<versión>-32bits.zip` si la PC tiene Windows de 32 bits).
 2. Descomprímelo en una carpeta fija (p. ej. `C:\LanChat` o Documentos) y
    ejecuta `lanchat.exe`.
 3. Cuando Windows lo pregunte, permite el acceso en **redes privadas**.
 4. Repite en cada PC de la oficina.
 
-Requisitos: Windows 10 u 11 de 64 bits con Microsoft Edge (viene con
-Windows). La red debe estar marcada como **privada** en Windows y permitir
+Requisitos: Windows 10 u 11 (de 64 o 32 bits) con Microsoft Edge (viene
+con Windows). La red debe estar marcada como **privada** en Windows y permitir
 UDP 50000 y TCP 50001 entre las PCs. Si ves a alguien pero no le llegan los
 mensajes, mira [esta sección](#se-ve-a-alguien-pero-no-le-llegan-los-mensajes).
 
@@ -324,11 +325,12 @@ falta nada más.
 ```bash
 go tool mage              # lista los targets con su descripción
 go tool mage build        # compila dist/lanchat.exe (sin consola)
+go tool mage build32      # compila dist/lanchat-32bits.exe, para Windows de 32 bits
 go tool mage debug        # compila dist/lanchat-debug.exe, con consola
 go tool mage check        # gofmt, go vet, staticcheck, compilación para Android y pruebas: antes de cada commit
 go tool mage race         # pruebas con detector de carreras (requiere gcc)
 go tool mage vuln         # vulnerabilidades conocidas en el código y sus librerías
-go tool mage dist         # dist/LanChat-<versión>.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
+go tool mage dist         # dist/LanChat-<versión>.zip y -32bits.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
 go tool mage screenshots  # regenera docs/screenshots y docs/logo.png (requiere Edge)
 go tool mage emoji        # regenera la lista de emojis del selector desde Unicode (requiere internet)
 go tool mage android      # android/app/libs/lanchat.aar para la app de Android (en desarrollo, ver docs/ANDROID.md)
@@ -336,8 +338,10 @@ go tool mage apk          # dist/LanChat-<versión>-debug.apk para probar en el 
 go tool mage apkRelease   # dist/LanChat-<versión>.apk firmado con la clave propia (ver docs/ANDROID.md)
 ```
 
-`build` genera antes `cmd/lanchat/rsrc_windows_amd64.syso` (ícono, versión y
-manifest del .exe, target `resources`); el archivo no se versiona. El texto de
+`build` y `build32` generan antes `cmd/lanchat/rsrc_windows_amd64.syso` y
+`rsrc_windows_386.syso` (ícono, versión y manifest del .exe, target
+`resources`); no se versionan. Go 1.21 en adelante ya no funciona en
+Windows 7 ni 8, así que el .exe de 32 bits también pide Windows 10. El texto de
 `LEEME.txt` del zip está en `packaging/LEEME.txt`.
 
 La versión del ejecutable sale de `git describe`: la etiqueta `v1.0.0` da la

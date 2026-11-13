@@ -19,27 +19,49 @@ const (
 	mainPkg      = "./cmd/lanchat"
 	distDir      = "dist"
 	exeName      = "lanchat.exe"
+	exe32Name    = "lanchat-32bits.exe"
 	debugExeName = "lanchat-debug.exe"
+	guiLdflags   = "-s -w -H=windowsgui"
 )
 
-// Build compila dist/lanchat.exe para Windows, sin consola, con la versión de
-// git y su ícono.
+// winArch es una arquitectura de Windows para la que se compila LanChat.
+type winArch struct {
+	goarch    string // GOARCH; también nombra su archivo de recursos
+	exe       string // ejecutable en dist
+	zipSuffix string // sufijo de su zip en dist
+}
+
+var (
+	arch64    = winArch{goarch: "amd64", exe: exeName}
+	arch32    = winArch{goarch: "386", exe: exe32Name, zipSuffix: "-32bits"}
+	winArches = []winArch{arch64, arch32}
+)
+
+// Build compila dist/lanchat.exe para Windows de 64 bits, sin consola, con la
+// versión de git y su ícono.
 func Build() error {
 	mg.Deps(Resources)
-	return build(exeName, "-s -w -H=windowsgui")
+	return build(arch64, exeName, guiLdflags)
 }
 
-// Debug compila dist/lanchat-debug.exe: igual pero con consola, para ver el
-// registro (-debug) o usar el modo -console.
+// Build32 compila dist/lanchat-32bits.exe, igual que Build pero para Windows
+// de 32 bits (Windows 10 o posterior, como pide Go).
+func Build32() error {
+	mg.Deps(Resources)
+	return build(arch32, exe32Name, guiLdflags)
+}
+
+// Debug compila dist/lanchat-debug.exe: igual que Build pero con consola,
+// para ver el registro (-debug) o usar el modo -console.
 func Debug() error {
 	mg.Deps(Resources)
-	return build(debugExeName, "")
+	return build(arch64, debugExeName, "")
 }
 
-func build(name, extraLdflags string) error {
+func build(a winArch, name, extraLdflags string) error {
 	v := appVersion()
 	ldflags := strings.TrimSpace(fmt.Sprintf("%s -X %s/internal/version.App=%s", extraLdflags, module, v))
-	env := map[string]string{"CGO_ENABLED": "0", "GOOS": "windows", "GOARCH": "amd64"}
+	env := map[string]string{"CGO_ENABLED": "0", "GOOS": "windows", "GOARCH": a.goarch}
 	out := filepath.Join(distDir, name)
 	if err := sh.RunWithV(env, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", out, mainPkg); err != nil {
 		return err
