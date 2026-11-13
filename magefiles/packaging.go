@@ -62,27 +62,35 @@ func Resources() error {
 		LongPathAware:       true,
 	})
 
+	for _, a := range winArches {
+		vi, err := versionInfo(v, a.exe)
+		if err != nil {
+			return err
+		}
+		rs.SetVersionInfo(vi)
+		if err := writeResources(rs, a.goarch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// versionInfo arma los datos de versión que Windows muestra en Propiedades.
+func versionInfo(v, exe string) (version.Info, error) {
 	vi := version.Info{FileVersion: numericVersion(v), ProductVersion: numericVersion(v)}
 	for key, value := range map[string]string{
 		version.ProductName:      productName,
 		version.FileDescription:  "LanChat: mensajería en la red local",
 		version.ProductVersion:   v,
 		version.FileVersion:      v,
-		version.OriginalFilename: exeName,
+		version.OriginalFilename: exe,
 		version.InternalName:     "lanchat",
 	} {
 		if err := vi.Set(langSpanishMX, key, value); err != nil {
-			return err
+			return vi, err
 		}
 	}
-	rs.SetVersionInfo(vi)
-
-	for _, a := range winArches {
-		if err := writeResources(rs, a.goarch); err != nil {
-			return err
-		}
-	}
-	return nil
+	return vi, nil
 }
 
 func writeResources(rs *winres.ResourceSet, goarch string) error {
@@ -111,10 +119,10 @@ func numericVersion(v string) [4]uint16 {
 	return out
 }
 
-// Dist arma dist/LanChat-<versión>.zip (64 bits) y
-// dist/LanChat-<versión>-32bits.zip, cada uno con su ejecutable (como
-// lanchat.exe), LEEME.txt, el acceso al desinstalador, la licencia y los
-// avisos de terceros, y dist/SHA256SUMS.txt con el hash de ambos.
+// Dist arma dist/LanChat-<versión>.zip con los ejecutables de 64 bits
+// (LanChat.exe) y 32 bits (LanChat_x86.exe), LEEME.txt, el acceso al
+// desinstalador, la licencia y los avisos de terceros, y dist/SHA256SUMS.txt
+// con su hash.
 func Dist() error {
 	mg.Deps(Build, Build32, Notices)
 	v := appVersion()
@@ -125,31 +133,29 @@ func Dist() error {
 	text := strings.ReplaceAll(string(readme), "{{VERSION}}", v)
 	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\r\n") // Bloc de notas
 
-	var zips []string
-	for _, a := range winArches {
-		out := filepath.Join(distDir, fmt.Sprintf("%s-%s%s.zip", productName, v, a.zipSuffix))
-		if err := writeZip(out, a.exe, text); err != nil {
-			return err
-		}
-		fmt.Println(out)
-		zips = append(zips, out)
+	out := filepath.Join(distDir, fmt.Sprintf("%s-%s.zip", productName, v))
+	if err := writeZip(out, text); err != nil {
+		return err
 	}
-	return writeChecksums(zips...)
+	fmt.Println(out)
+	return writeChecksum(out)
 }
 
-// writeZip arma un zip de LanChat con el ejecutable dist/<exe>.
-func writeZip(out, exe, readme string) error {
+func writeZip(out, readme string) error {
 	f, err := os.Create(out)
 	if err != nil {
 		return err
 	}
 	zw := zip.NewWriter(f)
-	err = errors.Join(
-		addFile(zw, productName+"/"+exeName, filepath.Join(distDir, exe)),
+	var errs []error
+	for _, a := range winArches {
+		errs = append(errs, addFile(zw, productName+"/"+a.exe, filepath.Join(distDir, a.exe)))
+	}
+	err = errors.Join(append(errs,
 		addFile(zw, productName+"/LICENSE.txt", "LICENSE"),
 		addFile(zw, productName+"/"+filepath.Base(uninstallScript), uninstallScript),
 		addFile(zw, productName+"/"+noticesName, filepath.Join(distDir, noticesName)),
-	)
+	)...)
 	if err == nil {
 		var w io.Writer
 		hdr := &zip.FileHeader{Name: productName + "/" + readmeName, Method: zip.Deflate, Modified: time.Now()}
@@ -166,21 +172,18 @@ func writeZip(out, exe, readme string) error {
 	return err
 }
 
-// writeChecksums escribe dist/SHA256SUMS.txt; se verifica con
+// writeChecksum escribe dist/SHA256SUMS.txt; se verifica con
 // "sha256sum -c SHA256SUMS.txt" o con Get-FileHash en PowerShell.
-func writeChecksums(paths ...string) error {
-	var lines strings.Builder
-	for _, path := range paths {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		sum := sha256.Sum256(b)
-		fmt.Fprintf(&lines, "%s  %s\n", hex.EncodeToString(sum[:]), filepath.Base(path))
+func writeChecksum(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
 	}
+	sum := sha256.Sum256(b)
+	line := fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), filepath.Base(path))
 	out := filepath.Join(distDir, checksumsName)
 	fmt.Println(out)
-	return os.WriteFile(out, []byte(lines.String()), 0o644)
+	return os.WriteFile(out, []byte(line), 0o644)
 }
 
 func addFile(zw *zip.Writer, name, path string) error {

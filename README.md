@@ -71,10 +71,10 @@
 
 ## Descargar
 
-1. Descarga `LanChat-<versión>.zip` de la [última versión](https://github.com/AEROGU/lanchat/releases/latest)
-   (`LanChat-<versión>-32bits.zip` si la PC tiene Windows de 32 bits).
+1. Descarga `LanChat-<versión>.zip` de la [última versión](https://github.com/AEROGU/lanchat/releases/latest).
 2. Descomprímelo en una carpeta fija (p. ej. `C:\LanChat` o Documentos) y
-   ejecuta `lanchat.exe`.
+   ejecuta `LanChat.exe` (`LanChat_x86.exe` si la PC tiene Windows de 32
+   bits; en lo que sigue, donde dice `LanChat.exe`, en esas PCs es ese).
 3. Cuando Windows lo pregunte, permite el acceso en **redes privadas**.
 4. Repite en cada PC de la oficina.
 
@@ -108,7 +108,7 @@ enviarlos.
 ### Aviso de Windows SmartScreen
 
 LanChat no está firmado con un certificado de firma de código (cuestan
-dinero cada año). Por eso, la primera vez que se abre un `lanchat.exe`
+dinero cada año). Por eso, la primera vez que se abre un `LanChat.exe`
 descargado de Internet, Windows puede mostrar **"Windows protegió su PC"**.
 Para abrirlo:
 
@@ -124,13 +124,13 @@ comprobar que el zip no fue alterado, compara su SHA-256
 
 ## Uso
 
-`lanchat.exe` abre la ventana y queda en la bandeja del sistema (clic
+`LanChat.exe` abre la ventana y queda en la bandeja del sistema (clic
 izquierdo: abrir; clic derecho: menú con **Salir**). Cerrar la ventana no
 cierra LanChat. Abrirlo de nuevo con LanChat ya abierto solo muestra la ventana.
 
 La primera vez Windows pedirá permiso de red: hay que permitirlo en **redes
 privadas** (UDP 50000 y TCP 50001). También se puede crear la regla desde
-Ajustes > Firewall de Windows, o con `lanchat.exe -firewall add`.
+Ajustes > Firewall de Windows, o con `LanChat.exe -firewall add`.
 
 ### Equipos de otras subredes
 
@@ -150,16 +150,16 @@ Que aparezca en la lista solo prueba el descubrimiento (UDP 50000, que sale de
 cada PC). Los mensajes y archivos **entran** por TCP 50001, y eso lo bloquea el
 firewall del equipo que recibe. Pasa sobre todo si su red está como "Pública"
 o si la PC tiene varias redes (p. ej. Ethernet y Wi-Fi). La solución es una
-regla **de entrada** para `lanchat.exe` en **todas las redes** (privada,
+regla **de entrada** para `LanChat.exe` en **todas las redes** (privada,
 pública y dominio); no hace falta regla de salida. En una ventana de
 comandos como administrador, con la ruta de ese equipo:
 
 ```bat
-netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\lanchat.exe"
+netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\LanChat.exe"
 ```
 
 La regla va ligada a la ruta del `.exe`: si se mueve de carpeta, hay que
-crearla de nuevo. Si existe una regla de **bloqueo** para `lanchat.exe` (se
+crearla de nuevo. Si existe una regla de **bloqueo** para `LanChat.exe` (se
 crea si alguna vez se canceló el aviso de Windows), bórrala en *Firewall de
 Windows > Configuración avanzada > Reglas de entrada*. Para comprobarlo desde
 otra PC: `Test-NetConnection <IP> -Port 50001` en PowerShell debe decir
@@ -253,8 +253,8 @@ esta PC: los demás conservan su copia de las conversaciones.
 **En Windows**, cualquiera de estas tres formas abre el desinstalador:
 
 - **Ajustes > Desinstalar LanChat de esta PC…**
-- doble clic en **`Desinstalar LanChat.cmd`**, junto a `lanchat.exe`
-- `lanchat.exe -uninstall`
+- doble clic en **`Desinstalar LanChat.cmd`**, junto a `LanChat.exe`
+- `LanChat.exe -uninstall`
 
 El desinstalador pregunta antes de borrar nada. Luego cierra LanChat y quita:
 
@@ -268,7 +268,7 @@ El desinstalador pregunta antes de borrar nada. Luego cierra LanChat y quita:
   solo se borran los archivos que LanChat guardó ahí, no los tuyos.
 
 Al final abre la carpeta del programa para que la borres: es lo único que el
-desinstalador no puede quitar, porque `lanchat.exe` está en uso.
+desinstalador no puede quitar, porque `LanChat.exe` está en uso.
 
 Desinstalar borra tus datos sin avisar a los demás. Si estás en salas y
 quieres que los otros miembros sepan que saliste, usa antes **Ajustes >
@@ -286,9 +286,9 @@ Privacidad > Borrar todos mis datos**.
    ```
 
    Si alguna dice que no encuentra la clave, es que no existía.
-3. Firewall: `lanchat.exe -firewall remove` (pide administrador), o en
+3. Firewall: `LanChat.exe -firewall remove` (pide administrador), o en
    *Firewall de Windows > Configuración avanzada > Reglas de entrada* borra
-   las reglas de LanChat y `lanchat.exe`.
+   las reglas de LanChat y `LanChat.exe`.
 4. Datos: borra la carpeta `%APPDATA%\LanChat` (pégalo tal cual en la barra
    de direcciones del Explorador). Ahí están la base de datos `lanchat.db`,
    la identidad, los ajustes y el registro.
@@ -324,13 +324,13 @@ falta nada más.
 
 ```bash
 go tool mage              # lista los targets con su descripción
-go tool mage build        # compila dist/lanchat.exe (sin consola)
-go tool mage build32      # compila dist/lanchat-32bits.exe, para Windows de 32 bits
+go tool mage build        # compila dist/LanChat.exe (sin consola)
+go tool mage build32      # compila dist/LanChat_x86.exe, para Windows de 32 bits
 go tool mage debug        # compila dist/lanchat-debug.exe, con consola
 go tool mage check        # gofmt, go vet, staticcheck, compilación para Android y pruebas: antes de cada commit
 go tool mage race         # pruebas con detector de carreras (requiere gcc)
 go tool mage vuln         # vulnerabilidades conocidas en el código y sus librerías
-go tool mage dist         # dist/LanChat-<versión>.zip y -32bits.zip (exe, LEEME, licencia, avisos) y SHA256SUMS.txt
+go tool mage dist         # dist/LanChat-<versión>.zip (exe de 64 y 32 bits, LEEME, licencia, avisos) y SHA256SUMS.txt
 go tool mage screenshots  # regenera docs/screenshots y docs/logo.png (requiere Edge)
 go tool mage emoji        # regenera la lista de emojis del selector desde Unicode (requiere internet)
 go tool mage android      # android/app/libs/lanchat.aar para la app de Android (en desarrollo, ver docs/ANDROID.md)

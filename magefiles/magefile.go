@@ -18,33 +18,32 @@ const (
 	module       = "github.com/AEROGU/lanchat"
 	mainPkg      = "./cmd/lanchat"
 	distDir      = "dist"
-	exeName      = "lanchat.exe"
-	exe32Name    = "lanchat-32bits.exe"
+	exeName      = "LanChat.exe"
+	exe32Name    = "LanChat_x86.exe"
 	debugExeName = "lanchat-debug.exe"
 	guiLdflags   = "-s -w -H=windowsgui"
 )
 
 // winArch es una arquitectura de Windows para la que se compila LanChat.
 type winArch struct {
-	goarch    string // GOARCH; también nombra su archivo de recursos
-	exe       string // ejecutable en dist
-	zipSuffix string // sufijo de su zip en dist
+	goarch string // GOARCH; también nombra su archivo de recursos
+	exe    string // nombre del ejecutable, en dist y en el zip
 }
 
 var (
 	arch64    = winArch{goarch: "amd64", exe: exeName}
-	arch32    = winArch{goarch: "386", exe: exe32Name, zipSuffix: "-32bits"}
+	arch32    = winArch{goarch: "386", exe: exe32Name}
 	winArches = []winArch{arch64, arch32}
 )
 
-// Build compila dist/lanchat.exe para Windows de 64 bits, sin consola, con la
+// Build compila dist/LanChat.exe para Windows de 64 bits, sin consola, con la
 // versión de git y su ícono.
 func Build() error {
 	mg.Deps(Resources)
 	return build(arch64, exeName, guiLdflags)
 }
 
-// Build32 compila dist/lanchat-32bits.exe, igual que Build pero para Windows
+// Build32 compila dist/LanChat_x86.exe, igual que Build pero para Windows
 // de 32 bits (Windows 10 o posterior, como pide Go).
 func Build32() error {
 	mg.Deps(Resources)

@@ -8,9 +8,12 @@ INSTALACIÓN (en cada PC)
       %LOCALAPPDATA%\Programs\LanChat
    (no hace falta ser administrador). No la dejes en Descargas ni en el
    Escritorio: el inicio automático y el firewall apuntan a esa ruta.
-2. Abre lanchat.exe. Si Windows muestra "Windows protegió su PC", haz clic
+2. Abre LanChat.exe. Si Windows muestra "Windows protegió su PC", haz clic
    en "Más información" y luego en "Ejecutar de todas formas" (LanChat no
    está firmado digitalmente; solo pasa la primera vez).
+   En Windows de 32 bits abre LanChat_x86.exe en su lugar (se ve en
+   Configuración > Sistema > Acerca de > Tipo de sistema); donde este texto
+   dice LanChat.exe, en esas PCs es LanChat_x86.exe.
    Queda un ícono en la bandeja del sistema (junto al reloj). LanChat
    pregunta si debe iniciar con Windows: conviene responder que sí.
 3. Firewall: la primera vez Windows puede preguntar si permite el acceso a
@@ -25,12 +28,12 @@ SI VES A ALGUIEN PERO NO LE LLEGAN LOS MENSAJES
 Que aparezca en la lista no basta: los mensajes ENTRAN a su PC por el
 puerto TCP 50001 y su firewall los bloquea. Pasa sobre todo si su red está
 como "Pública" o si la PC tiene varias redes (p. ej. Ethernet y Wi-Fi). En
-ESA PC crea una regla de entrada para lanchat.exe en todas las redes
+ESA PC crea una regla de entrada para LanChat.exe en todas las redes
 (privada, pública y dominio); no hace falta regla de salida. En una ventana
-de comandos como administrador, con la ruta donde está lanchat.exe:
-   netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\lanchat.exe"
-Si mueves lanchat.exe de carpeta, crea la regla de nuevo. Si hay una regla
-de BLOQUEO para lanchat.exe (aparece si alguna vez se canceló el aviso de
+de comandos como administrador, con la ruta donde está LanChat.exe:
+   netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\LanChat.exe"
+Si mueves LanChat.exe de carpeta, crea la regla de nuevo. Si hay una regla
+de BLOQUEO para LanChat.exe (aparece si alguna vez se canceló el aviso de
 Windows), bórrala en Firewall de Windows > Configuración avanzada > Reglas
 de entrada.
 
@@ -119,7 +122,7 @@ La versión 0.18 no se comunica con las anteriores (así todos respetan
 contacto con una versión anterior aparece en la lista como "incompatible"
 y recibe un aviso automático para que actualice.
 Cierra LanChat (clic derecho en la bandeja > Salir) y reemplaza
-lanchat.exe por el nuevo. Los mensajes y ajustes se conservan.
+LanChat.exe por el nuevo. Los mensajes y ajustes se conservan.
 Con teléfonos Android, actualiza también las PCs a esta versión: así los
 teléfonos las ven aunque tengan la pantalla apagada.
 Las reacciones, "Eliminar para todos" y los administradores de sala
@@ -144,7 +147,7 @@ A mano, sin dejar rastros:
       reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v LanChat /f
       reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" /v LanChat /f
       reg delete "HKCU\Software\Classes\AppUserModelId\LanChat" /f
-3. Firewall: lanchat.exe -firewall remove
+3. Firewall: LanChat.exe -firewall remove
 4. Borra la carpeta %APPDATA%\LanChat (base de datos, identidad, ajustes).
 5. Borra los archivos recibidos: Descargas\LanChat o la carpeta que hayas
    elegido en Ajustes.
@@ -162,9 +165,9 @@ PARA EL ADMINISTRADOR
 ---------------------
 - Puertos: UDP 50000 (descubrimiento) y TCP 50001 (mensajes y archivos).
 - Crear la regla del firewall sin preguntar al usuario (como administrador):
-      lanchat.exe -firewall add
+      LanChat.exe -firewall add
   Quitarla:
-      lanchat.exe -firewall remove
+      LanChat.exe -firewall remove
 - Opciones: -tray (arrancar en la bandeja), -dir carpeta (otros datos),
   -uninstall (desinstalar), -version.
 

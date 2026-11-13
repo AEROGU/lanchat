@@ -130,7 +130,8 @@ jobs:
 
           ## Instalación en Windows
 
-          1. Descarga \`LanChat-$VERSION.zip\`, descomprímelo y ejecuta \`lanchat.exe\`.
+          1. Descarga \`LanChat-$VERSION.zip\`, descomprímelo y ejecuta \`LanChat.exe\`
+             (\`LanChat_x86.exe\` en Windows de 32 bits).
           2. Si Windows muestra "Windows protegió su PC" (SmartScreen), elige
              **Más información > Ejecutar de todas formas**: el programa no está
              firmado con un certificado de pago. Ver \`LEEME.txt\`.
