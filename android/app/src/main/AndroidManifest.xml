@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Arrancar al encender el teléfono (StartReceiver). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Actualizarse: abre el instalador de Android con el APK de la versión
+         nueva (LanChatHost.installUpdate); el usuario la confirma. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- allowBackup="false" y dataExtractionRules (Android 12+): la identidad
          TLS (en filesDir) es de este teléfono; restaurarla en otro haría que

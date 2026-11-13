@@ -2,6 +2,9 @@
 <!-- Lo que LanChatHost.openFile puede pasar a otras apps: solo los archivos
      recibidos (ver LanChatService.downloadDir). -->
 <paths>
+    <!-- El APK de una versión nueva, para el instalador de Android
+         (LanChatHost.installUpdate); lo descarga el núcleo (mobile.updatesDir). -->
+    <files-path name="actualizaciones" path="updates/" />
     <!-- Android 11+: Descargas/LanChat. -->
     <external-path name="descargas" path="Download/LanChat/" />
     <!-- Antes de Android 11, y lo recibido con versiones anteriores de la app. -->

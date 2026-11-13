@@ -42,6 +42,7 @@ type fakeBackend struct {
 	room   *app.Room
 	// downloadDir vacío = una ruta de Windows que no se usa.
 	downloadDir string
+	autoUpdate  bool
 }
 
 var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", Online: true}
@@ -49,7 +50,7 @@ var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", 
 func (f *fakeBackend) Self() app.Self {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return app.Self{ID: "yo", Name: f.name, Hostname: "PC-YO", Status: f.status}
+	return app.Self{ID: "yo", Name: f.name, Hostname: "PC-YO", Status: f.status, AutoUpdate: f.autoUpdate}
 }
 func (f *fakeBackend) Contacts(context.Context) ([]app.Contact, error) {
 	return []app.Contact{f.contact()}, nil
@@ -663,9 +664,15 @@ func TestSendManyRoute(t *testing.T) {
 		t.Errorf("mensaje a varios: %d %+v %v", resp.StatusCode, out, b.sent)
 	}
 }
-func (f *fakeBackend) SetReadReceipts(bool) error        { return nil }
-func (f *fakeBackend) SetPreviews(bool) error            { return nil }
-func (f *fakeBackend) SetHideOffline(bool) error         { return nil }
+func (f *fakeBackend) SetReadReceipts(bool) error { return nil }
+func (f *fakeBackend) SetPreviews(bool) error     { return nil }
+func (f *fakeBackend) SetHideOffline(bool) error  { return nil }
+func (f *fakeBackend) SetAutoUpdate(on bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.autoUpdate = on
+	return nil
+}
 func (f *fakeBackend) SetCollapsedGroups([]string) error { return nil }
 func (f *fakeBackend) SetRecentEmoji([]string) error     { return nil }
 func (f *fakeBackend) ThumbsUsage(context.Context) (int, int64, error) {

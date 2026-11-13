@@ -27,8 +27,9 @@ App Android (Kotlin, carpeta android/)
   - `Mobile.start(dataDir, deviceName, downloadDir, host): String` arranca
     LanChat y devuelve la dirección para la WebView.
   - `Mobile.stop()`, `Mobile.running()`, `Mobile.version()`.
-  - `Host` (lo implementa Kotlin): `notify(title, body)` y
-    `unreadChanged(total)`.
+  - `Host` (lo implementa Kotlin): `notify(title, body, chat)`,
+    `unreadChanged(total)`, `openFile(path)`, `openURL(url)`,
+    `idleSeconds()`, `installUpdate(path)` y `notifyUpdate(title, body)`.
 - Target `go tool mage android`: genera `android/app/libs/lanchat.aar`
   (~17 MB). Probado en la laptop con NDK 30 y el JDK 25 de Android Studio.
 - `.gitignore` ya excluye lo generado por Android Studio, el `.aar` y las
@@ -311,6 +312,17 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
   del servicio en primer plano y del permiso de batería).
 - [x] Instalación en Android documentada en README, LEEME y el texto de la
   Release.
+- [x] Actualización desde la app (`internal/ui/updates.go`, la misma de
+  Windows): el núcleo busca la última versión en GitHub, descarga
+  `LanChat-<versión>.apk` en `filesDir/updates` y comprueba su SHA-256 con
+  `SHA256SUMS.txt`; `Host.installUpdate` lo comparte por el `FileProvider`
+  (`files-path` "actualizaciones") y abre el instalador de Android
+  (`ACTION_VIEW`, permiso `REQUEST_INSTALL_PACKAGES`). Android solo lo acepta
+  firmado con la misma clave, y siempre pide confirmarlo. Si falta el permiso
+  "Instalar apps desconocidas", abre ese ajuste y pide volver a tocar
+  "Actualizar". El APK se borra al volver a arrancar el núcleo (tras
+  actualizar, `MY_PACKAGE_REPLACED` reinicia el servicio). Compila; **falta
+  probarlo en un teléfono** con una Release real.
 
 #### Clave de firma
 

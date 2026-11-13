@@ -296,6 +296,8 @@ type Self struct {
 	CollapsedGroups []string
 	// RecentEmoji son los últimos emojis usados, el más reciente primero.
 	RecentEmoji []string
+	// AutoUpdate: buscar versiones nuevas por cuenta propia.
+	AutoUpdate bool
 	// Fingerprint es la huella de la identidad TLS de este equipo.
 	Fingerprint string
 }
@@ -312,6 +314,7 @@ func (a *App) Self() Self {
 		HideOffline:     a.cfg.HideOffline,
 		CollapsedGroups: slices.Clone(a.cfg.CollapsedGroups),
 		RecentEmoji:     slices.Clone(a.cfg.RecentEmoji),
+		AutoUpdate:      !a.cfg.NoAutoUpdate,
 		Fingerprint:     a.identity.Fingerprint,
 	}
 }
@@ -494,6 +497,14 @@ func (a *App) SetHideOffline(hide bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cfg.HideOffline = hide
+	return a.cfg.Save(a.dir)
+}
+
+// SetAutoUpdate activa o desactiva la búsqueda automática de versiones nuevas.
+func (a *App) SetAutoUpdate(enabled bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.NoAutoUpdate = !enabled
 	return a.cfg.Save(a.dir)
 }
 

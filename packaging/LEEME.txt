@@ -117,6 +117,18 @@ fotos, archivos o un texto: LanChat pregunta a qué contactos enviarlos.
 
 ACTUALIZAR
 ----------
+LanChat busca versiones nuevas al abrirse, una vez al día y cuando otro
+equipo de la red tiene una más nueva, y pregunta antes de instalar. Al
+aceptar, en Windows descarga la versión nueva, comprueba que llegó completa
+(SHA-256), reemplaza el programa y vuelve a abrirse solo; en Android abre el
+instalador, que pide confirmarlo (la primera vez, Android pide permitir
+"Instalar apps desconocidas" para LanChat). En Ajustes > Actualizaciones
+está el botón "Buscar actualizaciones" y la casilla para buscarlas
+automáticamente. Es lo único que se conecta a Internet (a github.com); los
+mensajes nunca salen de la red local.
+Para actualizar a mano (o si LanChat está en una carpeta protegida como
+C:\Program Files y no puede reemplazarse): descarga el zip de
+https://github.com/AEROGU/lanchat/releases.
 La versión 0.18 no se comunica con las anteriores (así todos respetan
 "Eliminar para todos"): actualiza todas las PCs y teléfonos a la vez. Un
 contacto con una versión anterior aparece en la lista como "incompatible"

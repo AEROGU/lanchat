@@ -9,11 +9,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/AEROGU/lanchat/internal/config"
 	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/ui"
+	"github.com/AEROGU/lanchat/internal/update"
 	"github.com/AEROGU/lanchat/internal/version"
 )
 
@@ -21,6 +23,9 @@ const (
 	logFileName = "lanchat.log"
 	// maxLogSize: al superarlo, el registro anterior pasa a lanchat.log.1.
 	maxLogSize = 1 << 20
+	// updatedWait: lo máximo que la versión nueva espera a que se cierre la
+	// anterior tras actualizarse.
+	updatedWait = 30 * time.Second
 )
 
 func main() {
@@ -33,6 +38,7 @@ func main() {
 	elevated := flag.Bool(elevatedFlag, false, "uso interno: proceso relanzado como administrador")
 	showVersion := flag.Bool("version", false, "mostrar la versión y salir")
 	uninstallOp := flag.Bool(platform.UninstallFlag, false, "desinstalar LanChat de este equipo (pregunta antes de borrar)")
+	updatedFrom := flag.Int(platform.UpdatedFlag, 0, "uso interno: proceso de la versión anterior, tras actualizarse")
 	flag.Parse()
 
 	if *showVersion {
@@ -81,10 +87,23 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: level}))
 	log.Info("iniciando", "version", version.App)
+	afterUpdate(*updatedFrom, log)
 	if err := ui.RunGUI(ui.Options{Dir: *dir, CustomDir: customDir, Hidden: *tray || *legacyTray, Log: log}); err != nil {
 		log.Error(err.Error())
 		ui.ShowError("LanChat no pudo iniciar:\n\n" + err.Error())
 		os.Exit(1)
+	}
+}
+
+// afterUpdate termina una actualización: espera a que se cierre la versión
+// anterior (pid) y borra su ejecutable, que quedó como .old junto a este.
+func afterUpdate(pid int, log *slog.Logger) {
+	if pid > 0 {
+		log.Info("actualizado; esperando a que se cierre la versión anterior", "pid", pid)
+		platform.WaitExit(pid, updatedWait)
+	}
+	if exe, err := platform.Executable(); err == nil {
+		update.RemoveOld(exe)
 	}
 }
 

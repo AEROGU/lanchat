@@ -14,3 +14,4 @@ func RemoveFirewall() error                      { return ErrUnsupported }
 func IsAdmin() bool                              { return false }
 func RunElevated(string, string) (int, error)    { return -1, ErrUnsupported }
 func IdleTime() (time.Duration, error)           { return 0, ErrUnsupported }
+func WaitExit(int, time.Duration)                {}

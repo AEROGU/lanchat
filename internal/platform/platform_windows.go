@@ -280,3 +280,16 @@ func IdleTime() (time.Duration, error) {
 	// Restar en uint32 tolera que el contador dé la vuelta (cada 49 días).
 	return time.Duration(uint32(now)-info.time) * time.Millisecond, nil
 }
+
+// ---------- Procesos ----------
+
+// WaitExit espera hasta timeout a que termine el proceso pid (o vuelve en
+// cuanto se sabe que ya no existe).
+func WaitExit(pid int, timeout time.Duration) {
+	h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+	if err != nil {
+		return // ya terminó
+	}
+	defer windows.CloseHandle(h)
+	windows.WaitForSingleObject(h, uint32(timeout.Milliseconds()))
+}

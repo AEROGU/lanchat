@@ -243,6 +243,7 @@ func (d *demoBackend) MarkSetupDone() error              { return nil }
 func (d *demoBackend) SetReadReceipts(bool) error        { return errDemo }
 func (d *demoBackend) SetPreviews(bool) error            { return errDemo }
 func (d *demoBackend) SetHideOffline(bool) error         { return nil }
+func (d *demoBackend) SetAutoUpdate(bool) error          { return nil }
 func (d *demoBackend) SetCollapsedGroups([]string) error { return nil }
 func (d *demoBackend) SetRecentEmoji([]string) error     { return nil }
 func (d *demoBackend) ThumbsUsage(context.Context) (int, int64, error) {

@@ -47,6 +47,9 @@ type Config struct {
 	CollapsedGroups []string `json:"collapsed_groups,omitempty"`
 	// RecentEmoji son los últimos emojis usados, el más reciente primero.
 	RecentEmoji []string `json:"recent_emoji,omitempty"`
+	// NoAutoUpdate: no buscar versiones nuevas por cuenta propia (el botón
+	// "Buscar actualizaciones" sigue funcionando).
+	NoAutoUpdate bool `json:"no_auto_update,omitempty"`
 }
 
 // DefaultDir devuelve %APPDATA%\LanChat (o su equivalente en otros sistemas).

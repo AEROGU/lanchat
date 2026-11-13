@@ -24,6 +24,7 @@ type stateJSON struct {
 	// Mobile: sin escritorio (Android, ver Server.Shell): se eligen archivos
 	// con <input type="file"> y no hay carpetas que abrir.
 	Mobile bool       `json:"mobile"`
+	Update updateJSON `json:"update"`
 	Limits limitsJSON `json:"limits"`
 }
 

@@ -132,6 +132,31 @@ La primera vez Windows pedirá permiso de red: hay que permitirlo en **redes
 privadas** (UDP 50000 y TCP 50001). También se puede crear la regla desde
 Ajustes > Firewall de Windows, o con `LanChat.exe -firewall add`.
 
+### Actualizaciones
+
+LanChat busca versiones nuevas en
+[Releases](https://github.com/AEROGU/lanchat/releases) al abrirse, una vez al
+día y cuando aparece en la red otro equipo con una versión más nueva. Si hay
+una, **pregunta** antes de instalar ("Ahora no" la deja hasta la próxima vez
+que se abra). Al aceptar:
+
+- **En Windows** descarga el zip, comprueba su SHA-256 con el
+  `SHA256SUMS.txt` de la misma versión, pone el ejecutable que corresponde
+  (`LanChat.exe` o `LanChat_x86.exe`) en lugar del actual, borra el zip y
+  reinicia LanChat. El inicio con Windows y la regla del firewall siguen
+  valiendo, porque la ruta no cambia. Si LanChat está en una carpeta
+  protegida (p. ej. `C:\Program Files`) no puede reemplazarse: avisa y hay que
+  actualizar a mano.
+- **En Android** descarga el APK (también comprobado con `SHA256SUMS.txt`) y
+  abre el instalador de Android, que pide confirmarlo. La primera vez Android
+  pide permitir "Instalar apps desconocidas" para LanChat.
+
+En **Ajustes > Actualizaciones** están el botón **Buscar actualizaciones** y la
+casilla **Buscar actualizaciones automáticamente** (con ella desactivada,
+LanChat solo consulta GitHub al pulsar el botón). La versión que anuncia otro
+equipo solo sirve de aviso: lo que se instala siempre viene de GitHub. Las
+compilaciones propias con cambios sin commit (`-dirty`) no se actualizan solas.
+
 ### Equipos de otras subredes
 
 Basta con agregar **una sola PC** de la otra subred, y en **una sola PC** de
@@ -243,6 +268,10 @@ ese equipo vuelve a conectarse, reaparece en la lista. Cada mensaje combinado
 lleva una leyenda pequeña con su origen ("⤷ Combinado de Angelika · OPPO
 Reno10 5G · 192.168.1.149", con el nombre que ese equipo anunciaba, no el
 alias), para que nadie lo haga pasar por escrito por el otro contacto.
+
+Los mensajes y archivos nunca salen de la red local. Lo único que se conecta a
+Internet es la búsqueda de actualizaciones, que consulta github.com (ver
+[Actualizaciones](#actualizaciones); se desactiva en Ajustes).
 
 Lo borrado no queda recuperable en `lanchat.db`: la base usa `secure_delete`
 (sobrescribe con ceros) y se vacía su registro (`-wal`). Borrar es solo en

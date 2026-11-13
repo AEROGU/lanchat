@@ -23,6 +23,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/ui"
+	"github.com/AEROGU/lanchat/internal/update"
 	"github.com/AEROGU/lanchat/internal/version"
 )
 
@@ -32,6 +33,9 @@ const (
 	maxLogSize = 1 << 20
 	// stopTimeout: espera máxima a las peticiones en curso al detener.
 	stopTimeout = 5 * time.Second
+	// updatesDir: dentro de la carpeta de datos, donde se descarga el APK de
+	// una versión nueva (la app lo comparte con el instalador de Android).
+	updatesDir = "updates"
 )
 
 // Host es lo que la app de Android ofrece al núcleo; lo implementa Kotlin.
@@ -49,6 +53,11 @@ type Host interface {
 	// IdleSeconds: cuánto lleva la pantalla apagada, en segundos (0 si está
 	// encendida). Es la inactividad del ausente automático.
 	IdleSeconds() int
+	// InstallUpdate abre el instalador de Android con el APK de una versión
+	// nueva, ya descargado y verificado (el usuario confirma la instalación).
+	InstallUpdate(path string) error
+	// NotifyUpdate avisa que hay una versión nueva; tocarlo abre la app.
+	NotifyUpdate(title, body string)
 }
 
 var (
@@ -115,10 +124,17 @@ func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
 	}
 	srv.OnUnreadChanged = host.UnreadChanged
 	srv.Shell = &ui.Shell{OpenFile: host.OpenFile, OpenURL: host.OpenURL}
+	srv.Updates = &ui.UpdatePlatform{
+		Asset:   update.APKName,
+		Dir:     filepath.Join(dataDir, updatesDir),
+		Install: func(path, _ string) error { return host.InstallUpdate(path) },
+		Notify:  host.NotifyUpdate,
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	in := &instance{app: a, cancel: cancel, srv: srv, done: make(chan error, 1), events: make(chan struct{}), logFile: logFile}
 	go srv.Serve()
+	srv.StartUpdates(ctx)
 	go func() { in.done <- a.Run(ctx) }()
 	go func() {
 		defer close(in.events)

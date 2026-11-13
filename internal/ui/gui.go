@@ -11,7 +11,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -21,6 +24,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/config"
 	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/platform"
+	"github.com/AEROGU/lanchat/internal/update"
 )
 
 const (
@@ -107,6 +111,14 @@ func RunGUI(o Options) error {
 	srv.OnQuit = systray.Quit
 	srv.OnUnreadChanged = g.setUnread
 	g.notifier = newNotifier(iconPath, g.show, o.Log)
+	if runtime.GOOS == "windows" {
+		srv.Updates = &UpdatePlatform{
+			Asset:   update.ZipName,
+			Dir:     filepath.Join(os.TempDir(), "LanChat-update"),
+			Install: g.installUpdate,
+			Notify:  func(title, body string) { go g.notifier.notify(title, body) },
+		}
+	}
 	if total, err := a.TotalUnread(context.Background()); err == nil {
 		g.unread = total
 	}
@@ -121,6 +133,7 @@ func RunGUI(o Options) error {
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve() }()
+	srv.StartUpdates(ctx)
 
 	runErr := make(chan error, 1)
 	go func() {
@@ -197,6 +210,31 @@ func (g *gui) show() {
 	if err := openWindow(g.srv.LaunchURL(), g.profileDir); err != nil {
 		g.log.Error("abriendo la ventana", "err", err)
 	}
+}
+
+// installUpdate pone el ejecutable del zip descargado en lugar del actual y
+// abre la versión nueva, que espera a que esta se cierre (-updated).
+func (g *gui) installUpdate(zipPath, version string) error {
+	exe, err := platform.Executable()
+	if err != nil {
+		return err
+	}
+	err = update.Install(zipPath, exe, runtime.GOARCH)
+	os.RemoveAll(filepath.Dir(zipPath)) // el zip ya no hace falta
+	if err != nil {
+		return err
+	}
+	args := append([]string{"-" + platform.UpdatedFlag, strconv.Itoa(os.Getpid())}, g.srv.AutostartArgs...)
+	if !g.srv.HasWindow() {
+		args = append(args, "-"+platform.TrayFlag)
+	}
+	if err := exec.Command(exe, args...).Start(); err != nil {
+		update.Rollback(exe)
+		return fmt.Errorf("la versión nueva no arrancó: %w", err)
+	}
+	g.log.Info("versión nueva instalada; reiniciando", "version", version)
+	g.srv.quit()
+	return nil
 }
 
 func (g *gui) setUnread(total int) {

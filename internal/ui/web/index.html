@@ -196,6 +196,19 @@
         <small class="help">Dejas de recibir mensajes hasta que vuelvas a abrir la app. También se detiene desde su notificación.</small>
       </div>
 
+      <div id="update-section" hidden>
+        <label>Actualizaciones</label>
+        <div class="input-row">
+          <span id="update-status" class="status-text"></span>
+          <button type="button" id="update-btn" class="text-btn">Buscar actualizaciones</button>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="autoupdate-input">
+          Buscar actualizaciones automáticamente
+        </label>
+        <small class="help">Al abrir LanChat, una vez al día y cuando otro equipo de la red tiene una versión más nueva. Siempre pregunta antes de instalar.</small>
+      </div>
+
       <label>Privacidad</label>
       <div class="input-row">
         <button type="button" id="export-btn" class="text-btn">Descargar mis datos</button>
@@ -395,6 +408,17 @@
       <div class="actions">
         <button value="no">Ahora no</button>
         <button value="yes" class="primary">Sí, iniciar con Windows</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="update-dialog">
+    <form method="dialog">
+      <h2>Hay una versión nueva de LanChat</h2>
+      <p class="help" id="update-text"></p>
+      <div class="actions">
+        <button value="later">Ahora no</button>
+        <button value="install" class="primary">Actualizar</button>
       </div>
     </form>
   </dialog>

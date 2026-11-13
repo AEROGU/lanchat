@@ -80,6 +80,7 @@ type Backend interface {
 	SetReadReceipts(enabled bool) error
 	SetPreviews(enabled bool) error
 	SetHideOffline(hide bool) error
+	SetAutoUpdate(enabled bool) error
 	SetCollapsedGroups(groups []string) error
 	SetRecentEmoji(list []string) error
 	ThumbsUsage(ctx context.Context) (count int, bytes int64, err error)
@@ -152,6 +153,10 @@ type Server struct {
 	// Shell, si no es nil, reemplaza las funciones del escritorio (Android);
 	// la página lo sabe por stateJSON.Mobile. Debe asignarse antes de Serve.
 	Shell *Shell
+	// Updates, si no es nil, permite que LanChat se actualice solo (ver
+	// StartUpdates). Debe asignarse antes de Serve.
+	Updates *UpdatePlatform
+	upd     updater
 
 	mu sync.Mutex
 	// focused y viewing los informa la página: si la ventana tiene el foco y
@@ -232,6 +237,7 @@ func (s *Server) Publish(ctx context.Context, ev any) {
 	switch e := ev.(type) {
 	case discovery.Event:
 		s.publishContact(ctx, e.Peer.ID)
+		s.peerVersion(ctx, e.Peer.AppVersion)
 	case chat.Event:
 		s.publishChat(ctx, e)
 	case app.SelfChanged:
@@ -291,6 +297,11 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/read-receipts", s.handleReadReceipts)
 	mux.HandleFunc("POST /api/previews", s.handlePreviews)
 	mux.HandleFunc("POST /api/hide-offline", s.handleHideOffline)
+	mux.HandleFunc("GET /api/update", s.handleUpdateState)
+	mux.HandleFunc("POST /api/update/check", s.handleUpdateCheck)
+	mux.HandleFunc("POST /api/update/install", s.handleUpdateInstall)
+	mux.HandleFunc("POST /api/update/later", s.handleUpdateLater)
+	mux.HandleFunc("POST /api/update/auto", s.handleAutoUpdate)
 	mux.HandleFunc("POST /api/collapsed-groups", s.handleList(s.b.SetCollapsedGroups))
 	mux.HandleFunc("POST /api/recent-emoji", s.handleList(s.b.SetRecentEmoji))
 	mux.HandleFunc("GET /api/previews/stored", s.handleThumbsUsage)
@@ -421,6 +432,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		ManualPeers: s.b.ManualPeers(),
 		DownloadDir: s.b.DownloadDir(),
 		Mobile:      s.Shell != nil,
+		Update:      s.updateState(),
 		Limits: limitsJSON{MaxName: protocol.MaxNameLen, MaxMessageBytes: protocol.MaxMessageBytes,
 			MaxStatusText: protocol.MaxStatusTextLen, DeleteWindowMs: protocol.DeleteWindow.Milliseconds()},
 	}
@@ -600,8 +612,13 @@ func (s *Server) handleQuit(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusNotImplemented, errors.New("esta instancia no se puede cerrar desde fuera"))
 		return
 	}
-	s.hub.broadcast("quit", struct{}{})
 	w.WriteHeader(http.StatusNoContent)
+	s.quit()
+}
+
+// quit cierra las ventanas y luego LanChat (OnQuit).
+func (s *Server) quit() {
+	s.hub.broadcast("quit", struct{}{})
 	go func() {
 		time.Sleep(quitDelay)
 		s.OnQuit()

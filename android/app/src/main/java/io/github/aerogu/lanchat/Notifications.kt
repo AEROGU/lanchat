@@ -17,8 +17,10 @@ import androidx.core.content.ContextCompat
 object Notifications {
     const val SERVICE_ID = 1
     private const val MESSAGE_ID = 2
+    private const val UPDATE_ID = 3
     private const val CHANNEL_SERVICE = "service"
     private const val CHANNEL_MESSAGES = "messages"
+    private const val CHANNEL_UPDATES = "updates"
 
     fun createChannels(context: Context) {
         NotificationManagerCompat.from(context).createNotificationChannelsCompat(
@@ -31,6 +33,10 @@ object Notifications {
                 NotificationChannelCompat.Builder(CHANNEL_MESSAGES, NotificationManagerCompat.IMPORTANCE_HIGH)
                     .setName(context.getString(R.string.channel_messages))
                     .setDescription(context.getString(R.string.channel_messages_description))
+                    .build(),
+                NotificationChannelCompat.Builder(CHANNEL_UPDATES, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+                    .setName(context.getString(R.string.channel_updates))
+                    .setDescription(context.getString(R.string.channel_updates_description))
                     .build(),
             ),
         )
@@ -84,6 +90,21 @@ object Notifications {
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(context).notify(chat, MESSAGE_ID, n)
+    }
+
+    /** Aviso de versión nueva; tocarlo abre la app, que pregunta si se instala. */
+    @SuppressLint("MissingPermission") // allowed() revisa POST_NOTIFICATIONS
+    fun update(context: Context, title: String, body: String) {
+        if (!allowed(context)) return
+        val n = NotificationCompat.Builder(context, CHANNEL_UPDATES)
+            .setSmallIcon(R.drawable.ic_stat_lanchat)
+            .setColor(ContextCompat.getColor(context, R.color.brand))
+            .setContentTitle(title)
+            .setContentText(body)
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(context).notify(UPDATE_ID, n)
     }
 
     /** Quita el aviso de una conversación (se abrió en la app). */

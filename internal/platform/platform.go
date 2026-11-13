@@ -21,6 +21,9 @@ const (
 	// UninstallFlag es la opción (-uninstall) que desinstala LanChat; la
 	// define cmd/lanchat y la usa el botón de Ajustes.
 	UninstallFlag = "uninstall"
+	// UpdatedFlag (-updated <pid>) lo agrega una actualización al abrir la
+	// versión nueva: espera a que termine la anterior antes de arrancar.
+	UpdatedFlag = "updated"
 )
 
 // AutostartState es la situación del inicio con Windows.

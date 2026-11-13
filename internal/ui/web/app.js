@@ -110,6 +110,10 @@ const api = {
   autostart: (enabled) => request("POST", "/api/system/autostart", { enabled }),
   firewall: () => request("POST", "/api/system/firewall", {}),
   uninstall: () => request("POST", "/api/system/uninstall", {}),
+  updateCheck: () => request("POST", "/api/update/check", {}),
+  updateInstall: () => request("POST", "/api/update/install", {}),
+  updateLater: () => request("POST", "/api/update/later", {}),
+  autoUpdate: (enabled) => request("POST", "/api/update/auto", { enabled }),
   createRoom: (name, members) => request("POST", "/api/rooms", { name, members }),
   roomHistory: (room, before) =>
     request("GET", `/api/rooms/messages?${new URLSearchParams({ room, before: before ?? "" })}`),
@@ -161,6 +165,7 @@ async function loadState() {
   state.manualPeers = s.manualPeers;
   state.downloadDir = s.downloadDir;
   state.mobile = s.mobile;
+  state.update = s.update;
   document.body.classList.toggle("mobile", s.mobile);
   if (s.mobile) {
     $("input").placeholder = "Escribe un mensaje";
@@ -2037,6 +2042,7 @@ function openSettings() {
   $("about").textContent = [`LanChat ${s.version} · ${s.hostname}`, s.copyright, s.license].join("\n");
   $("settings-error").hidden = true;
   renderAndroid();
+  renderUpdate();
   $("settings").showModal();
   api.system().then(renderSystem).catch(() => {});
 }
@@ -2054,6 +2060,95 @@ async function askAutostart() {
     api.autostart(dialog.returnValue === "yes").catch((e) => showBanner(e.message, 5000));
   }, { once: true });
   dialog.showModal();
+}
+
+// ---------- Actualizaciones ----------
+
+// renderUpdate muestra en Ajustes la versión, la búsqueda y la descarga.
+function renderUpdate() {
+  const u = state.update;
+  $("update-section").hidden = !u.supported && !u.reason;
+  const btn = $("update-btn");
+  $("autoupdate-input").checked = u.auto;
+  $("autoupdate-input").disabled = !u.supported;
+  btn.hidden = !u.supported;
+  if (!u.supported) {
+    $("update-status").textContent = u.reason;
+    return;
+  }
+  const canInstall = !!u.latest && u.latest !== u.current &&
+    (u.phase === "available" || u.phase === "error" || (u.phase === "installing" && state.mobile));
+  btn.textContent = canInstall ? `Actualizar a ${u.latest}` : "Buscar actualizaciones";
+  btn.dataset.action = canInstall ? "install" : "check";
+  btn.disabled = u.phase === "checking" || u.phase === "downloading" || (u.phase === "installing" && !state.mobile);
+  $("update-status").textContent = updateStatusText(u);
+}
+
+function updateStatusText(u) {
+  switch (u.phase) {
+    case "checking": return "Buscando…";
+    case "current": return `Tienes la última versión (${u.current}) ✓`;
+    case "available": return `Disponible: LanChat ${u.latest} (tienes ${u.current})`;
+    case "downloading": return `Descargando LanChat ${u.latest}… ${u.percent}%`;
+    case "installing": return state.mobile
+      ? "Confirma la instalación en la ventana de Android"
+      : "Instalando; LanChat se reiniciará en un momento…";
+    case "error": return u.error;
+    default: return `Versión ${u.current}`;
+  }
+}
+
+// updateChanged recibe el estado nuevo (evento "update"): actualiza Ajustes,
+// muestra el avance de la descarga y pregunta si hay una versión nueva.
+function updateChanged(u) {
+  const prev = state.update?.phase;
+  state.update = u;
+  if ($("settings").open) renderUpdate();
+  if (u.phase === "downloading" || (u.phase === "installing" && !state.mobile)) {
+    showBanner(updateStatusText(u));
+  } else if (u.phase === "installing") {
+    showBanner(updateStatusText(u), 8000);
+  } else if (u.phase === "error" && (prev === "downloading" || prev === "installing")) {
+    showBanner(u.error, 10000);
+  } else if (prev === "downloading") {
+    hideBanner();
+  }
+  askUpdate();
+}
+
+// askUpdate pregunta si se instala la versión nueva. Cerrar con Esc cuenta
+// como "Ahora no": no se vuelve a preguntar hasta reabrir LanChat.
+function askUpdate() {
+  const u = state.update;
+  const dialog = $("update-dialog");
+  if (!u?.ask || dialog.open) return;
+  $("update-text").textContent = `LanChat ${u.latest} está disponible (tienes la ${u.current}). ` + (state.mobile
+    ? "Se descargará y Android te pedirá confirmar la instalación."
+    : "Se descargará e instalará; LanChat se cerrará y volverá a abrirse en unos segundos. Tus mensajes y ajustes se conservan.");
+  dialog.returnValue = "";
+  dialog.addEventListener("close", () => {
+    const action = dialog.returnValue === "install" ? api.updateInstall() : api.updateLater();
+    action.catch((e) => showBanner(e.message, 6000));
+  }, { once: true });
+  dialog.showModal();
+}
+
+async function updateButton() {
+  try {
+    updateChanged(await ($("update-btn").dataset.action === "install" ? api.updateInstall() : api.updateCheck()));
+  } catch (e) {
+    settingsError(e);
+  }
+}
+
+async function toggleAutoUpdate() {
+  const input = $("autoupdate-input");
+  try {
+    updateChanged(await api.autoUpdate(input.checked));
+  } catch (e) {
+    input.checked = state.update.auto;
+    settingsError(e);
+  }
 }
 
 function renderSystem(sys) {
@@ -2731,6 +2826,7 @@ function connectEvents() {
   es.addEventListener("reload", reloadAll);
 
   es.addEventListener("focus", () => window.focus());
+  es.addEventListener("update", (e) => updateChanged(JSON.parse(e.data)));
 
   // El desinstalador cerró LanChat: la ventana se cierra para soltar su perfil.
   es.addEventListener("quit", () => {
@@ -2883,6 +2979,8 @@ function bind() {
   });
   $("receipts-input").addEventListener("change", toggleReceipts);
   $("previews-input").addEventListener("change", togglePreviews);
+  $("update-btn").addEventListener("click", updateButton);
+  $("autoupdate-input").addEventListener("change", toggleAutoUpdate);
   $("thumbs-clear-btn").addEventListener("click", clearThumbs);
   $("firewall-btn").addEventListener("click", allowFirewall);
   $("battery-btn").addEventListener("click", () => window.LanChatAndroid?.allowBackground());
@@ -2945,4 +3043,5 @@ bind();
 loadState()
   .then(connectEvents)
   .then(askAutostart)
+  .then(askUpdate)
   .catch((e) => showBanner(e.message));
