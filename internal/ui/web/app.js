@@ -38,6 +38,7 @@ const RISKY_EXT = /\.(exe|msi|msix|bat|cmd|com|scr|pif|cpl|ps1|psm1|vbs|vbe|js|j
 
 const timeFmt = new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("es", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const copyDateFmt = new Intl.DateTimeFormat("es", { day: "2-digit", month: "2-digit", year: "numeric" });
 const encoder = new TextEncoder();
 
 // ROOM antecede al id de una sala en state.current; coincide con roomViewPrefix
@@ -926,6 +927,7 @@ const ICONS = {
   reply: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v4",
   forward: "m15 14 5-5-5-5M20 9H10a6 6 0 0 0-6 6v4",
   edit: "M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4",
+  copy: "M10 9h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5",
   select: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 12l3 3 5-6",
   trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6",
   // Un monitor con una X: borrar solo en este equipo.
@@ -949,10 +951,12 @@ function closeMsgMenu() {
   document.querySelector(".msg-act.open")?.classList.remove("open");
 }
 
-function openMsgMenu(id, anchor, showMore = false) {
+// openMsgMenu abre el menú del mensaje junto a su botón ☺ (anchor) o, con
+// clic derecho, donde está el puntero (at: {x, y}).
+function openMsgMenu(id, anchor, showMore = false, at = null) {
   const m = findMessage(id);
   const menu = $("msg-menu");
-  if (!m || m.deleted || (!menu.hidden && menu.dataset.id === id && !showMore)) return closeMsgMenu();
+  if (!m || m.deleted || (!menu.hidden && menu.dataset.id === id && !showMore && !at)) return closeMsgMenu();
   closeMsgMenu();
   menu.dataset.id = id;
   const mine = myReaction(m);
@@ -975,7 +979,7 @@ function openMsgMenu(id, anchor, showMore = false) {
     more.title = "Más reacciones";
     more.addEventListener("click", (e) => {
       e.stopPropagation();
-      openMsgMenu(id, anchor, true);
+      openMsgMenu(id, anchor, true, at);
     });
     row.append(more);
   }
@@ -989,6 +993,12 @@ function openMsgMenu(id, anchor, showMore = false) {
     menu.append(b);
   };
   if (canReply(m)) item("reply", "Responder", () => startReply(m));
+  if (m.kind === "text") {
+    item("copy", "Copiar", () => {
+      closeMsgMenu();
+      copyText(m.body, "Mensaje copiado");
+    });
+  }
   if (canEdit(m)) item("edit", "Editar", () => startEdit(m));
   if (canForward(m)) {
     item("forward", "Reenviar", () => {
@@ -1007,12 +1017,72 @@ function openMsgMenu(id, anchor, showMore = false) {
   }
   menu.hidden = false;
   anchor.classList.add("open");
-  // Junto al botón, sin salirse de la ventana.
-  const a = anchor.getBoundingClientRect();
   const w = menu.offsetWidth;
   const h = menu.offsetHeight;
+  if (at) {
+    // En el puntero, como el menú contextual, sin salirse de la ventana.
+    menu.style.left = `${Math.max(8, Math.min(at.x, innerWidth - w - 8))}px`;
+    menu.style.top = `${at.y + h + 8 > innerHeight ? Math.max(8, at.y - h) : at.y}px`;
+    return;
+  }
+  // Junto al botón, sin salirse de la ventana.
+  const a = anchor.getBoundingClientRect();
   menu.style.left = `${Math.max(8, Math.min(a.left + a.width / 2 - w / 2, innerWidth - w - 8))}px`;
   menu.style.top = `${a.bottom + h + 8 > innerHeight ? Math.max(8, a.top - h - 6) : a.bottom + 6}px`;
+}
+
+// msgContextMenu abre con clic derecho el menú del mensaje (el del botón ☺),
+// como en WhatsApp Web. Queda el del navegador si hay texto seleccionado
+// (para copiar solo una parte), al seleccionar mensajes y en el teléfono.
+function msgContextMenu(e) {
+  if (state.mobile || state.selecting || !document.getSelection().isCollapsed) return;
+  const el = e.target.closest(".msg[data-id]");
+  const btn = el?.querySelector(":scope > .msg-act");
+  if (!btn) return; // avisos y eliminados no tienen menú
+  e.preventDefault();
+  closeMsgMenu();
+  openMsgMenu(el.dataset.id, btn, false, { x: e.clientX, y: e.clientY });
+}
+
+// copyText copia al portapapeles y lo confirma con un aviso breve.
+// Primero con un textarea temporal: es síncrono, así cuenta como parte del
+// clic aunque la API del portapapeles no exista o no tenga permiso (p. ej. en
+// el WebView de Android).
+async function copyText(text, done) {
+  const focused = document.activeElement;
+  const ta = Object.assign(document.createElement("textarea"), { value: text, readOnly: true });
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+  document.body.append(ta);
+  ta.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch { /* se intenta con la API */ }
+  ta.remove();
+  focused?.focus?.({ preventScroll: true });
+  if (!ok) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      return showBanner("No se pudo copiar al portapapeles.", 4000);
+    }
+  }
+  showBanner(done, 2000);
+}
+
+// copySelected copia los mensajes seleccionados como WhatsApp Web: un
+// renglón por mensaje, "[hora, fecha] Nombre: texto".
+function copySelected() {
+  const msgs = selectedMessages();
+  if (msgs.length === 0) return;
+  const me = state.self.name || state.self.hostname;
+  const text = msgs.map((m) => {
+    const d = new Date(m.at);
+    const who = m.outgoing ? me : memberName(m.peerId);
+    return `[${timeFmt.format(d)}, ${copyDateFmt.format(d)}] ${who}: ${m.body}`;
+  }).join("\n");
+  endSelect();
+  copyText(text, msgs.length === 1 ? "Mensaje copiado" : `${msgs.length} mensajes copiados`);
 }
 
 // react pone la reacción del usuario; elegir la que ya tenía la quita.
@@ -2914,6 +2984,11 @@ function bind() {
     if (e.key === "Escape") closeMsgMenu();
   });
   $("messages").addEventListener("scroll", closeMsgMenu, { passive: true });
+  // Clic derecho sobre un mensaje: su menú. En otro lado, cierra el abierto.
+  $("messages").addEventListener("contextmenu", msgContextMenu);
+  document.addEventListener("contextmenu", (e) => {
+    if (!e.defaultPrevented && !$("msg-menu").contains(e.target)) closeMsgMenu();
+  });
   $("room-rename-btn").addEventListener("click", () => openRoomDialog("rename"));
   $("room-leave-btn").addEventListener("click", leaveRoom);
   $("room-form").addEventListener("submit", saveRoom);
@@ -3000,7 +3075,18 @@ function bind() {
   $("select-cancel").addEventListener("click", endSelect);
   $("select-delete").prepend(iconElement("trash"));
   $("select-forward").prepend(iconElement("forward"));
+  $("select-copy").prepend(iconElement("copy"));
   $("select-delete").addEventListener("click", deleteSelected);
+  $("select-copy").addEventListener("click", copySelected);
+  // Ctrl+C al seleccionar copia los mensajes, como en WhatsApp Web (salvo que
+  // haya texto seleccionado o se esté escribiendo).
+  document.addEventListener("keydown", (e) => {
+    if (!state.selecting || !(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "c" || e.altKey || e.shiftKey) return;
+    if (document.querySelector("dialog[open]") || e.target.closest?.("input, textarea, [contenteditable]")) return;
+    if (!document.getSelection().isCollapsed) return;
+    e.preventDefault();
+    copySelected();
+  });
   $("select-forward").addEventListener("click", () => openForward(selectedMessages().map((m) => m.id)));
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && state.selecting && !document.querySelector("dialog[open]")) endSelect();

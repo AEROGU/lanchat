@@ -564,6 +564,8 @@ dialog input, dialog textarea, dialog select {
   #app.chatting #sidebar { display: none; }
   #app:not(.chatting) #chat { display: none; }
   #back-btn { display: block; }
+  /* Sin espacio para todo en la barra de selección: Copiar queda en ícono. */
+  #select-copy .btn-label { display: none; }
 
   #more-btn { display: block; }
   .chat-actions {
@@ -853,7 +855,7 @@ dialog input, dialog textarea, dialog select {
 }
 .msg-menu .menu-item .icon { color: var(--muted); }
 .msg-menu .menu-item.danger .icon { color: inherit; }
-#select-delete, #select-forward { display: inline-flex; align-items: center; gap: 6px; }
+#select-copy, #select-delete, #select-forward { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ---------- Editar, seleccionar y reenviar ---------- */
 

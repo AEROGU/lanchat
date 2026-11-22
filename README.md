@@ -39,8 +39,10 @@
   se puede **borrar de este equipo** en cualquier momento.
 - **Editar** un mensaje propio en el mismo plazo de 15 minutos (aparece
   "editado"), y **reenviar** mensajes a otros contactos o salas (aparecen
-  "Reenviado"). Se pueden **seleccionar varios** para reenviarlos o
-  eliminarlos para todos. Un archivo se reenvía mientras siga en la carpeta
+  "Reenviado"). Se pueden **copiar** y **seleccionar varios** para
+  copiarlos (Ctrl+C, con hora y autor como en WhatsApp Web), reenviarlos o
+  eliminarlos para todos. En la PC, el clic derecho sobre un mensaje abre su
+  menú. Un archivo se reenvía mientras siga en la carpeta
   de descargas (o, si lo enviaste tú, donde estaba); a las salas solo se
   reenvían textos.
 - **Responder** a un mensaje o envío de archivos anterior, como en
