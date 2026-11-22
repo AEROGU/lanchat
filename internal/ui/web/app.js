@@ -993,10 +993,10 @@ function openMsgMenu(id, anchor, showMore = false, at = null) {
     menu.append(b);
   };
   if (canReply(m)) item("reply", "Responder", () => startReply(m));
-  if (m.kind === "text") {
+  if (m.kind === "text" || m.transfer) {
     item("copy", "Copiar", () => {
       closeMsgMenu();
-      copyText(m.body, "Mensaje copiado");
+      copyText(copyBody(m), "Mensaje copiado");
     });
   }
   if (canEdit(m)) item("edit", "Editar", () => startEdit(m));
@@ -1070,6 +1070,48 @@ async function copyText(text, done) {
   showBanner(done, 2000);
 }
 
+// copyBody es lo que se copia de un mensaje: su texto o, de un envío de
+// archivos, qué se envió ("📎 Envió 3 archivos").
+const copyBody = (m) => (m.transfer ? transferText(m.transfer) : m.body);
+
+// IMAGE_EXT: lo que se describe como imagen al copiar un envío.
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|heic)$/i;
+
+// transferText describe un envío de archivos contando imágenes, archivos y
+// carpetas: "📷 Envió una imagen: foto.jpg", "📎 Envió 3 archivos",
+// "📁 Envió una carpeta: Facturas (8 archivos)" o, si hay de varios tipos,
+// "📎 Envió 2 imágenes, 3 archivos y una carpeta".
+function transferText(t) {
+  const images = [];
+  const files = [];
+  const folders = new Map(); // carpeta raíz -> archivos dentro
+  for (const f of t.files) {
+    if (f.dir) {
+      const root = f.dir.split("/")[0];
+      folders.set(root, (folders.get(root) ?? 0) + 1);
+    } else {
+      (IMAGE_EXT.test(f.name) ? images : files).push(f.name);
+    }
+  }
+  const kinds = [
+    { n: images.length, one: "una imagen", many: "imágenes", icon: "📷" },
+    { n: files.length, one: "un archivo", many: "archivos", icon: "📎" },
+    { n: folders.size, one: "una carpeta", many: "carpetas", icon: "📁" },
+  ].filter((k) => k.n > 0);
+  if (kinds.length === 0) return t.files.length === 1 ? "📎 Envió un archivo" : `📎 Envió ${t.files.length} archivos`;
+  if (kinds.length === 1) {
+    const k = kinds[0];
+    if (k.n > 1) return `${k.icon} Envió ${k.n} ${k.many}`;
+    if (folders.size === 1) {
+      const [[name, count]] = folders;
+      return `📁 Envió una carpeta: ${name} (${count === 1 ? "1 archivo" : `${count} archivos`})`;
+    }
+    return `${k.icon} Envió ${k.one}: ${images[0] ?? files[0]}`;
+  }
+  const parts = kinds.map((k) => (k.n === 1 ? k.one : `${k.n} ${k.many}`));
+  return `📎 Envió ${parts.slice(0, -1).join(", ")} y ${parts.at(-1)}`;
+}
+
 // copySelected copia los mensajes seleccionados como WhatsApp Web: un
 // renglón por mensaje, "[hora, fecha] Nombre: texto".
 function copySelected() {
@@ -1079,7 +1121,7 @@ function copySelected() {
   const text = msgs.map((m) => {
     const d = new Date(m.at);
     const who = m.outgoing ? me : memberName(m.peerId);
-    return `[${timeFmt.format(d)}, ${copyDateFmt.format(d)}] ${who}: ${m.body}`;
+    return `[${timeFmt.format(d)}, ${copyDateFmt.format(d)}] ${who}: ${copyBody(m)}`;
   }).join("\n");
   endSelect();
   copyText(text, msgs.length === 1 ? "Mensaje copiado" : `${msgs.length} mensajes copiados`);
