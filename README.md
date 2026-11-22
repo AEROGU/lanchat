@@ -54,7 +54,8 @@
 - **Salas** de chat grupales con administradores (quien la crea puede sacar
   miembros y nombrar más administradores) y **mensajes a varios** contactos
   o a un grupo.
-- **Archivos y carpetas** (botón o arrastrar y soltar): el otro debe
+- **Archivos y carpetas** (botón o arrastrar y soltar en la conversación o
+  sobre un contacto de la lista): el otro debe
   aceptarlos, se descargan una sola vez, se reanudan si se corta la red y se
   verifican con SHA-256. Las imágenes (JPG, PNG, GIF, WebP) llegan con
   **vista previa** antes de aceptarlas y se abren completas con un clic.

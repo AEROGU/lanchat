@@ -29,6 +29,8 @@ const state = {
   // selecting: modo de selección de varios mensajes (selected: sus ids).
   selecting: false,
   selected: new Set(),
+  // dropTarget: contacto de la lista sobre el que se arrastran archivos.
+  dropTarget: null,
 };
 
 // Extensiones de programas o scripts: se pide confirmación antes de abrirlos.
@@ -473,8 +475,42 @@ function contactItem(c) {
     li.append(badge);
   }
   li.addEventListener("click", () => openChat(c.id));
+  dropOnContact(li, c.id);
   return li;
 }
+
+// dropOnContact deja soltar archivos y carpetas sobre un contacto de la lista:
+// se abre su conversación y se envían como al soltarlos dentro de ella.
+function dropOnContact(li, id) {
+  li.dataset.peer = id;
+  // La lista se redibuja seguido (presencia, mensajes); el resaltado sobrevive.
+  if (state.dropTarget === id) li.classList.add("drop-target");
+  li.addEventListener("dragover", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setDropTarget(id);
+  });
+  li.addEventListener("dragleave", (e) => {
+    if (!li.contains(e.relatedTarget) && state.dropTarget === id) setDropTarget(null);
+  });
+  li.addEventListener("drop", (e) => {
+    setDropTarget(null);
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    uploadDropped(e.dataTransfer, id);
+  });
+}
+
+function setDropTarget(id) {
+  if (state.dropTarget === id) return;
+  state.dropTarget = id;
+  for (const el of $("contacts").querySelectorAll(".contact[data-peer]")) {
+    el.classList.toggle("drop-target", el.dataset.peer === id);
+  }
+}
+
+const hasFiles = (e) => e.dataTransfer?.types.includes("Files");
 
 function sortedRooms() {
   return [...state.rooms.values()].sort(
@@ -1364,11 +1400,16 @@ async function droppedFiles(entries) {
   return out;
 }
 
-async function uploadDropped(dt) {
-  if (!state.current) return showBanner("Elige primero a quién enviarle los archivos.", 4000);
-  // Las entradas se toman ya: el DataTransfer deja de servir tras el evento.
+// uploadDropped envía lo soltado a la conversación del contacto to (por
+// defecto, la abierta). Si se soltó sobre un contacto de la lista, antes abre
+// su conversación.
+async function uploadDropped(dt, to = state.current) {
+  if (!to) return showBanner("Elige primero a quién enviarle los archivos.", 4000);
+  // Las entradas se toman ya, antes de cualquier await: el DataTransfer deja
+  // de servir tras el evento.
   const entries = [...dt.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
   const loose = [...dt.files];
+  if (to !== state.current) await openChat(to);
   showBanner("Preparando archivos…");
   let items;
   try {
@@ -1376,7 +1417,7 @@ async function uploadDropped(dt) {
   } catch (e) {
     return showBanner(`No se pudieron leer los archivos: ${e.message}`, 5000);
   }
-  await uploadItems(items);
+  await uploadItems(items, to);
 }
 
 // uploadPicked envía lo elegido con el selector del sistema (sin escritorio).
@@ -1387,15 +1428,15 @@ function uploadPicked(input) {
 }
 
 // uploadItems copia los archivos ([{file, dir}]) a este equipo y los ofrece
-// en la conversación abierta.
-async function uploadItems(items) {
+// en la conversación de to (por defecto, la abierta).
+async function uploadItems(items, to = state.current) {
   if (items.length === 0) return showBanner("No hay archivos para enviar (¿carpetas vacías?).", 5000);
   if (items.length > MAX_OFFER_FILES) {
     return showBanner(`Son más de ${MAX_OFFER_FILES} archivos; comprímelos en un .zip o envíalos en partes.`, 6000);
   }
   showBanner(`Preparando ${items.length === 1 ? items[0].file.name : `${items.length} archivos`}…`);
   try {
-    addMessage(await api.upload(state.current, uploadForm(items)));
+    addMessage(await api.upload(to, uploadForm(items)));
     hideBanner();
   } catch (e) {
     showBanner(e.message, 5000);
@@ -2994,7 +3035,6 @@ function bind() {
   // Arrastrar y soltar archivos sobre la conversación.
   const chat = $("chat");
   let dragDepth = 0;
-  const hasFiles = (e) => e.dataTransfer?.types.includes("Files");
   chat.addEventListener("dragenter", (e) => {
     if (!hasFiles(e) || !state.current || roomId(state.current)) return;
     dragDepth++;

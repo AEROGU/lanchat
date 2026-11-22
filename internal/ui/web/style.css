@@ -129,6 +129,12 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 .contact:hover { background: var(--bg); }
 .contact.selected { background: var(--selected); }
+/* Archivos arrastrados sobre el contacto: al soltarlos se le envían. */
+.contact.drop-target {
+  background: var(--selected);
+  outline: 2px dashed var(--brand);
+  outline-offset: -2px;
+}
 .contact.offline .name { color: var(--muted); }
 
 .contact .text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
