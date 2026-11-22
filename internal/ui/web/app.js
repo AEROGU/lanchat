@@ -38,6 +38,8 @@ const RISKY_EXT = /\.(exe|msi|msix|bat|cmd|com|scr|pif|cpl|ps1|psm1|vbs|vbe|js|j
 
 const timeFmt = new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("es", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const weekdayFmt = new Intl.DateTimeFormat("es", { weekday: "short" });
+const shortDateFmt = new Intl.DateTimeFormat("es", { day: "2-digit", month: "2-digit", year: "2-digit" });
 const copyDateFmt = new Intl.DateTimeFormat("es", { day: "2-digit", month: "2-digit", year: "numeric" });
 const encoder = new TextEncoder();
 
@@ -83,6 +85,12 @@ const api = {
   send: (peer, body) => request("POST", "/api/messages", { peer, body }),
   read: (peer) => request("POST", "/api/read", { peer }),
   name: (name) => request("POST", "/api/name", { name }),
+  photo: (file) => {
+    const form = new FormData();
+    form.append("photo", file);
+    return request("POST", "/api/photo", form);
+  },
+  removePhoto: () => request("POST", "/api/photo/remove", {}),
   status: (status, text, autoAway) => request("POST", "/api/status", { status, text, autoAway }),
   sendMany: (peers, body) => request("POST", "/api/messages/many", { peers, body }),
   deleteMessage: (id) => request("POST", "/api/messages/delete", { id }),
@@ -213,12 +221,109 @@ window.lanchatOpen = (id) => {
   if (state.contacts.has(id) || state.rooms.has(roomId(id))) openChat(id);
 };
 
-// sortedContacts: los de la lista. Los quitados siguen en state.contacts solo
-// para nombrarlos en las salas.
+// sortedContacts: los de la lista, como en WhatsApp: arriba quien escribió o
+// recibió algo más recientemente; los que no tienen mensajes, después (primero
+// los conectados, luego por nombre). Los quitados siguen en state.contacts
+// solo para nombrarlos en las salas.
 function sortedContacts() {
   return [...state.contacts.values()].filter((c) => !c.removed).sort(
-    (a, b) => b.online - a.online || a.displayName.localeCompare(b.displayName, "es", { sensitivity: "base" }),
+    (a, b) => lastAt(b) - lastAt(a) || b.online - a.online ||
+      a.displayName.localeCompare(b.displayName, "es", { sensitivity: "base" }),
   );
+}
+
+// lastAt es la hora del último mensaje de un contacto o sala (0 si no hay).
+const lastAt = (conv) => conv.last?.at ?? 0;
+
+// touchConversation actualiza el último mensaje de la conversación de m: un
+// mensaje nuevo la sube al principio de la lista y cambia su vista previa;
+// un evento del mismo mensaje (entrega, lectura, edición, eliminación) solo
+// la vista previa. Uno de un mensaje anterior no cambia nada.
+function touchConversation(m) {
+  const conv = m.roomId ? state.rooms.get(m.roomId) : state.contacts.get(m.peerId);
+  if (!conv) return;
+  const last = conv.last;
+  if (last && m.id !== last.id && m.at <= last.at) return;
+  const merged = last?.id === m.id ? { ...last, ...m } : { ...m };
+  // Un evento atrasado (p. ej. la entrega) no revive un mensaje eliminado
+  // ni hace retroceder las marcas.
+  if (last?.id === m.id) {
+    merged.deleted ||= last.deleted;
+    merged.readAt ||= last.readAt;
+    if (last.status === "delivered") merged.status = "delivered";
+  }
+  conv.last = merged;
+  renderContacts();
+}
+
+// listTime es la hora del último mensaje en la lista, como en WhatsApp: la
+// hora si es de hoy, "Ayer", el día de la semana si es de esta semana, o la fecha.
+function listTime(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return timeFmt.format(d);
+  const days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
+  if (days === 1) return "Ayer";
+  if (days > 1 && days < 7) return weekdayFmt.format(d);
+  return shortDateFmt.format(d);
+}
+
+// previewText es el comienzo del último mensaje, para la lista.
+function previewText(m) {
+  if (m.deleted) return m.outgoing ? "🚫 Eliminaste este mensaje" : "🚫 Se eliminó este mensaje";
+  if (m.kind === "event" || !m.roomId) return m.body;
+  return `${m.outgoing ? "Tú" : memberName(m.peerId).split(" ")[0]}: ${m.body}`;
+}
+
+// previewElement es la segunda línea de un contacto o sala con mensajes: las
+// marcas de entrega si el último es tuyo y su comienzo.
+function previewElement(m) {
+  const span = document.createElement("span");
+  span.className = "detail last-msg" + (m.deleted || m.kind === "event" ? " muted-preview" : "");
+  if (m.outgoing && !m.deleted && m.kind !== "event") {
+    const ticks = document.createElement("span");
+    ticks.className = "ticks" + (m.readAt ? " read" : "");
+    ticks.textContent = m.status === "pending" ? "🕓 " : m.readAt ? "✓✓ " : "✓ ";
+    ticks.title = m.status === "pending" ? "Pendiente" : m.readAt ? "Leído" : "Entregado";
+    span.append(ticks);
+  }
+  span.append(previewText(m));
+  return span;
+}
+
+// nameRow es la primera línea de la lista: el nombre y, a la derecha, la
+// hora del último mensaje (resaltada si hay mensajes sin leer).
+function nameRow(name, conv) {
+  const row = document.createElement("span");
+  row.className = "name-row";
+  row.append(name);
+  if (conv.last) {
+    const time = document.createElement("span");
+    time.className = "time" + (conv.unread > 0 ? " unread" : "");
+    time.textContent = listTime(conv.last.at);
+    time.title = `${dayLabel(conv.last.at)} ${timeFmt.format(new Date(conv.last.at))}`;
+    row.append(time);
+  }
+  return row;
+}
+
+// unreadBadge es el contador de mensajes sin leer (null si no hay).
+function unreadBadge(n) {
+  if (n <= 0) return null;
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.textContent = n > 99 ? "99+" : n;
+  return badge;
+}
+
+// secondRow es la segunda línea: vista previa (o detalle) y el contador.
+function secondRow(content, unread) {
+  const row = document.createElement("span");
+  row.className = "second-row";
+  row.append(content);
+  const badge = unreadBadge(unread);
+  if (badge) row.append(badge);
+  return row;
 }
 
 function totalUnread() {
@@ -242,9 +347,74 @@ function dotClass(online, status) {
   return "dot" + (online ? ` online ${status || "available"}` : "");
 }
 
+// ---------- Avatares ----------
+
+// Colores de fondo de los avatares sin foto: con letras blancas se leen en
+// los temas claro y oscuro. A cada contacto le toca siempre el mismo.
+const AVATAR_COLORS = ["#e11d48", "#db2777", "#c026d3", "#7c3aed", "#4f46e5", "#2563eb",
+  "#0369a1", "#0f766e", "#047857", "#4d7c0f", "#b45309", "#c2410c"];
+
+function avatarColor(key) {
+  let h = 0;
+  for (const ch of key) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+// initials son las iniciales del nombre: de la primera y la última palabra
+// ("María Fernanda Ortiz" → "MO"), o una sola si es una palabra.
+function initials(name) {
+  const isChar = (ch) => /[\p{L}\p{N}]/u.test(ch);
+  const words = name.split(/[\s._-]+/).filter((w) => [...w].some(isChar));
+  if (words.length === 0) return "?";
+  const first = (w) => [...w].find(isChar);
+  return (first(words[0]) + (words.length > 1 ? first(words.at(-1)) : "")).toLocaleUpperCase("es");
+}
+
+// photoURL es la dirección de la foto de perfil de un equipo (null si no
+// tiene). La versión (photo) cambia con la foto, para no ver una vieja en caché.
+function photoURL(id, photo) {
+  return photo ? `/api/photo?${new URLSearchParams({ id, v: photo })}` : null;
+}
+
+// avatarElement es el círculo con la foto o, si no hay, las iniciales (o
+// fallback) sobre un color fijo para key.
+function avatarElement(key, name, photo, fallback) {
+  const a = document.createElement("span");
+  a.className = "avatar";
+  a.style.setProperty("--avatar-bg", avatarColor(key));
+  const letters = document.createElement("span");
+  letters.className = "initials";
+  letters.textContent = fallback ?? initials(name);
+  if (photo) {
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = photo;
+    img.addEventListener("error", () => img.replaceWith(letters));
+    a.append(img);
+  } else {
+    a.append(letters);
+  }
+  return a;
+}
+
+// contactAvatar lleva encima el punto de presencia, como antes en la lista.
+function contactAvatar(c) {
+  const a = avatarElement(c.id, c.displayName, photoURL(c.id, c.photo));
+  const dot = document.createElement("span");
+  dot.className = dotClass(c.online, c.status);
+  a.append(dot);
+  return a;
+}
+
+function roomAvatar(r) {
+  return avatarElement(r.id, r.name, null, "👥");
+}
+
 function renderSelf() {
   const s = state.self;
   $("me-name").textContent = s.name || s.hostname;
+  $("me-avatar").replaceChildren(selfAvatar());
+  if ($("settings").open) renderPhotoSettings();
   $("me-detail").textContent = s.name ? s.hostname : "Sin nombre: haz clic en ⚙ para elegirlo";
   // Inactivo y Disponible: los demás te ven Ausente.
   const shown = s.status === "available" && s.idle ? "away" : s.status;
@@ -434,11 +604,13 @@ function incompatibleBadge() {
 function contactItem(c) {
   const li = document.createElement("li");
   li.className = "contact" + (c.online ? "" : " offline") + (c.id === state.current ? " selected" : "");
-  li.title = c.online ? statusLabel(c.status, c.statusText) : "Desconectado";
-  if (c.appVersion) li.title += `\nLanChat ${c.appVersion}`;
-
-  const dot = document.createElement("span");
-  dot.className = dotClass(c.online, c.status);
+  // El equipo, la IP y la versión van en el tooltip (y en el encabezado del
+  // chat): la segunda línea es para el último mensaje, como en WhatsApp.
+  li.title = [
+    c.detail,
+    c.online ? statusLabel(c.status, c.statusText) : "Desconectado",
+    c.appVersion && `LanChat ${c.appVersion}`,
+  ].filter(Boolean).join("\n");
 
   const text = document.createElement("div");
   text.className = "text";
@@ -449,11 +621,7 @@ function contactItem(c) {
     name.textContent = `⚠ ${c.displayName}`;
     li.title = "Su identidad cambió: revisa antes de enviarle algo";
   }
-  const detail = document.createElement("span");
-  detail.className = "detail";
-  detail.textContent = c.detail;
-  if (c.appVersion) detail.append(` · ${versionLabel(c.appVersion)}`);
-  text.append(name, detail);
+  text.append(nameRow(name, c), secondRow(contactSecondLine(c), c.unread));
   if (c.incompatible) {
     // En su propia línea para que no la corte el ancho de la lista.
     const line = document.createElement("span");
@@ -461,23 +629,27 @@ function contactItem(c) {
     line.append(incompatibleBadge(), c.incompatible === "older" ? " · debe actualizar" : " · actualiza tu LanChat");
     text.append(line);
     li.title = incompatibleText(c);
-  } else if (c.online && c.statusText) {
-    const st = document.createElement("span");
-    st.className = "status-line";
-    st.textContent = c.statusText;
-    text.append(st);
   }
 
-  li.append(dot, text);
-  if (c.unread > 0) {
-    const badge = document.createElement("span");
-    badge.className = "badge";
-    badge.textContent = c.unread > 99 ? "99+" : c.unread;
-    li.append(badge);
-  }
+  li.append(contactAvatar(c), text);
   li.addEventListener("click", () => openChat(c.id));
   dropOnContact(li, c.id);
   return li;
+}
+
+// contactSecondLine: el último mensaje; sin mensajes, su texto de estado si
+// está en línea y tiene uno, o su equipo e IP.
+function contactSecondLine(c) {
+  if (c.last) return previewElement(c.last);
+  const span = document.createElement("span");
+  span.className = "detail";
+  if (c.online && c.statusText) {
+    span.classList.add("status-text");
+    span.textContent = c.statusText;
+  } else {
+    span.textContent = c.detail + (c.appVersion ? ` · ${versionLabel(c.appVersion)}` : "");
+  }
+  return span;
 }
 
 // dropOnContact deja soltar archivos y carpetas sobre un contacto de la lista:
@@ -513,9 +685,12 @@ function setDropTarget(id) {
 
 const hasFiles = (e) => e.dataTransfer?.types.includes("Files");
 
+// sortedRooms: al final aquellas de las que se salió; si no, la de actividad
+// más reciente primero.
 function sortedRooms() {
   return [...state.rooms.values()].sort(
-    (a, b) => a.left - b.left || a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+    (a, b) => a.left - b.left || lastAt(b) - lastAt(a) ||
+      a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
   );
 }
 
@@ -536,25 +711,21 @@ function roomItem(r) {
   li.className = "contact room" + (r.left ? " offline" : "") + (key === state.current ? " selected" : "");
   li.title = r.members.map(memberName).join(", ");
 
-  const icon = document.createElement("span");
-  icon.className = "room-icon";
-  icon.textContent = "👥";
   const text = document.createElement("div");
   text.className = "text";
   const name = document.createElement("span");
   name.className = "name";
   name.textContent = r.name;
-  const detail = document.createElement("span");
-  detail.className = "detail";
-  detail.textContent = roomDetail(r);
-  text.append(name, detail);
-  li.append(icon, text);
-  if (r.unread > 0) {
-    const badge = document.createElement("span");
-    badge.className = "badge";
-    badge.textContent = r.unread > 99 ? "99+" : r.unread;
-    li.append(badge);
+  let second;
+  if (r.last && !r.left) {
+    second = previewElement(r.last);
+  } else {
+    second = document.createElement("span");
+    second.className = "detail";
+    second.textContent = roomDetail(r);
   }
+  text.append(nameRow(name, r), secondRow(second, r.unread));
+  li.append(roomAvatar(r), text);
   li.addEventListener("click", () => openChat(key));
   return li;
 }
@@ -571,7 +742,7 @@ function renderRoomHeader(r) {
   showFor(true);
   $("peer-name").textContent = r.name;
   $("peer-detail").textContent = r.members.map(memberName).join(", ");
-  $("peer-dot").hidden = true;
+  $("peer-avatar").replaceChildren(roomAvatar(r));
   $("identity-note").hidden = true;
   $("incompatible-note").hidden = true;
   for (const id of ["room-rename-btn", "room-leave-btn"]) $(id).disabled = r.left;
@@ -590,7 +761,7 @@ function renderHeader() {
   const c = state.contacts.get(state.current);
   if (!c) return;
   showFor(false);
-  $("peer-dot").hidden = false;
+  $("peer-avatar").replaceChildren(contactAvatar(c));
   syncComposer(); // a un contacto incompatible no se le puede escribir
   $("incompatible-note").hidden = !c.incompatible;
   $("incompatible-note").textContent = incompatibleText(c);
@@ -601,7 +772,6 @@ function renderHeader() {
     detail += ` · versión ${c.appVersion} (la tuya es ${state.self.version})`;
   }
   $("peer-detail").textContent = detail;
-  $("peer-dot").className = dotClass(c.online, c.status);
   $("remove-contact-btn").hidden = c.online;
   const note = $("offline-note");
   note.hidden = c.online;
@@ -1825,6 +1995,7 @@ async function loadHistory(peer, before) {
 }
 
 function addMessage(m) {
+  touchConversation(m);
   const key = convKey(m);
   const conv = state.messages.get(key);
   if (!conv) return; // la conversación se cargará completa al abrirla
@@ -2194,6 +2365,7 @@ function openSettings() {
   api.thumbsUsage().then(renderThumbsUsage).catch(() => {});
   $("about").textContent = [`LanChat ${s.version} · ${s.hostname}`, s.copyright, s.license].join("\n");
   $("settings-error").hidden = true;
+  renderPhotoSettings();
   renderAndroid();
   renderUpdate();
   $("settings").showModal();
@@ -2323,6 +2495,57 @@ function renderAndroid() {
   const restricted = android.backgroundRestricted();
   $("battery-status").textContent = restricted ? "Android puede pausarlo para ahorrar batería" : "Sin restricción ✓";
   $("battery-btn").hidden = !restricted;
+}
+
+// ---------- Foto de perfil ----------
+
+function selfAvatar() {
+  const s = state.self;
+  return avatarElement(s.id, s.name || s.hostname, photoURL(s.id, s.photo));
+}
+
+// renderPhotoSettings muestra en Ajustes la foto propia (o las iniciales).
+function renderPhotoSettings() {
+  const has = Boolean(state.self.photo);
+  const big = selfAvatar();
+  big.classList.add("big");
+  $("settings-avatar").replaceChildren(big);
+  $("photo-pick").textContent = has ? "Cambiar foto…" : "Elegir foto…";
+  $("photo-remove").hidden = !has;
+  $("photo-help").textContent = has
+    ? "Los demás la ven en su lista de contactos. Se aplica en el acto."
+    : "Sin foto, los demás ven tus iniciales sobre un color.";
+}
+
+// photoChanged guarda la respuesta del servidor y repinta donde se ve la foto.
+function photoChanged(self) {
+  state.self = self;
+  renderSelf();
+}
+
+async function uploadPhoto() {
+  const input = $("photo-input");
+  const file = input.files[0];
+  input.value = ""; // para poder elegir de nuevo la misma imagen
+  if (!file) return;
+  $("settings-error").hidden = true;
+  $("photo-pick").disabled = true;
+  try {
+    photoChanged(await api.photo(file));
+  } catch (e) {
+    settingsError(e);
+  } finally {
+    $("photo-pick").disabled = false;
+  }
+}
+
+async function removePhoto() {
+  $("settings-error").hidden = true;
+  try {
+    photoChanged(await api.removePhoto());
+  } catch (e) {
+    settingsError(e);
+  }
 }
 
 function settingsError(e) {
@@ -2861,12 +3084,15 @@ function messageDeleted(ev) {
 function cleared(ev) {
   const key = ev.room ? ROOM + ev.room : ev.peer;
   if (ev.removed) state.rooms.delete(ev.room);
+  const conv = ev.room ? state.rooms.get(ev.room) : state.contacts.get(ev.peer);
+  if (conv) conv.last = null; // sin mensajes, vuelve a su lugar por nombre
   if (key !== state.current) {
     state.messages.delete(key);
     renderContacts();
     return;
   }
   if (ev.removed) return showEmpty();
+  renderContacts();
   state.messages.set(key, { list: [], complete: true });
   renderMessages();
 }
@@ -2995,6 +3221,10 @@ function bind() {
   $("search").addEventListener("input", renderContacts);
   $("offline-btn").addEventListener("click", () => setHideOffline(!hideOffline()));
   $("settings-btn").addEventListener("click", openSettings);
+  $("me-avatar").addEventListener("click", openSettings);
+  $("photo-pick").addEventListener("click", () => $("photo-input").click());
+  $("photo-input").addEventListener("change", uploadPhoto);
+  $("photo-remove").addEventListener("click", removePhoto);
   $("status-btn").addEventListener("click", openStatus);
   $("many-btn").addEventListener("click", openMany);
   $("new-room-btn").addEventListener("click", () => openRoomDialog("create"));

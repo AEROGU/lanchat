@@ -11,7 +11,7 @@
   <div id="app">
     <aside id="sidebar">
       <header class="me">
-        <img src="/icon.png" alt="" class="logo">
+        <button type="button" id="me-avatar" class="avatar-btn" title="Tu foto de perfil" aria-label="Tu foto de perfil"></button>
         <div class="who">
           <strong id="me-name"></strong>
           <small id="me-detail"></small>
@@ -49,7 +49,7 @@
 
       <header id="chat-header" hidden>
         <button id="back-btn" class="icon-btn" title="Volver" aria-label="Volver">‹</button>
-        <span id="peer-dot" class="dot"></span>
+        <span id="peer-avatar"></span>
         <div class="who">
           <strong id="peer-name"></strong>
           <small id="peer-detail"></small>
@@ -130,6 +130,19 @@
   <dialog id="settings">
     <form method="dialog" id="settings-form">
       <h2>Ajustes</h2>
+      <div class="photo-row">
+        <span id="settings-avatar"></span>
+        <div class="photo-actions">
+          <strong>Foto de perfil</strong>
+          <div class="input-row">
+            <button type="button" id="photo-pick" class="text-btn">Elegir foto…</button>
+            <button type="button" id="photo-remove" class="text-btn" hidden>Quitar foto</button>
+          </div>
+          <small class="help" id="photo-help"></small>
+        </div>
+        <input type="file" id="photo-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+      </div>
+
       <label for="name-input">Tu nombre</label>
       <input id="name-input" autocomplete="off">
       <small id="name-help" class="help"></small>

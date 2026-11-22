@@ -84,6 +84,7 @@ type App struct {
 	gossipEvery time.Duration
 	http        *http.Client
 	identity    *identity.Identity
+	photos      *photos
 
 	mu  sync.Mutex
 	cfg *config.Config
@@ -124,6 +125,10 @@ func New(o Options) (a *App, err error) {
 		return nil, err
 	}
 	closers = append(closers, func() { st.Close() })
+	photoIDs, err := st.PhotoIDs(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
 	id, err := identity.Load(o.Dir, cfg.ID)
 	if err != nil {
@@ -148,6 +153,7 @@ func New(o Options) (a *App, err error) {
 		HTTPPort:    srv.Port(),
 		ManualPeers: cfg.ManualPeers,
 		Fingerprint: id.Fingerprint,
+		Photo:       photoIDs[cfg.ID],
 		Status:      cfg.Status,
 		StatusText:  cfg.StatusText,
 		LocalNets:   o.LocalNets,
@@ -179,7 +185,9 @@ func New(o Options) (a *App, err error) {
 		gossipEvery: cmp.Or(o.GossipInterval, gossipInterval),
 		http:        peer.NewClient(id),
 		identity:    id,
+		photos:      newPhotos(photoIDs),
 	}
+	srv.Handle("GET "+protocol.RoutePhoto, http.HandlerFunc(a.handlePhoto))
 	srv.Handle("GET "+protocol.RoutePeers, http.HandlerFunc(a.handlePeers))
 	a.transfer = transfer.New(transfer.Config{
 		StagingDir:  filepath.Join(o.Dir, stagingDirName),
@@ -234,6 +242,7 @@ func (a *App) Run(ctx context.Context) error {
 	}()
 	for ev := range a.disc.Events() {
 		a.onPeer(ev)
+		a.syncPhoto(ctx, &gossipWG, ev.Peer)
 		if ev.Type == discovery.PeerOnline {
 			a.gossip(ctx, &gossipWG, ev.Peer)
 		}
@@ -300,6 +309,8 @@ type Self struct {
 	AutoUpdate bool
 	// Fingerprint es la huella de la identidad TLS de este equipo.
 	Fingerprint string
+	// Photo identifica la foto de perfil (protocol.PhotoID; vacío = sin foto).
+	Photo string
 }
 
 func (a *App) Self() Self {
@@ -316,6 +327,7 @@ func (a *App) Self() Self {
 		RecentEmoji:     slices.Clone(a.cfg.RecentEmoji),
 		AutoUpdate:      !a.cfg.NoAutoUpdate,
 		Fingerprint:     a.identity.Fingerprint,
+		Photo:           a.photos.get(a.cfg.ID),
 	}
 }
 
@@ -336,6 +348,11 @@ type Contact struct {
 	LastSeen   time.Time
 	// Unread es la cantidad de mensajes suyos sin leer.
 	Unread int
+	// Last es el mensaje más reciente con él (Last.ID vacío si no hay ninguno).
+	Last store.Message
+	// Photo identifica su foto de perfil guardada (protocol.PhotoID; vacío =
+	// sin foto). Se conserva aunque esté desconectado.
+	Photo string
 	// Fingerprint es la huella fijada (la que se verifica al conectar).
 	Fingerprint string
 	// AnnouncedFingerprint es la que anuncia ahora (vacía si no está en línea).
@@ -407,6 +424,10 @@ func (a *App) Contacts(ctx context.Context) ([]Contact, error) {
 	if err != nil {
 		return nil, err
 	}
+	last, err := a.store.LastMessages(ctx)
+	if err != nil {
+		return nil, err
+	}
 	byID := make(map[string]int, len(recs))
 	out := make([]Contact, 0, len(recs))
 	for _, r := range recs {
@@ -423,6 +444,8 @@ func (a *App) Contacts(ctx context.Context) ([]Contact, error) {
 	}
 	for i := range out {
 		out[i].Unread = unread[out[i].ID]
+		out[i].Last = last[out[i].ID]
+		out[i].Photo = a.photos.get(out[i].ID)
 	}
 
 	slices.SortStableFunc(out, func(x, y Contact) int {
@@ -453,6 +476,10 @@ func (a *App) Contact(ctx context.Context, id string) (Contact, bool, error) {
 		return Contact{}, false, err
 	}
 	c.Unread = unread[id]
+	c.Photo = a.photos.get(id)
+	if c.Last, _, err = a.store.LastMessage(ctx, id); err != nil {
+		return Contact{}, false, err
+	}
 	return c, ok, nil
 }
 

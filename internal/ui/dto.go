@@ -62,6 +62,8 @@ type selfJSON struct {
 	// RecentEmoji son los últimos emojis usados, el más reciente primero.
 	RecentEmoji []string `json:"recentEmoji"`
 	Fingerprint string   `json:"fingerprint"`
+	// Photo identifica la foto de perfil ("" = sin foto; ver handlePhoto).
+	Photo string `json:"photo"`
 }
 
 func toSelfJSON(s app.Self) selfJSON {
@@ -73,6 +75,7 @@ func toSelfJSON(s app.Self) selfJSON {
 		ReadReceipts: s.ReadReceipts, Previews: s.Previews, HideOffline: s.HideOffline,
 		CollapsedGroups: nonNil(s.CollapsedGroups), RecentEmoji: nonNil(s.RecentEmoji),
 		Fingerprint: identity.Format(s.Fingerprint),
+		Photo:       s.Photo,
 	}
 }
 
@@ -101,10 +104,14 @@ type contactJSON struct {
 	Online       bool   `json:"online"`
 	LastSeen     int64  `json:"lastSeen"`
 	Unread       int    `json:"unread"`
+	// Last: su mensaje más reciente (null si no hay), para la lista; el texto va recortado.
+	Last *messageJSON `json:"last"`
 	// Fingerprint es la huella fijada; NewFingerprint, la que anuncia si cambió.
 	Fingerprint     string `json:"fingerprint"`
 	IdentityChanged bool   `json:"identityChanged"`
 	NewFingerprint  string `json:"newFingerprint"`
+	// Photo identifica su foto de perfil guardada ("" = sin foto; ver handlePhoto).
+	Photo string `json:"photo"`
 	// Status: available, away o busy; vacío si está desconectado.
 	Status     string `json:"status"`
 	StatusText string `json:"statusText"`
@@ -126,11 +133,13 @@ func toContactJSON(c app.Contact) contactJSON {
 		Online:          c.Online,
 		LastSeen:        c.LastSeen.UnixMilli(),
 		Unread:          c.Unread,
+		Last:            lastJSON(c.Last),
 		Status:          c.Status,
 		StatusText:      c.StatusText,
 		Fingerprint:     identity.Format(c.Fingerprint),
 		IdentityChanged: c.IdentityChanged(),
 		Removed:         c.Removed,
+		Photo:           c.Photo,
 	}
 	switch {
 	case !c.Incompatible():
@@ -241,6 +250,17 @@ func toReplyJSON(m store.Message) *replyJSON {
 	}
 	r := m.Reply
 	return &replyJSON{ID: r.ID, Author: r.Author, Text: r.Text, Deleted: r.Text == ""}
+}
+
+// lastJSON es el último mensaje de una conversación para la lista (nil si
+// no hay): con el texto recortado, porque solo se ve su comienzo.
+func lastJSON(m store.Message) *messageJSON {
+	if m.ID == "" {
+		return nil
+	}
+	m.Body = protocol.ReplySnippet(m.Body)
+	out := toMessageJSON(m)
+	return &out
 }
 
 // unixMilli es 0 para la hora cero (en vez de un número negativo).

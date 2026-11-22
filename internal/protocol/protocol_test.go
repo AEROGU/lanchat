@@ -83,3 +83,18 @@ func TestReplySnippet(t *testing.T) {
 		t.Error("debía rechazar una cita demasiado larga o con caracteres de control")
 	}
 }
+
+func TestPhotoID(t *testing.T) {
+	id := PhotoID([]byte("foto"))
+	if len(id) != PhotoIDLen || ValidatePhotoID(id) != nil || id == PhotoID([]byte("otra")) {
+		t.Fatalf("PhotoID = %q", id)
+	}
+	if ValidatePhotoID("") != nil {
+		t.Error("sin foto debía ser válido")
+	}
+	for _, s := range []string{"abc", strings.Repeat("A", PhotoIDLen), strings.Repeat("g", PhotoIDLen), id + "0"} {
+		if ValidatePhotoID(s) == nil {
+			t.Errorf("%q debía rechazarse", s)
+		}
+	}
+}

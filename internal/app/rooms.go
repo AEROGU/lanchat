@@ -16,6 +16,8 @@ import (
 type Room struct {
 	store.Room
 	Unread int
+	// Last es el mensaje más reciente de la sala (Last.ID vacío si no hay ninguno).
+	Last store.Message
 }
 
 // Rooms devuelve las salas (también aquellas de las que este equipo salió).
@@ -28,9 +30,13 @@ func (a *App) Rooms(ctx context.Context) ([]Room, error) {
 	if err != nil {
 		return nil, err
 	}
+	last, err := a.store.RoomLastMessages(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]Room, len(rooms))
 	for i, r := range rooms {
-		out[i] = Room{Room: r, Unread: unread[r.ID]}
+		out[i] = Room{Room: r, Unread: unread[r.ID], Last: last[r.ID]}
 	}
 	return out, nil
 }
@@ -42,7 +48,11 @@ func (a *App) Room(ctx context.Context, id string) (Room, bool, error) {
 		return Room{}, false, err
 	}
 	unread, err := a.store.RoomUnreadCounts(ctx)
-	return Room{Room: r, Unread: unread[id]}, true, err
+	if err != nil {
+		return Room{}, false, err
+	}
+	last, _, err := a.store.RoomLastMessage(ctx, id)
+	return Room{Room: r, Unread: unread[id], Last: last}, true, err
 }
 
 // CreateRoom crea una sala con este equipo, que queda como su administrador,

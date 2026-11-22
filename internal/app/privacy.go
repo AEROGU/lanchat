@@ -75,6 +75,7 @@ func (a *App) RemoveContact(ctx context.Context, peerID, into string) error {
 		return err
 	}
 	a.disc.Forget(peerID)
+	a.photos.set(peerID, "") // el store ya la borró
 	if into != "" {
 		a.chat.Flush(into) // los mensajes pendientes ahora son para into
 	}
@@ -123,6 +124,8 @@ func (a *App) WipeData(ctx context.Context) error {
 	err = a.cfg.Save(a.dir)
 	a.mu.Unlock()
 	a.disc.SetName("")
+	a.photos.reset() // el store borró la foto propia y las de los contactos
+	a.disc.SetPhoto("")
 	a.applyStatus()
 	return err
 }

@@ -220,6 +220,28 @@ func (s *Store) RoomUnreadCounts(ctx context.Context) (map[string]int, error) {
 	return out, rows.Err()
 }
 
+// RoomLastMessages devuelve el mensaje más reciente de cada sala (también
+// los avisos, como "Ana agregó a Luis").
+func (s *Store) RoomLastMessages(ctx context.Context) (map[string]Message, error) {
+	msgs, err := s.queryMessages(ctx, `SELECT `+messageSelect+` FROM (
+		SELECT *, ROW_NUMBER() OVER (PARTITION BY room_id ORDER BY at DESC, rowid DESC) AS n
+		FROM messages WHERE room_id != '') WHERE n = 1`)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]Message, len(msgs))
+	for _, m := range msgs {
+		out[m.RoomID] = m
+	}
+	return out, nil
+}
+
+// RoomLastMessage devuelve el mensaje más reciente de la sala (ok es false si no hay).
+func (s *Store) RoomLastMessage(ctx context.Context, roomID string) (m Message, ok bool, err error) {
+	return s.firstMessage(s.queryMessages(ctx, `SELECT `+messageSelect+` FROM messages
+		WHERE room_id = ? ORDER BY at DESC, rowid DESC LIMIT 1`, roomID))
+}
+
 // MarkRoomRead marca como leídos los mensajes de la sala.
 func (s *Store) MarkRoomRead(ctx context.Context, roomID string) (changed bool, err error) {
 	res, err := s.db.ExecContext(ctx, `UPDATE messages SET unread = 0 WHERE room_id = ? AND unread = 1`, roomID)

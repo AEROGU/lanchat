@@ -22,11 +22,13 @@ type roomJSON struct {
 	// Left: este equipo salió; se ve el historial pero no se puede escribir.
 	Left   bool `json:"left"`
 	Unread int  `json:"unread"`
+	// Last: su mensaje más reciente (null si no hay), para la lista.
+	Last *messageJSON `json:"last"`
 }
 
 func toRoomJSON(r app.Room) roomJSON {
 	return roomJSON{ID: r.ID, Name: r.Name, Members: r.Members, Admins: r.EffectiveAdmins(),
-		Left: r.Left, Unread: r.Unread}
+		Left: r.Left, Unread: r.Unread, Last: lastJSON(r.Last)}
 }
 
 func (s *Server) roomsJSON(ctx context.Context) ([]roomJSON, error) {

@@ -85,6 +85,16 @@ func TestDiscoveryUnicastBothWays(t *testing.T) {
 		t.Errorf("estado = %q %q", ev.Peer.Status, ev.Peer.StatusText)
 	}
 
+	photo := protocol.PhotoID([]byte("foto"))
+	b.SetPhoto(photo)
+	if ev := waitEvent(t, a, PeerUpdated, "B"); ev.Peer.Photo != photo {
+		t.Errorf("foto = %q, quería %q", ev.Peer.Photo, photo)
+	}
+	b.SetPhoto("")
+	if ev := waitEvent(t, a, PeerUpdated, "B"); ev.Peer.Photo != "" {
+		t.Errorf("foto = %q, quería ninguna", ev.Peer.Photo)
+	}
+
 	cancelB()
 	for range b.Events() {
 	}

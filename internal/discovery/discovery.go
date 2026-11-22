@@ -40,6 +40,8 @@ type Config struct {
 	// Status y StatusText iniciales (ver SetStatus).
 	Status     string
 	StatusText string
+	// Photo es el identificador de la foto de perfil inicial (ver SetPhoto).
+	Photo string
 	// UDPPort es el puerto de descubrimiento (0 = uno libre, útil en pruebas).
 	UDPPort int
 	// BindIP limita la escucha a una IP; vacío = todas las interfaces.
@@ -72,6 +74,7 @@ type Service struct {
 	name       string
 	status     string
 	statusText string
+	photo      string
 	manual     []manualPeer
 	manualAddr []netip.AddrPort // última resolución de manual
 	// hints son equipos que nos contaron otros equipos (p. ej. de otra
@@ -115,6 +118,7 @@ func New(cfg Config, log *slog.Logger) (*Service, error) {
 		name:       cfg.Name,
 		status:     protocol.NormalizeStatus(cfg.Status),
 		statusText: cfg.StatusText,
+		photo:      cfg.Photo,
 	}, nil
 }
 
@@ -156,6 +160,19 @@ func (s *Service) SetStatus(status, text string) {
 	s.mu.Lock()
 	changed := s.status != status || s.statusText != text
 	s.status, s.statusText = status, text
+	s.mu.Unlock()
+	if changed {
+		s.sendAll(typeAnnounce)
+	}
+}
+
+// SetPhoto cambia el identificador de la foto de perfil (protocol.PhotoID;
+// vacío = sin foto) y lo anuncia de inmediato si cambió: así los demás la
+// descargan o la quitan.
+func (s *Service) SetPhoto(id string) {
+	s.mu.Lock()
+	changed := s.photo != id
+	s.photo = id
 	s.mu.Unlock()
 	if changed {
 		s.sendAll(typeAnnounce)
@@ -294,6 +311,7 @@ func (s *Service) packet(t packetType) packet {
 		HTTPPort:    s.cfg.HTTPPort,
 		Status:      s.status,
 		StatusText:  s.statusText,
+		Photo:       s.photo,
 		Fingerprint: s.cfg.Fingerprint,
 	}
 }

@@ -119,3 +119,66 @@ func withOrientation(jpg []byte, o uint16) []byte {
 	app1 = append(app1, seg...)
 	return append(append(append([]byte{}, jpg[:2]...), app1...), jpg[2:]...)
 }
+
+func TestAvatarCropsCenterSquare(t *testing.T) {
+	// 900×300: verde a los lados y rojo en el cuadrado del centro.
+	img := image.NewRGBA(image.Rect(0, 0, 900, 300))
+	for y := range 300 {
+		for x := range 900 {
+			c := color.RGBA{G: 255, A: 255}
+			if x >= 300 && x < 600 {
+				c = color.RGBA{R: 255, A: 255}
+			}
+			img.SetRGBA(x, y, c)
+		}
+	}
+	var buf bytes.Buffer
+	png.Encode(&buf, img)
+	b, err := Avatar(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ValidAvatar(b) {
+		t.Fatalf("foto no válida (%d bytes)", len(b))
+	}
+	got, err := jpeg.Decode(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size := got.Bounds().Size(); size != image.Pt(AvatarSide, AvatarSide) {
+		t.Errorf("tamaño = %v, quería %d×%d", size, AvatarSide, AvatarSide)
+	}
+	for _, p := range []image.Point{{2, 2}, {253, 2}, {2, 253}, {253, 253}, {128, 128}} {
+		if !isRed(got.At(p.X, p.Y)) {
+			t.Errorf("en %v no es rojo: quedó parte de los lados", p)
+		}
+	}
+
+	buf.Reset()
+	png.Encode(&buf, halves(2000, 1000))
+	b, err = Avatar(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ = jpeg.Decode(bytes.NewReader(b))
+	if size := got.Bounds().Size(); size != image.Pt(AvatarSide, AvatarSide) {
+		t.Errorf("tamaño = %v, quería %d×%d", size, AvatarSide, AvatarSide)
+	}
+	// Mitad roja y mitad azul: el centro conserva las dos.
+	if !isRed(got.At(10, 128)) || isRed(got.At(245, 128)) {
+		t.Error("el recorte no quedó centrado")
+	}
+}
+
+func TestValidAvatarRejects(t *testing.T) {
+	var buf bytes.Buffer
+	png.Encode(&buf, halves(10, 10))
+	if ValidAvatar(buf.Bytes()) {
+		t.Error("un PNG no debía aceptarse")
+	}
+	buf.Reset()
+	jpeg.Encode(&buf, halves(3*AvatarSide, 3*AvatarSide), nil)
+	if ValidAvatar(buf.Bytes()) {
+		t.Error("una imagen enorme no debía aceptarse")
+	}
+}

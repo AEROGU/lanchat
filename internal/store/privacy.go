@@ -86,7 +86,9 @@ func (s *Store) RemovePeer(ctx context.Context, id, into string) error {
 			stmt{`UPDATE peers SET group_name = (SELECT group_name FROM peers WHERE id = ?) WHERE id = ? AND group_name = ''`, []any{id, into}},
 		)
 	}
-	stmts = append(stmts, stmt{`UPDATE peers SET removed = 1 WHERE id = ?`, []any{id}})
+	stmts = append(stmts,
+		stmt{`DELETE FROM photos WHERE peer_id = ?`, []any{id}},
+		stmt{`UPDATE peers SET removed = 1 WHERE id = ?`, []any{id}})
 	return s.purge(ctx, stmts...)
 }
 
@@ -139,6 +141,8 @@ func (s *Store) Wipe(ctx context.Context) error {
 		stmt{`DELETE FROM transfer_files`, nil},
 		stmt{`DELETE FROM transfers`, nil},
 		stmt{`UPDATE peers SET alias = '', group_name = ''`, nil},
+		// La foto propia y las de los contactos (se vuelven a descargar).
+		stmt{`DELETE FROM photos`, nil},
 	)
 	if err != nil {
 		return err

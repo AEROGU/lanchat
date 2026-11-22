@@ -28,6 +28,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/thumb"
 	"github.com/AEROGU/lanchat/internal/version"
 )
 
@@ -43,6 +44,7 @@ type fakeBackend struct {
 	// downloadDir vacío = una ruta de Windows que no se usa.
 	downloadDir string
 	autoUpdate  bool
+	photo       []byte // foto de perfil propia (nil = sin foto)
 }
 
 var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", Online: true}
@@ -50,7 +52,11 @@ var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", 
 func (f *fakeBackend) Self() app.Self {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return app.Self{ID: "yo", Name: f.name, Hostname: "PC-YO", Status: f.status, AutoUpdate: f.autoUpdate}
+	s := app.Self{ID: "yo", Name: f.name, Hostname: "PC-YO", Status: f.status, AutoUpdate: f.autoUpdate}
+	if f.photo != nil {
+		s.Photo = protocol.PhotoID(f.photo)
+	}
+	return s
 }
 func (f *fakeBackend) Contacts(context.Context) ([]app.Contact, error) {
 	return []app.Contact{f.contact()}, nil
@@ -1268,5 +1274,97 @@ func TestContactIncompatible(t *testing.T) {
 		if got := toContactJSON(app.Contact{ID: "c", Protocol: proto}).Incompatible; got != want {
 			t.Errorf("protocolo %d: incompatible = %q, quería %q", proto, got, want)
 		}
+	}
+}
+
+func (f *fakeBackend) SetPhoto(_ context.Context, r io.ReadSeeker) error {
+	data, err := thumb.Avatar(r)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	f.photo = data
+	f.mu.Unlock()
+	return nil
+}
+func (f *fakeBackend) RemovePhoto(context.Context) error {
+	f.mu.Lock()
+	f.photo = nil
+	f.mu.Unlock()
+	return nil
+}
+func (f *fakeBackend) Photo(_ context.Context, id string) (string, []byte, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if id != "yo" || f.photo == nil {
+		return "", nil, false, nil
+	}
+	return protocol.PhotoID(f.photo), f.photo, true, nil
+}
+
+func TestPhotoRoutes(t *testing.T) {
+	s, _ := startServer(t)
+	c := loggedClient(t, s)
+	self := func(resp *http.Response) selfJSON {
+		t.Helper()
+		defer resp.Body.Close()
+		var out selfJSON
+		if resp.StatusCode != http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			t.Fatalf("estado %d: %s", resp.StatusCode, b)
+		}
+		json.NewDecoder(resp.Body).Decode(&out)
+		return out
+	}
+
+	if resp, _ := c.Get(base(s) + "/api/photo?id=yo"); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("sin foto: %d", resp.StatusCode)
+	}
+	upload := func(data []byte) (*http.Response, error) {
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		part, _ := mw.CreateFormFile("photo", "foto.png")
+		part.Write(data)
+		mw.Close()
+		return c.Post(base(s)+"/api/photo", mw.FormDataContentType(), &body)
+	}
+	resp, err := upload([]byte("no es una imagen"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("imagen inválida: %d", resp.StatusCode)
+	}
+
+	var img bytes.Buffer
+	png.Encode(&img, image.NewRGBA(image.Rect(0, 0, 600, 400)))
+	resp, err = upload(img.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	me := self(resp)
+	if me.Photo == "" {
+		t.Fatal("la respuesta debía traer la foto nueva")
+	}
+	resp, err = c.Get(base(s) + "/api/photo?id=yo&v=" + me.Photo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" || !thumb.ValidAvatar(b) {
+		t.Errorf("foto: %d %q %d bytes", resp.StatusCode, resp.Header.Get("Content-Type"), len(b))
+	}
+
+	resp, err = postJSON(c, base(s)+"/api/photo/remove", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if me := self(resp); me.Photo != "" {
+		t.Errorf("tras quitarla: %q", me.Photo)
+	}
+	if resp, _ := c.Get(base(s) + "/api/photo?id=yo"); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("foto quitada: %d", resp.StatusCode)
 	}
 }

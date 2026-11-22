@@ -24,6 +24,8 @@ import (
 const (
 	// MaxSide es el lado mayor de la miniatura, en píxeles.
 	MaxSide = 320
+	// AvatarSide es el lado de la foto de perfil (cuadrada), en píxeles.
+	AvatarSide = 256
 	// MaxBytes acota una miniatura, también al recibirla de otro equipo.
 	MaxBytes = 32 << 10
 	// MaxPerOffer: cuántas imágenes de una oferta llevan miniatura (las
@@ -58,28 +60,61 @@ func FromFile(path string) ([]byte, error) {
 // FromReader genera la miniatura de una imagen: reducida a MaxSide, girada
 // según la orientación EXIF de las fotos y con la transparencia sobre blanco.
 func FromReader(r io.ReadSeeker) ([]byte, error) {
-	cfg, format, err := image.DecodeConfig(bufio.NewReader(r))
+	img, orientation, err := decodeImage(r)
 	if err != nil {
 		return nil, err
 	}
+	return encode(orient(scale(img, MaxSide), orientation))
+}
+
+// Avatar genera la foto de perfil a partir de una imagen: el cuadrado del
+// centro, reducido a AvatarSide y girado según la orientación EXIF.
+func Avatar(r io.ReadSeeker) ([]byte, error) {
+	img, orientation, err := decodeImage(r)
+	if err != nil {
+		return nil, err
+	}
+	// El cuadrado del centro de la imagen girada es el giro del cuadrado del
+	// centro: se recorta antes de girar.
+	b := img.Bounds()
+	side := min(b.Dx(), b.Dy())
+	x, y := b.Min.X+(b.Dx()-side)/2, b.Min.Y+(b.Dy()-side)/2
+	square := image.NewRGBA(image.Rect(0, 0, side, side))
+	draw.Draw(square, square.Bounds(), img, image.Pt(x, y), draw.Src)
+	return encode(orient(scale(square, AvatarSide), orientation))
+}
+
+// ValidAvatar indica si b es una foto de perfil aceptable (al recibirla de
+// otro equipo): un JPEG pequeño y no más grande que el doble de AvatarSide.
+func ValidAvatar(b []byte) bool {
+	if len(b) == 0 || len(b) > MaxBytes {
+		return false
+	}
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(b))
+	return err == nil && cfg.Width > 0 && cfg.Height > 0 && cfg.Width <= 2*AvatarSide && cfg.Height <= 2*AvatarSide
+}
+
+// decodeImage lee una imagen y la orientación EXIF con que se debe mostrar.
+func decodeImage(r io.ReadSeeker) (image.Image, int, error) {
+	cfg, format, err := image.DecodeConfig(bufio.NewReader(r))
+	if err != nil {
+		return nil, 0, err
+	}
 	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > maxPixels {
-		return nil, errTooLarge
+		return nil, 0, errTooLarge
 	}
 	orientation := 1
 	if format == "jpeg" {
 		if _, err := r.Seek(0, io.SeekStart); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		orientation = exifOrientation(bufio.NewReader(r))
 	}
 	if _, err := r.Seek(0, io.SeekStart); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	img, _, err := image.Decode(bufio.NewReader(r))
-	if err != nil {
-		return nil, err
-	}
-	return encode(orient(scale(img), orientation))
+	return img, orientation, err
 }
 
 // Valid indica si b es una miniatura aceptable (al recibirla de otro equipo):
@@ -92,16 +127,16 @@ func Valid(b []byte) bool {
 	return err == nil && cfg.Width > 0 && cfg.Height > 0 && cfg.Width <= 2*MaxSide && cfg.Height <= 2*MaxSide
 }
 
-// scale reduce img para que su lado mayor sea MaxSide (nunca la agranda) y
+// scale reduce img para que su lado mayor sea maxSide (nunca la agranda) y
 // la compone sobre blanco: JPEG no tiene transparencia.
-func scale(img image.Image) *image.RGBA {
+func scale(img image.Image, maxSide int) *image.RGBA {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if w > MaxSide || h > MaxSide {
+	if w > maxSide || h > maxSide {
 		if w >= h {
-			w, h = MaxSide, max(1, h*MaxSide/w)
+			w, h = maxSide, max(1, h*maxSide/w)
 		} else {
-			w, h = max(1, w*MaxSide/h), MaxSide
+			w, h = max(1, w*maxSide/h), maxSide
 		}
 	}
 	// Una foto grande pasa primero por una reducción rápida al doble del

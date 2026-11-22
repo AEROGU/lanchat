@@ -26,6 +26,8 @@ type Peer struct {
 	// Status es protocol.StatusAvailable, StatusAway o StatusBusy.
 	Status     string
 	StatusText string
+	// Photo identifica su foto de perfil (protocol.PhotoID; vacío = sin foto).
+	Photo string
 	// Fingerprint es la huella que anuncia (sin verificar; ver packet).
 	Fingerprint string
 	LastSeen    time.Time
@@ -50,7 +52,8 @@ type EventType int
 const (
 	// PeerOnline: equipo nuevo o que volvió a conectarse.
 	PeerOnline EventType = iota
-	// PeerUpdated: cambió su nombre, hostname, IP, puerto, versión, protocolo o estado.
+	// PeerUpdated: cambió su nombre, hostname, IP, puerto, versión, protocolo,
+	// estado o foto.
 	PeerUpdated
 	// PeerOffline: se despidió o dejó de anunciarse.
 	PeerOffline
@@ -103,6 +106,7 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 		Protocol:    p.Version,
 		Status:      p.Status,
 		StatusText:  p.StatusText,
+		Photo:       p.Photo,
 		Fingerprint: p.Fingerprint,
 		LastSeen:    now,
 		Online:      true,
@@ -110,7 +114,7 @@ func (r *registry) seen(p packet, src netip.AddrPort, now time.Time) (ev *Event,
 	}
 	changed := cur.Name != updated.Name || cur.Hostname != updated.Hostname || cur.IP != updated.IP ||
 		cur.HTTPPort != updated.HTTPPort || cur.AppVersion != updated.AppVersion || cur.Protocol != updated.Protocol ||
-		cur.Status != updated.Status || cur.StatusText != updated.StatusText ||
+		cur.Status != updated.Status || cur.StatusText != updated.StatusText || cur.Photo != updated.Photo ||
 		cur.Fingerprint != updated.Fingerprint
 	cameOnline = !cur.Online
 	*cur = updated

@@ -30,6 +30,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/thumb"
 	"github.com/AEROGU/lanchat/internal/version"
 )
 
@@ -42,6 +43,7 @@ type demoBackend struct {
 	rooms     []app.Room
 	history   map[string][]store.Message // contacto o sala -> mensajes
 	transfers map[string]store.Transfer
+	photos    map[string][]byte // foto de perfil por equipo
 }
 
 // today devuelve la hora h:m de hoy.
@@ -82,6 +84,7 @@ func newDemoBackend() *demoBackend {
 		},
 		history:   map[string][]store.Message{},
 		transfers: map[string]store.Transfer{},
+		photos:    map[string][]byte{},
 	}
 
 	in := func(id, peer string, at time.Time, body string) store.Message {
@@ -164,6 +167,17 @@ func newDemoBackend() *demoBackend {
 		react(replyTo(inRoom("r1c", "r1", "c3", today(8, 51), "Las mando hoy antes de las 3 🙌"),
 			"r1b", "c1", "A mí me faltan dos facturas de Ventas."), "❤️", "c2"),
 		outRoom("r1d", "r1", today(8, 53), "Gracias a todos. Cualquier duda, aquí estoy."),
+	}
+	// Como en LanChat real, la lista se ordena por el último mensaje.
+	for i, c := range d.contacts {
+		if h := d.history[c.ID]; len(h) > 0 {
+			d.contacts[i].Last = h[len(h)-1]
+		}
+	}
+	for i, r := range d.rooms {
+		if h := d.history[roomViewPrefix+r.ID]; len(h) > 0 {
+			d.rooms[i].Last = h[len(h)-1]
+		}
 	}
 	return d
 }
@@ -473,4 +487,33 @@ func TestDemo(t *testing.T) {
 	if err := s.Serve(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// La foto de perfil propia sí funciona en la demostración (en memoria).
+func (d *demoBackend) SetPhoto(_ context.Context, r io.ReadSeeker) error {
+	data, err := thumb.Avatar(r)
+	if err != nil {
+		return err
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.photos[d.self.ID] = data
+	d.self.Photo = protocol.PhotoID(data)
+	return nil
+}
+func (d *demoBackend) RemovePhoto(context.Context) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.photos, d.self.ID)
+	d.self.Photo = ""
+	return nil
+}
+func (d *demoBackend) Photo(_ context.Context, id string) (string, []byte, bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	data, ok := d.photos[id]
+	if !ok {
+		return "", nil, false, nil
+	}
+	return protocol.PhotoID(data), data, true, nil
 }

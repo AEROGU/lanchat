@@ -25,6 +25,8 @@ var (
 	RouteFileDone = APIPrefix + "/transfers/{id}/files/{idx}/done"
 	// RouteTransferState avisa al otro equipo de un rechazo o cancelación (POST).
 	RouteTransferState = APIPrefix + "/transfers/{id}/state"
+	// RoutePhoto entrega la foto de perfil del equipo (GET, JPEG; 404 si no tiene).
+	RoutePhoto = APIPrefix + "/photo"
 
 	// LegacyRouteMessage es RouteMessage en el protocolo LegacyVersion: solo
 	// sirve para pedir a esos equipos que actualicen.

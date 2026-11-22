@@ -175,6 +175,11 @@ var migrations = [][]string{
 		`ALTER TABLE messages ADD COLUMN reply_text TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX messages_reply ON messages(reply_id) WHERE reply_id != ''`,
 	},
+	{
+		// photos: fotos de perfil (JPEG), la propia y las de los contactos;
+		// photo_id es protocol.PhotoID de data.
+		`CREATE TABLE photos (peer_id TEXT PRIMARY KEY, photo_id TEXT NOT NULL, data BLOB NOT NULL)`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -507,6 +512,36 @@ func (s *Store) UnreadCounts(ctx context.Context) (map[string]int, error) {
 		out[id] = n
 	}
 	return out, rows.Err()
+}
+
+// LastMessages devuelve el mensaje más reciente (entrante o saliente) de cada
+// conversación 1 a 1: ordena la lista por actividad y se muestra en ella.
+func (s *Store) LastMessages(ctx context.Context) (map[string]Message, error) {
+	msgs, err := s.queryMessages(ctx, `SELECT `+messageSelect+` FROM (
+		SELECT *, ROW_NUMBER() OVER (PARTITION BY peer_id ORDER BY at DESC, rowid DESC) AS n
+		FROM messages WHERE room_id = '') WHERE n = 1`)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]Message, len(msgs))
+	for _, m := range msgs {
+		out[m.PeerID] = m
+	}
+	return out, nil
+}
+
+// LastMessage devuelve el mensaje más reciente con peerID (ok es false si no hay).
+func (s *Store) LastMessage(ctx context.Context, peerID string) (m Message, ok bool, err error) {
+	return s.firstMessage(s.queryMessages(ctx, `SELECT `+messageSelect+` FROM messages
+		WHERE peer_id = ? AND room_id = '' ORDER BY at DESC, rowid DESC LIMIT 1`, peerID))
+}
+
+// firstMessage es el primero de msgs, si hay alguno.
+func (s *Store) firstMessage(msgs []Message, err error) (Message, bool, error) {
+	if err != nil || len(msgs) == 0 {
+		return Message{}, false, err
+	}
+	return msgs[0], true, nil
 }
 
 // Pending devuelve los mensajes salientes sin entregar a peerID, del más antiguo al más nuevo.

@@ -28,8 +28,13 @@
 - **Sin servidor ni configuración**: las PCs de la red se encuentran solas. De
   otra subred basta agregar una sola PC (por IP o nombre de equipo): las
   demás de esa subred llegan a través de ella ([detalles](#equipos-de-otras-subredes)).
-- **Sin cuentas**: cada quien elige su nombre; siempre se ve también el nombre
-  del equipo y su IP. A cada contacto le puedes poner un alias y un grupo.
+- **Sin cuentas**: cada quien elige su nombre y, si quiere, una **foto de
+  perfil** (sin foto se ven sus iniciales sobre un color). El nombre del
+  equipo y su IP se ven en la conversación y al pasar el mouse por el
+  contacto. A cada contacto le puedes poner un alias y un grupo.
+- **Lista como en WhatsApp**: arriba la conversación con actividad más
+  reciente, con el comienzo del último mensaje, su hora, ✓/✓✓ si es tuyo y
+  los mensajes sin leer.
 - **Mensajes** 1 a 1 con historial, entrega a los desconectados cuando se
   conectan, ✓ entregado y ✓✓ leído (desactivable).
 - **Reacciones** con emoji a cualquier mensaje y **eliminar para todos** un
@@ -231,6 +236,8 @@ P-256 en `identity.key`) y los demás la reconocen por su **huella**:
 - El descubrimiento por UDP no va cifrado (nombre, hostname, estado y huella
   anunciados son visibles en la red), pero no permite suplantar a nadie: la
   conexión TLS comprueba la huella.
+- La foto de perfil viaja cifrada, pero cualquier LanChat de la red puede
+  pedirla, igual que todos ven el nombre que se anuncia.
 - Los archivos recibidos llevan la "marca de la Web" de Windows, como los
   descargados con un navegador, y LanChat pide confirmación antes de abrir
   programas o scripts.
@@ -250,12 +257,12 @@ teléfonos.
 En **Ajustes > Privacidad**:
 
 - **Descargar mis datos**: guarda en Descargas una copia de `lanchat.db`
-  (historial, contactos, salas y ofertas de archivos). Se abre con cualquier
+  (historial, contactos, salas, ofertas de archivos y fotos de perfil). Se abre con cualquier
   programa para SQLite, p. ej. DB Browser for SQLite.
 - **Borrar todos mis datos** (p. ej. cuando alguien deja la empresa): sale de
   las salas avisando a los demás, cancela los archivos pendientes y borra las
-  conversaciones, salas, alias y grupos de contactos, el nombre y el mensaje
-  de estado. Pide escribir `BORRAR` para confirmar. Conserva la configuración
+  conversaciones, salas, alias y grupos de contactos, el nombre, el mensaje
+  de estado y la foto de perfil (también las guardadas de los contactos). Pide escribir `BORRAR` para confirmar. Conserva la configuración
   de red y la identidad de la PC. Los archivos ya recibidos quedan en su
   carpeta.
 

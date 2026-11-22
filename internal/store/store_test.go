@@ -126,6 +126,41 @@ func TestUnread(t *testing.T) {
 	}
 }
 
+func TestLastMessages(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	t0 := time.UnixMilli(1_700_000_000_000)
+	msgs := []Message{
+		{ID: "1", PeerID: "a", Body: "x", At: t0, SentAt: t0},
+		{ID: "2", PeerID: "a", Body: "x", At: t0.Add(2 * time.Minute), SentAt: t0, Outgoing: true},
+		{ID: "3", PeerID: "b", Body: "x", At: t0.Add(time.Minute), SentAt: t0},
+		// De sala: cuenta para la sala, no para el contacto que lo escribió.
+		{ID: "4", PeerID: "b", Body: "x", At: t0.Add(5 * time.Minute), SentAt: t0, RoomID: "r1"},
+	}
+	for _, m := range msgs {
+		if _, err := s.InsertMessage(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	last, err := s.LastMessages(ctx)
+	if err != nil || len(last) != 2 || last["a"].ID != "2" || !last["a"].Outgoing || last["b"].ID != "3" {
+		t.Fatalf("LastMessages = %+v, %v", last, err)
+	}
+	if m, ok, err := s.LastMessage(ctx, "a"); err != nil || !ok || m.ID != "2" || !m.At.Equal(t0.Add(2*time.Minute)) {
+		t.Errorf("LastMessage(a) = %+v %v %v", m, ok, err)
+	}
+	if _, ok, err := s.LastMessage(ctx, "nadie"); err != nil || ok {
+		t.Errorf("LastMessage(nadie) = %v %v", ok, err)
+	}
+	rooms, err := s.RoomLastMessages(ctx)
+	if err != nil || len(rooms) != 1 || rooms["r1"].ID != "4" {
+		t.Fatalf("RoomLastMessages = %+v, %v", rooms, err)
+	}
+	if m, ok, err := s.RoomLastMessage(ctx, "r1"); err != nil || !ok || m.ID != "4" {
+		t.Errorf("RoomLastMessage(r1) = %+v %v %v", m, ok, err)
+	}
+}
+
 func TestTransfers(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
@@ -339,5 +374,38 @@ func TestRooms(t *testing.T) {
 	}
 	if changed, _ := s.MarkRoomRead(ctx, "r1"); !changed {
 		t.Error("MarkRoomRead")
+	}
+}
+
+func TestPhotos(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	if _, _, ok, err := s.Photo(ctx, "a"); ok || err != nil {
+		t.Fatalf("sin foto: ok=%v err=%v", ok, err)
+	}
+	if err := s.SetPhoto(ctx, "a", "id1", []byte("jpg1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPhoto(ctx, "a", "id2", []byte("jpg2")); err != nil {
+		t.Fatal(err)
+	}
+	s.SetPhoto(ctx, "b", "idb", []byte("jpgb"))
+	if id, data, ok, err := s.Photo(ctx, "a"); !ok || err != nil || id != "id2" || string(data) != "jpg2" {
+		t.Fatalf("Photo(a) = %q %q %v %v", id, data, ok, err)
+	}
+	if ids, err := s.PhotoIDs(ctx); err != nil || len(ids) != 2 || ids["a"] != "id2" || ids["b"] != "idb" {
+		t.Fatalf("PhotoIDs = %v %v", ids, err)
+	}
+	if err := s.DeletePhoto(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok, _ := s.Photo(ctx, "a"); ok {
+		t.Error("la foto de a debía borrarse")
+	}
+	if err := s.Wipe(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if ids, _ := s.PhotoIDs(ctx); len(ids) != 0 {
+		t.Errorf("Wipe debía borrar las fotos: %v", ids)
 	}
 }

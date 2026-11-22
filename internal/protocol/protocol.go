@@ -7,6 +7,8 @@
 package protocol
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -181,6 +183,25 @@ const FingerprintLen = 64
 func ValidateFingerprint(s string) error {
 	if len(s) != FingerprintLen || strings.Trim(s, "0123456789abcdef") != "" {
 		return errors.New("huella inválida")
+	}
+	return nil
+}
+
+// PhotoIDLen es el largo del identificador de una foto de perfil.
+const PhotoIDLen = 16
+
+// PhotoID identifica una foto de perfil: el comienzo de su SHA-256 en hex. Va
+// en los anuncios; quien vea uno distinto del que tiene guardado la descarga
+// de RoutePhoto.
+func PhotoID(jpeg []byte) string {
+	sum := sha256.Sum256(jpeg)
+	return hex.EncodeToString(sum[:])[:PhotoIDLen]
+}
+
+// ValidatePhotoID valida el identificador de una foto (vacío es válido: sin foto).
+func ValidatePhotoID(s string) error {
+	if s != "" && (len(s) != PhotoIDLen || strings.Trim(s, "0123456789abcdef") != "") {
+		return errors.New("identificador de foto inválido")
 	}
 	return nil
 }

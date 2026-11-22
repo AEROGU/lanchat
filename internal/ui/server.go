@@ -75,6 +75,9 @@ type Backend interface {
 	SendMany(ctx context.Context, peerIDs []string, body string) ([]store.Message, error)
 	History(ctx context.Context, peerID, beforeID string, limit int) ([]store.Message, error)
 	SetName(name string) error
+	SetPhoto(ctx context.Context, r io.ReadSeeker) error
+	RemovePhoto(ctx context.Context) error
+	Photo(ctx context.Context, peerID string) (id string, data []byte, ok bool, err error)
 	SetStatus(status, text string) error
 	SetAutoAway(enabled bool) error
 	SetReadReceipts(enabled bool) error
@@ -240,6 +243,8 @@ func (s *Server) Publish(ctx context.Context, ev any) {
 		s.peerVersion(ctx, e.Peer.AppVersion)
 	case chat.Event:
 		s.publishChat(ctx, e)
+	case app.PhotoChanged:
+		s.publishContact(ctx, e.PeerID)
 	case app.SelfChanged:
 		s.hub.broadcast("self", toSelfJSON(s.b.Self()))
 	case transfer.Event:
@@ -293,6 +298,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/messages/forward", s.handleForward)
 	mux.HandleFunc("POST /api/read", s.handleRead)
 	mux.HandleFunc("POST /api/name", s.handleName)
+	mux.HandleFunc("GET /api/photo", s.handlePhoto)
+	mux.HandleFunc("POST "+photoPath, s.handleSetPhoto)
+	mux.HandleFunc("POST /api/photo/remove", s.handleRemovePhoto)
 	mux.HandleFunc("POST /api/status", s.handleStatus)
 	mux.HandleFunc("POST /api/read-receipts", s.handleReadReceipts)
 	mux.HandleFunc("POST /api/previews", s.handlePreviews)
@@ -376,10 +384,12 @@ func (s *Server) guard(next http.Handler) http.Handler {
 				http.Error(w, "origen no permitido", http.StatusForbidden)
 				return
 			}
-			// Solo la subida de archivos arrastrados acepta multipart (y sin límite de tamaño).
+			// Solo la subida de archivos arrastrados (sin límite de tamaño) y la
+			// de la foto de perfil (con el suyo) aceptan multipart.
 			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 			switch {
 			case r.URL.Path == uploadPath && mt == "multipart/form-data":
+			case r.URL.Path == photoPath && mt == "multipart/form-data":
 			case mt == "application/json":
 				r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
 			default:
