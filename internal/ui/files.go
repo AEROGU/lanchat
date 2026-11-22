@@ -101,6 +101,26 @@ func (s *Server) handleTransferAction(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleSaveAs ("Guardar en…") pregunta en qué carpeta guardar una oferta
+// recibida y empieza a descargarla ahí. 204 también si el usuario canceló.
+func (s *Server) handleSaveAs(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	dir, err := s.pickFolder("Elegir dónde guardar lo recibido", true)
+	if err == nil && dir != "" {
+		err = s.b.AcceptTransferTo(r.Context(), req.ID, dir)
+	}
+	if err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleDeleteTransfer borra de este equipo una oferta que no llegó a nada
 // (cancelada, rechazada o caducada) y avisa a las ventanas para quitarla.
 func (s *Server) handleDeleteTransfer(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +276,7 @@ func (s *Server) handlePickFolder(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &req) {
 		return
 	}
-	dir, err := s.pickFolder()
+	dir, err := s.pickFolder("Elegir la carpeta para enviar", false)
 	if err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return

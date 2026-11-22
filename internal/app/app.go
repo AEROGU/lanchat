@@ -744,12 +744,18 @@ func (a *App) Upload(ctx context.Context, peerID string, next func() (name, dir 
 
 // AcceptTransfer empieza (o reintenta) la descarga de una oferta recibida.
 func (a *App) AcceptTransfer(ctx context.Context, id string) error {
+	return a.AcceptTransferTo(ctx, id, "")
+}
+
+// AcceptTransferTo empieza la descarga de una oferta recibida en la carpeta
+// dir (ruta absoluta; vacío = la carpeta de descargas).
+func (a *App) AcceptTransferTo(ctx context.Context, id, dir string) error {
 	if t, ok, err := a.store.Transfer(ctx, id); err == nil && ok {
 		if err := a.requireContact(ctx, t.PeerID); err != nil {
 			return err
 		}
 	}
-	return a.transfer.Accept(ctx, id)
+	return a.transfer.AcceptTo(ctx, id, dir)
 }
 func (a *App) RejectTransfer(ctx context.Context, id string) error { return a.transfer.Reject(ctx, id) }
 func (a *App) CancelTransfer(ctx context.Context, id string) error { return a.transfer.Cancel(ctx, id) }

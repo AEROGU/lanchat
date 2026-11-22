@@ -276,6 +276,9 @@ func (d *demoBackend) Upload(context.Context, string, func() (string, string, io
 	return store.Message{}, errDemo
 }
 func (d *demoBackend) AcceptTransfer(context.Context, string) error { return errDemo }
+func (d *demoBackend) AcceptTransferTo(context.Context, string, string) error {
+	return errDemo
+}
 func (d *demoBackend) RejectTransfer(context.Context, string) error { return errDemo }
 func (d *demoBackend) CancelTransfer(context.Context, string) error { return errDemo }
 func (d *demoBackend) DeleteTransfer(context.Context, string) error { return errDemo }

@@ -99,6 +99,7 @@ type Backend interface {
 	OfferFiles(ctx context.Context, peerID string, paths []string) (store.Message, error)
 	Upload(ctx context.Context, peerID string, next func() (name, dir string, r io.Reader, err error)) (store.Message, error)
 	AcceptTransfer(ctx context.Context, id string) error
+	AcceptTransferTo(ctx context.Context, id, dir string) error
 	RejectTransfer(ctx context.Context, id string) error
 	CancelTransfer(ctx context.Context, id string) error
 	DeleteTransfer(ctx context.Context, id string) error
@@ -327,6 +328,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/files/open-dir", s.handleOpenDir)
 	mux.HandleFunc("POST "+uploadPath, s.handleUpload)
 	mux.HandleFunc("POST /api/transfers/delete", s.handleDeleteTransfer)
+	mux.HandleFunc("POST /api/transfers/save-as", s.handleSaveAs)
 	mux.HandleFunc("POST /api/transfers/{action}", s.handleTransferAction)
 	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
 	mux.HandleFunc("GET /api/files/thumb", s.handleThumb)

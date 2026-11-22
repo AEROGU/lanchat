@@ -483,3 +483,48 @@ func TestTransferRequiresRecipientIdentity(t *testing.T) {
 		t.Errorf("destinatario legítimo: %d, quería 200", code)
 	}
 }
+
+// "Guardar en…": la oferta se descarga en la carpeta elegida y no en la de
+// descargas; un reintento no puede cambiar de carpeta.
+func TestAcceptTransferTo(t *testing.T) {
+	a, b, downloads := pair(t)
+	ctx := context.Background()
+	p, data := writeRandom(t, testutil.TempDir(t), "plano.dwg", 200_000)
+
+	m := offer(t, a, b, p)
+	if err := b.app.AcceptTransferTo(ctx, m.ID, "relativa"); err == nil {
+		t.Error("una carpeta relativa debía rechazarse")
+	}
+	chosen := filepath.Join(testutil.TempDir(t), "Proyecto Norte") // aún no existe: se crea
+	if err := b.app.AcceptTransferTo(ctx, m.ID, chosen); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B completa", transferState(m.ID, store.TransferCompleted))
+	if got, err := os.ReadFile(filepath.Join(chosen, "plano.dwg")); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("en la carpeta elegida: %d bytes, %v", len(got), err)
+	}
+	if _, err := os.Stat(filepath.Join(downloads, "plano.dwg")); err == nil {
+		t.Error("no debía guardarse también en la carpeta de descargas")
+	}
+
+	// Una descarga fallida se reintenta donde empezó.
+	m2 := offer(t, a, b, p)
+	part := filepath.Join(chosen, fmt.Sprintf("plano.dwg.%s-0.lanchat-part", m2.ID[:8]))
+	bad := bytes.Clone(data[:50_000])
+	bad[10] ^= 0xff
+	os.WriteFile(part, bad, 0o600)
+	if err := b.app.AcceptTransferTo(ctx, m2.ID, chosen); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B detecta el daño", transferState(m2.ID, store.TransferFailed))
+	if err := b.app.AcceptTransferTo(ctx, m2.ID, downloads); err == nil {
+		t.Error("reintentar en otra carpeta debía rechazarse")
+	}
+	if err := b.app.AcceptTransfer(ctx, m2.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, b, "B completa al reintentar", transferState(m2.ID, store.TransferCompleted))
+	if got, _ := os.ReadFile(filepath.Join(chosen, "plano (1).dwg")); !bytes.Equal(got, data) {
+		t.Error("el reintento debía quedar en la carpeta elegida")
+	}
+}

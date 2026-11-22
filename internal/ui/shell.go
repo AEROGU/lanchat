@@ -51,9 +51,12 @@ func (s *Server) pickFiles() ([]string, error) {
 	return pickFiles()
 }
 
-func (s *Server) pickFolder() (string, error) {
+// folderDialog es el selector de carpetas (las pruebas lo reemplazan).
+var folderDialog = pickFolder
+
+func (s *Server) pickFolder(title string, newFolder bool) (string, error) {
 	if s.Shell != nil {
 		return "", errNoPicker
 	}
-	return pickFolder()
+	return folderDialog(title, newFolder)
 }

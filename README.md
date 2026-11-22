@@ -63,7 +63,8 @@
   o a un grupo.
 - **Archivos y carpetas** (botón o arrastrar y soltar en la conversación o
   sobre un contacto de la lista): el otro debe
-  aceptarlos, se descargan una sola vez, se reanudan si se corta la red y se
+  aceptarlos (en su carpeta de descargas, o en la PC con **Guardar en…** en
+  la carpeta que elija), se descargan una sola vez, se reanudan si se corta la red y se
   verifican con SHA-256. Las imágenes (JPG, PNG, GIF, WebP) llegan con
   **vista previa** antes de aceptarlas y se abren completas con un clic.
 - **Estados** Disponible, Ausente y Ocupado, con mensaje y ausente automático.

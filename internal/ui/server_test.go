@@ -153,6 +153,9 @@ func (f *fakeBackend) record(action, id string) error {
 func (f *fakeBackend) AcceptTransfer(_ context.Context, id string) error {
 	return f.record("accept", id)
 }
+func (f *fakeBackend) AcceptTransferTo(_ context.Context, id, dir string) error {
+	return f.record("accept-to:"+dir, id)
+}
 func (f *fakeBackend) RejectTransfer(_ context.Context, id string) error {
 	return f.record("reject", id)
 }
@@ -1366,5 +1369,46 @@ func TestPhotoRoutes(t *testing.T) {
 	}
 	if resp, _ := c.Get(base(s) + "/api/photo?id=yo"); resp.StatusCode != http.StatusNotFound {
 		t.Errorf("foto quitada: %d", resp.StatusCode)
+	}
+}
+
+func TestSaveAs(t *testing.T) {
+	pick := ""
+	var gotTitle string
+	var gotNew bool
+	old := folderDialog
+	folderDialog = func(title string, newFolder bool) (string, error) {
+		gotTitle, gotNew = title, newFolder
+		return pick, nil
+	}
+	t.Cleanup(func() { folderDialog = old })
+
+	s, b := startServer(t)
+	c := loggedClient(t, s)
+	save := func() int {
+		t.Helper()
+		resp, err := postJSON(c, base(s)+"/api/transfers/save-as", `{"id":"t1"}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	// Cancelar el selector no acepta nada.
+	if code := save(); code != http.StatusNoContent {
+		t.Errorf("cancelado: %d", code)
+	}
+	if !gotNew || gotTitle == "" {
+		t.Errorf("selector: título %q, nueva carpeta %v", gotTitle, gotNew)
+	}
+	pick = `D:\Proyectos\Recibido`
+	if code := save(); code != http.StatusNoContent {
+		t.Errorf("guardar en: %d", code)
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if want := []string{`accept-to:D:\Proyectos\Recibido:t1`}; !slices.Equal(b.sent, want) {
+		t.Errorf("acciones = %q, quería %q", b.sent, want)
 	}
 }

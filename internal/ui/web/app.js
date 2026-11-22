@@ -114,6 +114,7 @@ const api = {
   openDir: (id, dir) => request("POST", "/api/files/open-dir", { id, dir }),
   upload: (peer, form) => request("POST", `/api/files/upload?${new URLSearchParams({ peer })}`, form),
   transfer: (action, id) => request("POST", `/api/transfers/${action}`, { id }),
+  saveAs: (id) => request("POST", "/api/transfers/save-as", { id }),
   openFile: (id, index, reveal) => request("POST", "/api/files/open", { id, index, reveal }),
   downloadDir: (dir) => request("POST", "/api/download-dir", { dir }),
   openDownloadDir: () => request("POST", "/api/download-dir/open", {}),
@@ -1466,7 +1467,16 @@ function transferCard(m) {
   const act = (label, action, primary, confirmText) =>
     textButton(label, () => transferAction(action, t.id, confirmText), primary);
   if (!t.outgoing && t.state === "offered") {
-    actions.append(act("Aceptar", "accept", true), act("Rechazar", "reject"));
+    const accept = act("Aceptar", "accept", true);
+    accept.title = `Guardar en ${state.downloadDir || "Descargas\\LanChat"}`;
+    actions.append(accept);
+    // En el teléfono no hay selector de carpetas: todo va a Descargas.
+    if (!state.mobile) {
+      const saveAt = textButton("Guardar en…", () => saveAs(t.id));
+      saveAt.title = "Elegir la carpeta donde guardarlo";
+      actions.append(saveAt);
+    }
+    actions.append(act("Rechazar", "reject"));
   } else if (!t.outgoing && t.state === "failed") {
     actions.append(act("Reintentar", "accept", true), act("Cancelar", "cancel", false, "¿Cancelar la descarga?"));
   } else if (t.state === "downloading" || (t.outgoing && t.state === "offered")) {
@@ -1609,6 +1619,16 @@ function paintProgress(card, p) {
 
 function cardElement(id) {
   return $("messages").querySelector(`.msg[data-id="${CSS.escape(id)}"]`);
+}
+
+// saveAs ("Guardar en…") pregunta la carpeta y acepta la oferta ahí. Si el
+// usuario cancela el selector, la oferta queda como estaba.
+async function saveAs(id) {
+  try {
+    await api.saveAs(id);
+  } catch (e) {
+    showBanner(e.message, 5000);
+  }
 }
 
 async function transferAction(action, id, confirmText) {

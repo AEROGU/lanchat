@@ -525,8 +525,14 @@ func (s *Service) handleState(w http.ResponseWriter, r *http.Request) {
 
 // ---------- Destinatario ----------
 
-// Accept empieza (o reintenta) la descarga de una oferta recibida.
-func (s *Service) Accept(ctx context.Context, id string) error {
+// Accept empieza (o reintenta) la descarga de una oferta recibida en la
+// carpeta de descargas.
+func (s *Service) Accept(ctx context.Context, id string) error { return s.AcceptTo(ctx, id, "") }
+
+// AcceptTo empieza la descarga de una oferta recibida en la carpeta dir
+// (ruta absoluta; vacío = la carpeta de descargas). Un reintento sigue en la
+// carpeta donde empezó, donde quedaron los archivos a medias.
+func (s *Service) AcceptTo(ctx context.Context, id, dir string) error {
 	t, err := s.incoming(ctx, id)
 	if err != nil {
 		return err
@@ -538,8 +544,14 @@ func (s *Service) Accept(ctx context.Context, id string) error {
 		s.setState(ctx, id, store.TransferExpired, "")
 		return errors.New("la oferta caducó; pide que la vuelvan a enviar")
 	}
-	dir := t.Dir
-	if dir == "" {
+	switch {
+	case dir != "" && !filepath.IsAbs(dir):
+		return fmt.Errorf("carpeta inválida: %s", dir)
+	case dir != "" && t.Dir != "" && filepath.Clean(dir) != filepath.Clean(t.Dir):
+		return fmt.Errorf("la descarga ya empezó en %s; reintenta ahí o cancélala", t.Dir)
+	case t.Dir != "":
+		dir = t.Dir
+	case dir == "":
 		if dir, err = s.downloadDir(); err != nil {
 			return err
 		}

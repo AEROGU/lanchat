@@ -177,8 +177,9 @@ type browseInfo struct {
 }
 
 // pickFolder muestra el selector de carpetas de Windows sobre la ventana de
-// LanChat. Devuelve "" si el usuario cancela.
-func pickFolder() (string, error) {
+// LanChat, con title y, si newFolder, el botón para crear una carpeta.
+// Devuelve "" si el usuario cancela.
+func pickFolder(title string, newFolder bool) (string, error) {
 	done, err := beginDialog()
 	if err != nil {
 		return "", err
@@ -186,12 +187,16 @@ func pickFolder() (string, error) {
 	defer done()
 
 	display := make([]uint16, windows.MAX_PATH)
-	title, _ := windows.UTF16PtrFromString("Elegir la carpeta para enviar")
+	flags := uint32(bifReturnOnlyFSDirs | bifNewDialogStyle)
+	if !newFolder {
+		flags |= bifNoNewFolderButton
+	}
+	title16, _ := windows.UTF16PtrFromString(title)
 	bi := browseInfo{
 		owner:       findWindow(),
 		displayName: &display[0],
-		title:       title,
-		flags:       bifReturnOnlyFSDirs | bifNewDialogStyle | bifNoNewFolderButton,
+		title:       title16,
+		flags:       flags,
 	}
 	pidl, _, _ := procSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&bi)))
 	if pidl == 0 {
