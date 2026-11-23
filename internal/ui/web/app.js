@@ -2225,14 +2225,30 @@ function toggleSelected(id) {
 function updateSelectBar() {
   const msgs = selectedMessages();
   const n = msgs.length;
-  $("select-count").textContent = n === 1 ? "1 seleccionado" : `${n} seleccionados`;
+  $("select-n").textContent = n;
+  $("select-word").textContent = n === 1 ? " seleccionado" : " seleccionados";
   const forward = n > 0 && msgs.every(canForward);
-  $("select-forward").disabled = !forward;
-  $("select-forward").title = forward ? "" : "Solo se reenvían los mensajes de texto y los archivos enviados o ya descargados";
+  setUnavailable($("select-forward"), !forward,
+    "Solo se reenvían los mensajes de texto y los archivos enviados o ya descargados");
   const del = n > 0 && msgs.every(canDelete);
-  $("select-delete").disabled = !del;
-  $("select-delete").title = del ? ""
-    : `Solo se eliminan para todos tus propios mensajes de los últimos ${Math.round(state.limits.deleteWindowMs / 60000)} minutos`;
+  setUnavailable($("select-delete"), !del,
+    `Solo se eliminan para todos tus propios mensajes de los últimos ${Math.round(state.limits.deleteWindowMs / 60000)} minutos`);
+}
+
+// setUnavailable apaga un botón sin desactivarlo: uno desactivado no responde
+// al tocarlo y en el teléfono no hay mouse para ver su title, así que el clic
+// muestra la razón (ver unavailableReason).
+function setUnavailable(b, off, reason) {
+  b.setAttribute("aria-disabled", off ? "true" : "false");
+  b.title = off ? reason : "";
+}
+
+// unavailableReason, en el clic de un botón apagado con setUnavailable, avisa
+// por qué no se puede y devuelve true.
+function unavailableReason(b) {
+  if (b.getAttribute("aria-disabled") !== "true") return false;
+  showBanner(b.title, 5000);
+  return true;
 }
 
 async function deleteSelected() {
@@ -3379,7 +3395,9 @@ function bind() {
     e.preventDefault();
     copySelected();
   });
-  $("select-forward").addEventListener("click", () => openForward(selectedMessages().map((m) => m.id)));
+  $("select-forward").addEventListener("click", (e) => {
+    if (!unavailableReason(e.currentTarget)) openForward(selectedMessages().map((m) => m.id));
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && state.selecting && !document.querySelector("dialog[open]")) endSelect();
   });

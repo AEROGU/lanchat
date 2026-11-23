@@ -16,6 +16,9 @@
   --warn-text: #8a5a00;
   --selected: #e8efff;
   --quote-bg: rgba(0, 0, 0, 0.05);
+  --btn-bg: #eef1f5;
+  --btn-hover: #e1e5eb;
+  --btn-border: #cfd5dd;
   --radius: 10px;
   color-scheme: light;
 }
@@ -31,6 +34,9 @@
     --bubble-out: #1e3a70;
     --selected: #23324f;
     --quote-bg: rgba(255, 255, 255, 0.07);
+    --btn-bg: #2b3036;
+    --btn-hover: #363c44;
+    --btn-border: #444b54;
     --warn-bg: #3a2e12;
     --warn-text: #f3c969;
     color-scheme: dark;
@@ -597,12 +603,28 @@ dialog input, dialog textarea, dialog select {
   margin-top: 18px;
 }
 
-.actions button:not(.primary) {
-  background: none;
-  border: 1px solid var(--border);
+/* Botones secundarios: con fondo y borde propios para que no parezcan texto
+   sobre el fondo del diálogo (sobre todo en el tema oscuro). */
+.actions button:not(.primary),
+#settings .text-btn {
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
   border-radius: var(--radius);
+  color: var(--text);
   padding: 8px 14px;
 }
+
+#settings .text-btn { padding: 6px 12px; }
+
+.actions button:not(.primary):hover,
+#settings .text-btn:hover { background: var(--btn-hover); }
+
+#settings .text-btn.danger-btn {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--btn-border));
+}
+
+#settings .text-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* ---------- Ventana angosta: una columna ---------- */
 
@@ -613,9 +635,6 @@ dialog input, dialog textarea, dialog select {
   #app.chatting #sidebar { display: none; }
   #app:not(.chatting) #chat { display: none; }
   #back-btn { display: block; }
-  /* Sin espacio para todo en la barra de selección: Copiar queda en ícono. */
-  #select-copy .btn-label { display: none; }
-
   #more-btn { display: block; }
   .chat-actions {
     display: none;
@@ -931,7 +950,41 @@ dialog input, dialog textarea, dialog select {
 .select-bar { padding: 10px 12px; }
 #select-count { flex: 1; font-weight: 600; }
 .select-bar .primary { padding: 8px 14px; }
-.select-bar button:disabled { opacity: 0.45; cursor: default; }
+.select-bar button[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+.select-bar .short-label { display: none; }
+
+@media (max-width: 640px) {
+  /* Barra de selección en una fila: el número y cada acción como ícono con
+     una palabra debajo ("Eliminar para todos" no cabe; lo dice la confirmación). */
+  .select-bar { gap: 4px; padding: 6px 8px; }
+  #select-count { flex: none; min-width: 28px; font-size: 18px; text-align: center; }
+  #select-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  #select-copy, #select-delete, #select-forward {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 2px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--text);
+    font-size: 12px;
+  }
+  #select-delete { color: var(--danger); }
+  #select-forward { color: var(--brand); }
+  #select-copy:hover, #select-delete:hover, #select-forward:hover { background: var(--bg); }
+  .select-bar .icon { width: 22px; height: 22px; }
+  .select-bar .long-label { display: none; }
+  .select-bar .short-label { display: inline; }
+}
 
 /* Al seleccionar, cada mensaje lleva un círculo que se marca. */
 #messages.selecting .msg-act { display: none; }
