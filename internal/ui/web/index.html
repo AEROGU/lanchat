@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,71 +7,74 @@
   <link rel="icon" href="/icon.png">
   <link rel="stylesheet" href="/style.css">
 </head>
+<!-- Los textos los pone app.js (translatePage) según data-i18n (el contenido)
+     y data-i18n-title, -placeholder y -aria-label, con las claves de
+     internal/i18n/locales. -->
 <body>
   <div id="app">
     <aside id="sidebar">
       <header class="me">
-        <button type="button" id="me-avatar" class="avatar-btn" title="Tu foto de perfil" aria-label="Tu foto de perfil"></button>
+        <button type="button" id="me-avatar" class="avatar-btn" data-i18n-title="self.photo" data-i18n-aria-label="self.photo"></button>
         <div class="who">
           <strong id="me-name"></strong>
           <small id="me-detail"></small>
         </div>
-        <button id="new-room-btn" class="icon-btn" title="Nueva sala de chat grupal" aria-label="Nueva sala">
+        <button id="new-room-btn" class="icon-btn" data-i18n-title="sidebar.newRoomTitle" data-i18n-aria-label="roomDialog.createTitle">
           <span aria-hidden="true">👥</span>
         </button>
-        <button id="many-btn" class="icon-btn" title="Mensaje a varios" aria-label="Mensaje a varios">
+        <button id="many-btn" class="icon-btn" data-i18n-title="msg.broadcast" data-i18n-aria-label="msg.broadcast">
           <span aria-hidden="true">📢</span>
         </button>
-        <button id="about-btn" class="icon-btn" title="Acerca de LanChat" aria-label="Acerca de LanChat">
+        <button id="about-btn" class="icon-btn" data-i18n-title="about.title" data-i18n-aria-label="about.title">
           <span aria-hidden="true">ℹ</span>
         </button>
-        <button id="settings-btn" class="icon-btn" title="Ajustes" aria-label="Ajustes">
+        <button id="settings-btn" class="icon-btn" data-i18n-title="settings.title" data-i18n-aria-label="settings.title">
           <span aria-hidden="true">⚙</span>
         </button>
       </header>
-      <button id="status-btn" class="status-btn" title="Cambiar tu estado">
+      <button id="status-btn" class="status-btn" data-i18n-title="status.change">
         <span id="status-dot" class="dot online available"></span>
         <span id="status-label"></span>
       </button>
       <div class="search-row">
-        <input id="search" type="search" placeholder="Buscar contacto o sala" autocomplete="off">
+        <input id="search" type="search" data-i18n-placeholder="sidebar.search" autocomplete="off">
         <button type="button" id="offline-btn" class="icon-btn" aria-pressed="false"
-          title="Ocultar los contactos desconectados" aria-label="Ocultar los contactos desconectados">
+          data-i18n-title="list.hideOffline" data-i18n-aria-label="list.hideOffline">
           <span class="offline-icon" aria-hidden="true"></span>
         </button>
       </div>
-      <ul id="contacts" aria-label="Contactos"></ul>
-      <p id="no-contacts" class="hint" hidden>Aún no se ha visto ningún equipo en la red.</p>
+      <ul id="contacts" data-i18n-aria-label="group.contacts"></ul>
+      <p id="no-contacts" class="hint" data-i18n="sidebar.noContacts" hidden></p>
     </aside>
 
     <main id="chat">
-      <div id="empty" class="hint">Elige un contacto para conversar.</div>
+      <div id="empty" class="hint" data-i18n="chat.empty"></div>
 
       <header id="chat-header" hidden>
-        <button id="back-btn" class="icon-btn" title="Volver" aria-label="Volver">‹</button>
+        <button id="back-btn" class="icon-btn" data-i18n-title="chat.back" data-i18n-aria-label="chat.back">‹</button>
         <span id="peer-avatar"></span>
         <div class="who">
           <strong id="peer-name"></strong>
           <small id="peer-detail"></small>
         </div>
         <!-- En ventana angosta las acciones van en el menú ⋯. -->
-        <button id="more-btn" class="icon-btn" title="Más opciones" aria-label="Más opciones"
+        <button id="more-btn" class="icon-btn" data-i18n-title="chat.more" data-i18n-aria-label="chat.more"
           aria-haspopup="menu" aria-expanded="false" aria-controls="chat-actions">⋯</button>
         <div id="chat-actions" class="chat-actions">
-          <button id="identity-btn" class="text-btn contact-only" title="Ver la huella de seguridad de este contacto">Identidad</button>
-          <button id="group-btn" class="text-btn contact-only" title="Poner a este contacto en un grupo">Grupo</button>
-          <button id="alias-btn" class="text-btn contact-only" title="Cambiar el nombre con el que ves a este contacto">Renombrar</button>
-          <button id="room-members-btn" class="text-btn room-only" title="Ver los miembros, agregar o sacar">Miembros</button>
-          <button id="room-rename-btn" class="text-btn room-only" title="Cambiar el nombre de la sala (para todos)">Renombrar</button>
-          <button id="room-leave-btn" class="text-btn room-only" title="Salir de la sala">Salir</button>
-          <button id="remove-contact-btn" class="text-btn contact-only danger-btn" title="Quitar este contacto desconectado de tu lista">Quitar</button>
-          <button id="delete-chat-btn" class="text-btn danger-btn" title="Borrar esta conversación de este equipo">Borrar</button>
+          <button id="identity-btn" class="text-btn contact-only" data-i18n="chat.identity" data-i18n-title="chat.identityTitle"></button>
+          <button id="group-btn" class="text-btn contact-only" data-i18n="chat.group" data-i18n-title="chat.groupTitle"></button>
+          <button id="alias-btn" class="text-btn contact-only" data-i18n="chat.rename" data-i18n-title="chat.aliasTitle"></button>
+          <button id="room-members-btn" class="text-btn room-only" data-i18n="chat.members" data-i18n-title="chat.membersTitle"></button>
+          <button id="room-rename-btn" class="text-btn room-only" data-i18n="chat.rename" data-i18n-title="chat.roomRenameTitle"></button>
+          <button id="room-leave-btn" class="text-btn room-only" data-i18n="chat.leave" data-i18n-title="chat.leaveTitle"></button>
+          <button id="remove-contact-btn" class="text-btn contact-only danger-btn" data-i18n="chat.remove" data-i18n-title="chat.removeTitle"></button>
+          <button id="delete-chat-btn" class="text-btn danger-btn" data-i18n="chat.delete" data-i18n-title="chat.deleteTitle"></button>
         </div>
       </header>
 
       <div id="identity-note" class="note danger" hidden>
         <span id="identity-note-text"></span>
-        <button type="button" id="trust-btn" class="text-btn">Confiar en la nueva identidad</button>
+        <button type="button" id="trust-btn" class="text-btn" data-i18n="identity.trust"></button>
       </div>
       <div id="incompatible-note" class="note danger" hidden></div>
       <div id="offline-note" class="note" hidden></div>
@@ -82,10 +85,10 @@
       <!-- Editar un mensaje propio: el composer muestra su texto. -->
       <div id="edit-bar" class="edit-bar" hidden>
         <div class="edit-what">
-          <strong>Editar mensaje</strong>
+          <strong data-i18n="edit.title"></strong>
           <span id="edit-original"></span>
         </div>
-        <button type="button" id="edit-cancel" class="icon-btn" title="Cancelar la edición (Esc)" aria-label="Cancelar la edición">✕</button>
+        <button type="button" id="edit-cancel" class="icon-btn" data-i18n-title="edit.cancelTitle" data-i18n-aria-label="edit.cancel">✕</button>
       </div>
 
       <!-- Responder a un mensaje: su cita va sobre la caja de escribir. -->
@@ -94,33 +97,33 @@
           <strong id="reply-who"></strong>
           <span id="reply-original"></span>
         </div>
-        <button type="button" id="reply-cancel" class="icon-btn" title="Cancelar la respuesta (Esc)" aria-label="Cancelar la respuesta">✕</button>
+        <button type="button" id="reply-cancel" class="icon-btn" data-i18n-title="reply.cancelTitle" data-i18n-aria-label="reply.cancel">✕</button>
       </div>
 
       <!-- Varios mensajes seleccionados: reemplaza al composer. -->
       <div id="select-bar" class="select-bar" hidden>
-        <button type="button" id="select-cancel" class="icon-btn" title="Terminar la selección (Esc)" aria-label="Terminar la selección">✕</button>
+        <button type="button" id="select-cancel" class="icon-btn" data-i18n-title="select.endTitle" data-i18n-aria-label="select.end">✕</button>
         <!-- En el teléfono solo se ve el número; la palabra queda para los lectores de pantalla. -->
         <span id="select-count"><span id="select-n"></span><span id="select-word"></span></span>
-        <button type="button" id="select-copy" class="text-btn" title="Copiar los mensajes seleccionados (Ctrl+C)"><span class="btn-label">Copiar</span></button>
-        <button type="button" id="select-delete" class="text-btn danger-btn" aria-label="Eliminar para todos"><span class="btn-label"><span class="long-label">Eliminar para todos</span><span class="short-label">Eliminar</span></span></button>
-        <button type="button" id="select-forward" class="primary"><span class="btn-label">Reenviar</span></button>
+        <button type="button" id="select-copy" class="text-btn" data-i18n-title="select.copyTitle"><span class="btn-label" data-i18n="menu.copy"></span></button>
+        <button type="button" id="select-delete" class="text-btn danger-btn" data-i18n-aria-label="menu.deleteForEveryone"><span class="btn-label"><span class="long-label" data-i18n="menu.deleteForEveryone"></span><span class="short-label" data-i18n="select.deleteShort"></span></span></button>
+        <button type="button" id="select-forward" class="primary"><span class="btn-label" data-i18n="menu.forward"></span></button>
       </div>
 
       <form id="composer" hidden>
-        <button type="button" id="attach-btn" class="icon-btn contact-only" title="Enviar archivos (también puedes arrastrarlos aquí)" aria-label="Enviar archivos">📎</button>
-        <button type="button" id="folder-btn" class="icon-btn contact-only desktop-only" title="Enviar una carpeta (también puedes arrastrarla aquí)" aria-label="Enviar una carpeta">📁</button>
+        <button type="button" id="attach-btn" class="icon-btn contact-only" data-i18n-title="composer.attachTitle" data-i18n-aria-label="composer.attach">📎</button>
+        <button type="button" id="folder-btn" class="icon-btn contact-only desktop-only" data-i18n-title="composer.folderTitle" data-i18n-aria-label="composer.folder">📁</button>
         <!-- Sin escritorio (Android) el 📎 usa el selector del sistema. -->
         <input type="file" id="file-input" multiple hidden>
-        <button type="button" id="emoji-btn" class="icon-btn" title="Emojis" aria-label="Emojis"
+        <button type="button" id="emoji-btn" class="icon-btn" data-i18n-title="composer.emoji" data-i18n-aria-label="composer.emoji"
           aria-haspopup="dialog" aria-expanded="false" aria-controls="emoji-panel">😊</button>
-        <div id="emoji-panel" class="emoji-panel" role="dialog" aria-label="Emojis" hidden>
+        <div id="emoji-panel" class="emoji-panel" role="dialog" data-i18n-aria-label="composer.emoji" hidden>
           <div id="emoji-tabs" class="emoji-tabs" role="tablist"></div>
           <div id="emoji-title" class="emoji-title"></div>
           <div id="emoji-grid" class="emoji-grid"></div>
         </div>
-        <textarea id="input" rows="1" placeholder="Escribe un mensaje (Enter envía, Shift+Enter nueva línea)"></textarea>
-        <button type="submit" class="primary" id="send-btn">Enviar</button>
+        <textarea id="input" rows="1" data-i18n-placeholder="composer.placeholder"></textarea>
+        <button type="submit" class="primary" id="send-btn" data-i18n="composer.send"></button>
       </form>
       <p id="send-error" class="error" hidden></p>
     </main>
@@ -130,133 +133,136 @@
 
   <dialog id="settings">
     <form method="dialog" id="settings-form">
-      <h2>Ajustes</h2>
+      <h2 data-i18n="settings.title"></h2>
       <div class="photo-row">
         <span id="settings-avatar"></span>
         <div class="photo-actions">
-          <strong>Foto de perfil</strong>
+          <strong data-i18n="photo.title"></strong>
           <div class="input-row">
-            <button type="button" id="photo-pick" class="text-btn">Elegir foto…</button>
-            <button type="button" id="photo-remove" class="text-btn" hidden>Quitar foto</button>
+            <button type="button" id="photo-pick" class="text-btn" data-i18n="photo.pick"></button>
+            <button type="button" id="photo-remove" class="text-btn" data-i18n="photo.remove" hidden></button>
           </div>
           <small class="help" id="photo-help"></small>
         </div>
         <input type="file" id="photo-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
       </div>
 
-      <label for="name-input">Tu nombre</label>
+      <label for="name-input" data-i18n="settings.name"></label>
       <input id="name-input" autocomplete="off">
       <small id="name-help" class="help"></small>
 
-      <label for="peers-input">Equipos de otras subredes</label>
+      <label for="language-input" data-i18n="settings.language"></label>
+      <select id="language-input"></select>
+
+      <label for="peers-input" data-i18n="settings.peers"></label>
       <textarea id="peers-input" rows="4" spellcheck="false"></textarea>
-      <small class="help">Uno por línea: IP o nombre del equipo, con <code>:puerto</code> opcional. Ej.: <code>10.0.5.20</code> o <code>PC-VENTAS</code>.</small>
+      <small class="help" data-i18n="settings.peersHelp"></small>
 
       <div class="desktop-only">
-        <label for="download-input">Carpeta para archivos recibidos</label>
+        <label for="download-input" data-i18n="settings.downloads"></label>
         <div class="input-row">
           <input id="download-input" autocomplete="off" spellcheck="false">
-          <button type="button" id="open-downloads" class="text-btn">Abrir</button>
+          <button type="button" id="open-downloads" class="text-btn" data-i18n="files.open"></button>
         </div>
-        <small class="help">Vacío = la carpeta Descargas\LanChat.</small>
+        <small class="help" data-i18n="settings.downloadsHelp"></small>
       </div>
 
       <label class="check">
         <input type="checkbox" id="receipts-input">
-        Avisar a los demás cuando leo sus mensajes (✓✓)
+        <span data-i18n="settings.receipts"></span>
       </label>
 
       <label class="check">
         <input type="checkbox" id="previews-input">
-        Mostrar vistas previas de las imágenes
+        <span data-i18n="settings.previews"></span>
       </label>
-      <small class="help">Desactivadas, no se guardan miniaturas de las imágenes nuevas (ni las llevan las que envías). Las anteriores se conservan por si las vuelves a activar.</small>
+      <small class="help" data-i18n="settings.previewsHelp"></small>
       <div class="input-row">
         <span id="thumbs-usage" class="status-text"></span>
-        <button type="button" id="thumbs-clear-btn" class="text-btn danger-btn">Borrar miniaturas guardadas</button>
+        <button type="button" id="thumbs-clear-btn" class="text-btn danger-btn" data-i18n="thumbs.clear"></button>
       </div>
 
       <div id="system-section" hidden>
         <label class="check">
           <input type="checkbox" id="autostart-input">
-          Iniciar LanChat al encender la PC (en la bandeja)
+          <span data-i18n="system.autostart"></span>
         </label>
-        <label>Firewall de Windows</label>
+        <label data-i18n="system.firewall"></label>
         <div class="input-row">
           <span id="firewall-status" class="status-text"></span>
-          <button type="button" id="firewall-btn" class="text-btn">Permitir</button>
+          <button type="button" id="firewall-btn" class="text-btn" data-i18n="system.allow"></button>
         </div>
-        <small class="help">Hace falta para recibir mensajes y archivos en redes privadas. Pide permiso de administrador.</small>
+        <small class="help" data-i18n="system.firewallHelp"></small>
       </div>
 
       <div id="android-section" hidden>
         <label class="check">
           <input type="checkbox" id="android-autostart">
-          Iniciar LanChat al encender el teléfono
+          <span data-i18n="android.autostart"></span>
         </label>
 
-        <label>Archivos recibidos</label>
+        <label data-i18n="android.received"></label>
         <span id="android-downloads" class="status-text"></span>
 
-        <label>Segundo plano</label>
+        <label data-i18n="android.background"></label>
         <div class="input-row">
           <span id="battery-status" class="status-text"></span>
-          <button type="button" id="battery-btn" class="text-btn">Permitir</button>
+          <button type="button" id="battery-btn" class="text-btn" data-i18n="system.allow"></button>
         </div>
-        <small class="help">Si Android pausa LanChat para ahorrar batería, los mensajes llegan con retraso. En algunos teléfonos (OPPO, Xiaomi, Huawei…) hay que permitir además la actividad en segundo plano en <button type="button" id="app-settings-btn" class="link-btn">la información de la app</button>.</small>
+        <small class="help"><span data-i18n="android.backgroundHelp"></span> <button type="button" id="app-settings-btn" class="link-btn" data-i18n="android.appInfo"></button></small>
 
         <div class="input-row stop-row">
-          <button type="button" id="stop-btn" class="text-btn danger-btn">Detener LanChat</button>
+          <button type="button" id="stop-btn" class="text-btn danger-btn" data-i18n="android.stop"></button>
         </div>
-        <small class="help">Dejas de recibir mensajes hasta que vuelvas a abrir la app. También se detiene desde su notificación.</small>
+        <small class="help" data-i18n="android.stopHelp"></small>
       </div>
 
       <div id="update-section" hidden>
-        <label>Actualizaciones</label>
+        <label data-i18n="update.title"></label>
         <div class="input-row">
           <span id="update-status" class="status-text"></span>
-          <button type="button" id="update-btn" class="text-btn">Buscar actualizaciones</button>
+          <button type="button" id="update-btn" class="text-btn" data-i18n="update.check"></button>
         </div>
         <label class="check">
           <input type="checkbox" id="autoupdate-input">
-          Buscar actualizaciones automáticamente
+          <span data-i18n="update.auto"></span>
         </label>
-        <small class="help">Al abrir LanChat, una vez al día y cuando otro equipo de la red tiene una versión más nueva. Siempre pregunta antes de instalar.</small>
+        <small class="help" data-i18n="update.autoHelp"></small>
       </div>
 
-      <label>Privacidad</label>
+      <label data-i18n="privacy.title"></label>
       <div class="input-row">
-        <button type="button" id="export-btn" class="text-btn">Descargar mis datos</button>
-        <button type="button" id="wipe-open-btn" class="text-btn danger-btn">Borrar todos mis datos…</button>
+        <button type="button" id="export-btn" class="text-btn" data-i18n="privacy.export"></button>
+        <button type="button" id="wipe-open-btn" class="text-btn danger-btn" data-i18n="privacy.wipe"></button>
       </div>
-      <small class="help">La copia es la base de datos de LanChat (se abre con programas para SQLite, p. ej. DB Browser for SQLite). Para borrar una sola conversación usa "Borrar" dentro de ella.</small>
+      <small class="help" data-i18n="privacy.help"></small>
 
-      <p class="help" id="uninstall-row" hidden><button type="button" id="uninstall-btn" class="link-btn">Desinstalar LanChat de esta PC…</button></p>
+      <p class="help" id="uninstall-row" hidden><button type="button" id="uninstall-btn" class="link-btn" data-i18n="privacy.uninstall"></button></p>
 
       <p id="settings-error" class="error" hidden></p>
       <p class="about" id="about"></p>
-      <p class="help"><button type="button" id="settings-about" class="link-btn">Acerca de LanChat</button></p>
+      <p class="help"><button type="button" id="settings-about" class="link-btn" data-i18n="about.title"></button></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button id="settings-save" value="save" class="primary">Guardar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button id="settings-save" value="save" class="primary" data-i18n="composer.save"></button>
       </div>
     </form>
   </dialog>
 
   <dialog id="identity-dialog">
     <form method="dialog">
-      <h2>Identidad de <span id="identity-who"></span></h2>
-      <p class="help">La comunicación con cada equipo va cifrada. Para asegurarte de que hablas con el equipo correcto, compara estas huellas con la otra persona (por teléfono o en persona): deben coincidir con lo que ve ella en su LanChat.</p>
-      <label>Huella de este contacto</label>
+      <h2 id="identity-title"></h2>
+      <p class="help" data-i18n="identity.help"></p>
+      <label data-i18n="identity.theirs"></label>
       <code id="identity-theirs" class="fingerprint"></code>
       <div id="identity-new-box" hidden>
-        <label>Huella nueva que anuncia ahora</label>
+        <label data-i18n="identity.new"></label>
         <code id="identity-new" class="fingerprint"></code>
       </div>
-      <label>Tu huella</label>
+      <label data-i18n="identity.mine"></label>
       <code id="identity-mine" class="fingerprint"></code>
       <div class="actions">
-        <button value="close" class="primary">Cerrar</button>
+        <button value="close" class="primary" data-i18n="dialog.close"></button>
       </div>
     </form>
   </dialog>
@@ -267,37 +273,37 @@
       <h2 id="about-name"></h2>
       <p id="about-version" class="about-version"></p>
       <dl class="about-list">
-        <dt>Licencia</dt>
+        <dt data-i18n="about.licenseLabel"></dt>
         <dd id="about-license"></dd>
-        <dt>Proyecto</dt>
+        <dt data-i18n="about.project"></dt>
         <dd><button type="button" id="about-repo" class="link-btn"></button></dd>
       </dl>
       <p id="about-copyright" class="help"></p>
-      <p class="help">Software libre: puedes usarlo, modificarlo y compartirlo según la GPL v3. Se distribuye sin ninguna garantía.</p>
+      <p class="help" data-i18n="about.free"></p>
       <div class="actions">
-        <button value="close" class="primary">Cerrar</button>
+        <button value="close" class="primary" data-i18n="dialog.close"></button>
       </div>
     </form>
   </dialog>
 
   <dialog id="many-dialog">
     <form method="dialog" id="many-form">
-      <h2>Mensaje a varios</h2>
+      <h2 data-i18n="msg.broadcast"></h2>
       <div class="select-row">
-        Elegir:
-        <button type="button" class="text-btn" data-select="all">Todos</button>
-        <button type="button" class="text-btn" data-select="online">En línea</button>
-        <button type="button" class="text-btn" data-select="none">Ninguno</button>
+        <span data-i18n="pick.choose"></span>
+        <button type="button" class="text-btn" data-select="all" data-i18n="pick.all"></button>
+        <button type="button" class="text-btn" data-select="online" data-i18n="pick.online"></button>
+        <button type="button" class="text-btn" data-select="none" data-i18n="pick.none"></button>
         <span id="many-groups" class="group-buttons"></span>
       </div>
       <ul id="many-list" class="pick-list"></ul>
-      <label for="many-text">Mensaje</label>
+      <label for="many-text" data-i18n="pick.message"></label>
       <textarea id="many-text" rows="4"></textarea>
-      <small class="help">Cada uno lo recibe en su conversación, marcado como mensaje a varios. Los desconectados lo reciben al conectarse.</small>
+      <small class="help" data-i18n="many.help"></small>
       <p id="many-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button value="save" class="primary" id="many-send">Enviar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button value="save" class="primary" id="many-send" data-i18n="composer.send"></button>
       </div>
     </form>
   </dialog>
@@ -307,20 +313,20 @@
       <h2 id="share-title"></h2>
       <p id="share-files" class="help share-files"></p>
       <div class="select-row">
-        Elegir:
-        <button type="button" class="text-btn" data-share-select="online">En línea</button>
-        <button type="button" class="text-btn" data-share-select="none">Ninguno</button>
+        <span data-i18n="pick.choose"></span>
+        <button type="button" class="text-btn" data-share-select="online" data-i18n="pick.online"></button>
+        <button type="button" class="text-btn" data-share-select="none" data-i18n="pick.none"></button>
       </div>
       <ul id="share-list" class="pick-list"></ul>
       <div id="share-text-box" hidden>
-        <label for="share-text">Mensaje</label>
+        <label for="share-text" data-i18n="pick.message"></label>
         <textarea id="share-text" rows="3"></textarea>
       </div>
-      <small class="help">Los desconectados los reciben al conectarse, mientras LanChat siga activo en este teléfono.</small>
+      <small class="help" data-i18n="share.help"></small>
       <p id="share-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button value="save" class="primary" id="share-send">Enviar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button value="save" class="primary" id="share-send" data-i18n="composer.send"></button>
       </div>
     </form>
   </dialog>
@@ -329,13 +335,13 @@
     <form method="dialog" id="forward-form">
       <h2 id="forward-title"></h2>
       <p id="forward-what" class="help share-files"></p>
-      <input id="forward-search" type="search" placeholder="Buscar contacto o sala" autocomplete="off">
+      <input id="forward-search" type="search" data-i18n-placeholder="sidebar.search" autocomplete="off">
       <ul id="forward-list" class="pick-list"></ul>
       <small id="forward-help" class="help"></small>
       <p id="forward-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button value="save" class="primary" id="forward-send">Reenviar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button value="save" class="primary" id="forward-send" data-i18n="menu.forward"></button>
       </div>
     </form>
   </dialog>
@@ -344,17 +350,17 @@
     <form method="dialog" id="room-form">
       <h2 id="room-title"></h2>
       <div id="room-name-box">
-        <label for="room-name">Nombre de la sala</label>
-        <input id="room-name" autocomplete="off" placeholder="p. ej. Proyecto Norte">
+        <label for="room-name" data-i18n="roomDialog.name"></label>
+        <input id="room-name" autocomplete="off" data-i18n-placeholder="roomDialog.namePlaceholder">
       </div>
       <div id="room-members-box">
-        <label>Contactos</label>
+        <label data-i18n="group.contacts"></label>
         <ul id="room-list" class="pick-list"></ul>
         <small id="room-help" class="help"></small>
       </div>
       <p id="room-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
         <button value="save" class="primary" id="room-save"></button>
       </div>
     </form>
@@ -362,41 +368,41 @@
 
   <dialog id="wipe-dialog">
     <form method="dialog" id="wipe-form">
-      <h2>Borrar todos mis datos</h2>
-      <p class="help">Por ejemplo, cuando dejas de usar este equipo o de trabajar en la empresa. Se borra de este equipo:</p>
+      <h2 data-i18n="privacy.wipeTitle"></h2>
+      <p class="help" data-i18n="wipe.intro"></p>
       <ul class="help-list">
-        <li>todas las conversaciones y salas (sales de ellas y se avisa a los demás),</li>
-        <li>las ofertas de archivos (las pendientes se cancelan),</li>
-        <li>los alias y grupos que pusiste a tus contactos,</li>
-        <li>tu nombre y tu mensaje de estado.</li>
+        <li data-i18n="wipe.item1"></li>
+        <li data-i18n="wipe.item2"></li>
+        <li data-i18n="wipe.item3"></li>
+        <li data-i18n="wipe.item4"></li>
       </ul>
-      <p class="help">No se puede deshacer. Los demás conservan su copia de las conversaciones. Los archivos ya recibidos siguen en <span id="wipe-downloads"></span>: bórralos aparte si hace falta.</p>
-      <p class="help"><button type="button" id="wipe-export-btn" class="link-btn">Descargar antes una copia de mis datos</button></p>
-      <label for="wipe-input">Escribe <strong>BORRAR</strong> para confirmar</label>
+      <p class="help"><span data-i18n="wipe.noUndo"></span> <span id="wipe-downloads"></span><span data-i18n="wipe.noUndoAfter"></span></p>
+      <p class="help"><button type="button" id="wipe-export-btn" class="link-btn" data-i18n="wipe.exportFirst"></button></p>
+      <label for="wipe-input" id="wipe-label"></label>
       <input id="wipe-input" autocomplete="off" spellcheck="false">
       <p id="wipe-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button value="save" class="primary danger" id="wipe-btn" disabled>Borrar todo</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button value="save" class="primary danger" id="wipe-btn" data-i18n="wipe.button" disabled></button>
       </div>
     </form>
   </dialog>
 
   <dialog id="remove-dialog">
     <form method="dialog" id="remove-form">
-      <h2>Quitar a <span id="remove-who"></span></h2>
-      <p class="help">Deja de aparecer en tu lista. Si ese equipo vuelve a conectarse, aparecerá de nuevo.</p>
+      <h2 id="remove-title"></h2>
+      <p class="help" data-i18n="remove.help"></p>
       <div id="remove-choice" class="status-options">
-        <strong class="remove-question">¿Qué hacer con su conversación?</strong>
-        <label class="check"><input type="radio" name="remove-mode" value="merge"> Combinarla con la de:</label>
-        <select id="remove-into" aria-label="Contacto con el que combinar la conversación"></select>
-        <small class="help">Úsalo si es la misma persona con otra identidad (p. ej. reinstaló LanChat o cambió de teléfono): sus mensajes quedan juntos en una sola conversación.</small>
-        <label class="check"><input type="radio" name="remove-mode" value="delete"> Borrarla de este equipo</label>
+        <strong class="remove-question" data-i18n="remove.question"></strong>
+        <label class="check"><input type="radio" name="remove-mode" value="merge"> <span data-i18n="remove.merge"></span></label>
+        <select id="remove-into" data-i18n-aria-label="remove.mergeWith"></select>
+        <small class="help" data-i18n="remove.mergeHelp"></small>
+        <label class="check"><input type="radio" name="remove-mode" value="delete"> <span data-i18n="remove.delete"></span></label>
       </div>
       <p id="remove-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button value="save" class="primary danger">Quitar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button value="save" class="primary danger" data-i18n="chat.remove"></button>
       </div>
     </form>
   </dialog>
@@ -408,89 +414,89 @@
       <small id="members-help" class="help"></small>
       <p id="members-error" class="error" hidden></p>
       <div class="actions">
-        <button type="button" id="members-destroy" class="danger-outline" hidden>Eliminar sala</button>
-        <button type="button" id="members-add">Agregar miembros…</button>
-        <button value="close" class="primary">Cerrar</button>
+        <button type="button" id="members-destroy" class="danger-outline" data-i18n="members.destroy" hidden></button>
+        <button type="button" id="members-add" data-i18n="members.add"></button>
+        <button value="close" class="primary" data-i18n="dialog.close"></button>
       </div>
     </form>
   </dialog>
 
   <dialog id="autostart-dialog">
     <form method="dialog">
-      <h2>¿Iniciar LanChat al encender la PC?</h2>
-      <p class="help">Así recibes los mensajes aunque no lo abras: LanChat queda en la bandeja del sistema, junto al reloj. Puedes cambiarlo cuando quieras en Ajustes.</p>
-      <p class="help" id="autostart-moved" hidden>Ya lo tenías activado, pero el programa cambió de carpeta: hace falta confirmarlo para que siga iniciando.</p>
+      <h2 data-i18n="autostart.title"></h2>
+      <p class="help" data-i18n="autostart.help"></p>
+      <p class="help" id="autostart-moved" data-i18n="autostart.moved" hidden></p>
       <div class="actions">
-        <button value="no">Ahora no</button>
-        <button value="yes" class="primary">Sí, iniciar con Windows</button>
+        <button value="no" data-i18n="dialog.notNow"></button>
+        <button value="yes" class="primary" data-i18n="autostart.yes"></button>
       </div>
     </form>
   </dialog>
 
   <dialog id="update-dialog">
     <form method="dialog">
-      <h2>Hay una versión nueva de LanChat</h2>
+      <h2 data-i18n="update.newTitle"></h2>
       <p class="help" id="update-text"></p>
       <div class="actions">
-        <button value="later">Ahora no</button>
-        <button value="install" class="primary">Actualizar</button>
+        <button value="later" data-i18n="dialog.notNow"></button>
+        <button value="install" class="primary" data-i18n="update.install"></button>
       </div>
     </form>
   </dialog>
 
   <dialog id="status-dialog">
     <form method="dialog" id="status-form">
-      <h2>Tu estado</h2>
+      <h2 data-i18n="status.title"></h2>
       <div class="status-options">
-        <label class="check"><input type="radio" name="status" value="available"><span class="dot online available"></span> Disponible</label>
-        <label class="check"><input type="radio" name="status" value="away"><span class="dot online away"></span> Ausente</label>
-        <label class="check"><input type="radio" name="status" value="busy"><span class="dot online busy"></span> Ocupado <small class="help-inline">(sin notificaciones)</small></label>
+        <label class="check"><input type="radio" name="status" value="available"><span class="dot online available"></span> <span data-i18n="status.available"></span></label>
+        <label class="check"><input type="radio" name="status" value="away"><span class="dot online away"></span> <span data-i18n="status.away"></span></label>
+        <label class="check"><input type="radio" name="status" value="busy"><span class="dot online busy"></span> <span data-i18n="status.busy"></span> <small class="help-inline" data-i18n="status.busyNote"></small></label>
       </div>
-      <label for="status-text">Mensaje (opcional)</label>
-      <input id="status-text" autocomplete="off" placeholder="p. ej. En junta hasta las 12">
+      <label for="status-text" data-i18n="status.message"></label>
+      <input id="status-text" autocomplete="off" data-i18n-placeholder="status.messagePlaceholder">
       <label class="check">
         <input type="checkbox" id="autoaway-input">
-        <span id="autoaway-text">Ponerme Ausente tras 10 minutos sin usar la PC</span>
+        <span id="autoaway-text" data-i18n="status.autoAway"></span>
       </label>
       <p id="status-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button value="save" class="primary">Guardar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button value="save" class="primary" data-i18n="composer.save"></button>
       </div>
     </form>
   </dialog>
 
   <dialog id="group-dialog">
     <form method="dialog" id="group-form">
-      <h2>Grupo</h2>
-      <label for="group-input">Grupo de <span id="group-who"></span></label>
-      <input id="group-input" list="group-names" autocomplete="off" placeholder="p. ej. Contabilidad">
+      <h2 data-i18n="chat.group"></h2>
+      <label for="group-input" id="group-label"></label>
+      <input id="group-input" list="group-names" autocomplete="off" data-i18n-placeholder="group.placeholder">
       <datalist id="group-names"></datalist>
-      <small class="help">Solo lo ves tú. Escribe uno nuevo o elige uno existente; vacío = sin grupo.</small>
+      <small class="help" data-i18n="group.help"></small>
       <p id="group-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button value="save" class="primary">Guardar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button value="save" class="primary" data-i18n="composer.save"></button>
       </div>
     </form>
   </dialog>
 
   <dialog id="alias-dialog">
     <form method="dialog" id="alias-form">
-      <h2>Renombrar contacto</h2>
-      <label for="alias-input">Nombre que verás tú</label>
+      <h2 data-i18n="alias.title"></h2>
+      <label for="alias-input" data-i18n="alias.label"></label>
       <input id="alias-input" autocomplete="off">
-      <small class="help">Solo lo ves tú. Déjalo vacío para usar el nombre que eligió el otro usuario.</small>
+      <small class="help" data-i18n="alias.help"></small>
       <p id="alias-error" class="error" hidden></p>
       <div class="actions">
-        <button value="cancel" formnovalidate>Cancelar</button>
-        <button value="save" class="primary">Guardar</button>
+        <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
+        <button value="save" class="primary" data-i18n="composer.save"></button>
       </div>
     </form>
   </dialog>
 
   <!-- Visor de imágenes (vista previa): la imagen completa, sin copias. -->
-  <dialog id="viewer" aria-label="Imagen">
+  <dialog id="viewer" data-i18n-aria-label="viewer.label">
     <img id="viewer-img" alt="">
     <p id="viewer-name"></p>
   </dialog>

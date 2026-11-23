@@ -22,18 +22,19 @@ const (
 	skinToneFirst, skinToneLast = 0x1F3FB, 0x1F3FF
 )
 
-// emojiGroups traduce los grupos de emoji-test.txt, en su orden; el ícono es
-// el de la pestaña. "Component" (tonos de piel y peinados sueltos) se omite.
-var emojiGroups = []struct{ source, name, icon string }{
-	{"Smileys & Emotion", "Caritas y emociones", "😀"},
-	{"People & Body", "Personas y gestos", "👋"},
-	{"Animals & Nature", "Animales y naturaleza", "🐶"},
-	{"Food & Drink", "Comida y bebida", "🍎"},
-	{"Travel & Places", "Viajes y lugares", "🚗"},
-	{"Activities", "Actividades", "⚽"},
-	{"Objects", "Objetos", "💡"},
-	{"Symbols", "Símbolos", "❤"},
-	{"Flags", "Banderas", "🏁"},
+// emojiGroups son los grupos de emoji-test.txt, en su orden, con la clave
+// de su nombre en internal/i18n/locales; el ícono es el de la pestaña.
+// "Component" (tonos de piel y peinados sueltos) se omite.
+var emojiGroups = []struct{ source, key, icon string }{
+	{"Smileys & Emotion", "emoji.smileys", "😀"},
+	{"People & Body", "emoji.people", "👋"},
+	{"Animals & Nature", "emoji.animals", "🐶"},
+	{"Food & Drink", "emoji.food", "🍎"},
+	{"Travel & Places", "emoji.travel", "🚗"},
+	{"Activities", "emoji.activities", "⚽"},
+	{"Objects", "emoji.objects", "💡"},
+	{"Symbols", "emoji.symbols", "❤"},
+	{"Flags", "emoji.flags", "🏁"},
 }
 
 // Emoji regenera internal/ui/web/emoji.js, la lista de emojis del selector,
@@ -103,7 +104,7 @@ export const EMOJI_GROUPS = [
 			return fmt.Errorf("el grupo %q no trae emojis: ¿cambió el formato de emoji-test.txt?", g.source)
 		}
 		total += len(list)
-		fmt.Fprintf(&b, "  {\n    name: %q,\n    icon: %q,\n    list: [\n", g.name, g.icon)
+		fmt.Fprintf(&b, "  {\n    key: %q,\n    icon: %q,\n    list: [\n", g.key, g.icon)
 		for i := 0; i < len(list); i += emojiPerLine {
 			fmt.Fprintf(&b, "      \"%s\",\n", strings.Join(list[i:min(i+emojiPerLine, len(list))], `", "`))
 		}

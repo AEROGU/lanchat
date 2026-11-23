@@ -478,6 +478,8 @@ func TestDemoLogo(t *testing.T) {
 }
 
 func TestDemo(t *testing.T) {
+	// El idioma del sistema, o LANCHAT_LANG (las capturas del README en cada idioma).
+	i18n.SetCurrent(i18n.Resolve("", i18n.System()))
 	s, err := Listen(newDemoBackend(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)

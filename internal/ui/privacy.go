@@ -15,8 +15,16 @@ import (
 	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
-// wipeConfirmation es lo que el usuario debe escribir para borrar todos sus datos.
-const wipeConfirmation = "BORRAR"
+// wipeConfirmed: el usuario escribió la palabra para borrar todos sus datos
+// (i18n "wipe.word": BORRAR, DELETE…), en cualquiera de los idiomas.
+func wipeConfirmed(s string) bool {
+	for _, l := range i18n.Languages() {
+		if s == i18n.TL(l.Code, "wipe.word") {
+			return true
+		}
+	}
+	return false
+}
 
 // handleExport descarga una copia de la base de datos.
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
@@ -168,8 +176,8 @@ func (s *Server) handleWipe(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &req) {
 		return
 	}
-	if req.Confirm != wipeConfirmation {
-		s.fail(w, http.StatusBadRequest, errors.New(`escribe "`+wipeConfirmation+`" para confirmar`))
+	if !wipeConfirmed(req.Confirm) {
+		s.fail(w, http.StatusBadRequest, i18n.E("wipe.typeWord", "word", i18n.T("wipe.word")))
 		return
 	}
 	if err := s.b.WipeData(r.Context()); err != nil {

@@ -1258,7 +1258,7 @@ func TestEmojiData(t *testing.T) {
 		t.Fatalf("emoji.js: %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
 	js := string(body)
-	if n := strings.Count(js, "name: "); n != 9 {
+	if n := strings.Count(js, "key: \"emoji."); n != 9 {
 		t.Errorf("grupos de emojis = %d, quería 9", n)
 	}
 	// Carita, familia (con uniones) y bandera: los tres como escapes.

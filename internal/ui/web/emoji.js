@@ -9,7 +9,7 @@
 
 export const EMOJI_GROUPS = [
   {
-    name: "Caritas y emociones",
+    key: "emoji.smileys",
     icon: "😀",
     list: [
       "\u{1F600}", "\u{1F603}", "\u{1F604}", "\u{1F601}", "\u{1F606}", "\u{1F605}", "\u{1F923}", "\u{1F602}",
@@ -37,7 +37,7 @@ export const EMOJI_GROUPS = [
     ],
   },
   {
-    name: "Personas y gestos",
+    key: "emoji.people",
     icon: "👋",
     list: [
       "\u{1F44B}", "\u{1F91A}", "\u{1F590}\u{FE0F}", "\u{270B}", "\u{1F596}", "\u{1FAF1}", "\u{1FAF2}", "\u{1FAF3}",
@@ -92,7 +92,7 @@ export const EMOJI_GROUPS = [
     ],
   },
   {
-    name: "Animales y naturaleza",
+    key: "emoji.animals",
     icon: "🐶",
     list: [
       "\u{1F435}", "\u{1F412}", "\u{1F98D}", "\u{1F9A7}", "\u{1F436}", "\u{1F415}", "\u{1F9AE}", "\u{1F415}\u{200D}\u{1F9BA}",
@@ -118,7 +118,7 @@ export const EMOJI_GROUPS = [
     ],
   },
   {
-    name: "Comida y bebida",
+    key: "emoji.food",
     icon: "🍎",
     list: [
       "\u{1F347}", "\u{1F348}", "\u{1F349}", "\u{1F34A}", "\u{1F34B}", "\u{1F34B}\u{200D}\u{1F7E9}", "\u{1F34C}", "\u{1F34D}",
@@ -141,7 +141,7 @@ export const EMOJI_GROUPS = [
     ],
   },
   {
-    name: "Viajes y lugares",
+    key: "emoji.travel",
     icon: "🚗",
     list: [
       "\u{1F30D}", "\u{1F30E}", "\u{1F30F}", "\u{1F310}", "\u{1F5FA}\u{FE0F}", "\u{1F5FE}", "\u{1F9ED}", "\u{1F3D4}\u{FE0F}",
@@ -175,7 +175,7 @@ export const EMOJI_GROUPS = [
     ],
   },
   {
-    name: "Actividades",
+    key: "emoji.activities",
     icon: "⚽",
     list: [
       "\u{1F383}", "\u{1F384}", "\u{1F386}", "\u{1F387}", "\u{1F9E8}", "\u{2728}", "\u{1F388}", "\u{1F389}",
@@ -192,7 +192,7 @@ export const EMOJI_GROUPS = [
     ],
   },
   {
-    name: "Objetos",
+    key: "emoji.objects",
     icon: "💡",
     list: [
       "\u{1F453}", "\u{1F576}\u{FE0F}", "\u{1F97D}", "\u{1F97C}", "\u{1F9BA}", "\u{1F454}", "\u{1F455}", "\u{1F456}",
@@ -231,7 +231,7 @@ export const EMOJI_GROUPS = [
     ],
   },
   {
-    name: "Símbolos",
+    key: "emoji.symbols",
     icon: "❤",
     list: [
       "\u{1F3E7}", "\u{1F6AE}", "\u{1F6B0}", "\u{267F}", "\u{1F6B9}", "\u{1F6BA}", "\u{1F6BB}", "\u{1F6BC}",
@@ -265,7 +265,7 @@ export const EMOJI_GROUPS = [
     ],
   },
   {
-    name: "Banderas",
+    key: "emoji.flags",
     icon: "🏁",
     list: [
       "\u{1F3C1}", "\u{1F6A9}", "\u{1F38C}", "\u{1F3F4}", "\u{1F3F3}\u{FE0F}", "\u{1F3F3}\u{FE0F}\u{200D}\u{1F308}", "\u{1F3F3}\u{FE0F}\u{200D}\u{26A7}\u{FE0F}", "\u{1F3F4}\u{200D}\u{2620}\u{FE0F}",

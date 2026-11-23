@@ -830,7 +830,7 @@ func (a *App) SetDownloadDir(dir string) error {
 	dir = strings.TrimSpace(dir)
 	if dir != "" {
 		if !filepath.IsAbs(dir) {
-			return errors.New(`escribe la ruta completa de la carpeta, p. ej. D:\Recibidos`)
+			return i18n.E("app.fullPath")
 		}
 		dir = filepath.Clean(dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {

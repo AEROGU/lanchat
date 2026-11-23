@@ -36,12 +36,60 @@ const state = {
 // Extensiones de programas o scripts: se pide confirmación antes de abrirlos.
 const RISKY_EXT = /\.(exe|msi|msix|bat|cmd|com|scr|pif|cpl|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|hta|lnk|reg|jar|dll|appx)$/i;
 
-const timeFmt = new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" });
-const dayFmt = new Intl.DateTimeFormat("es", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-const weekdayFmt = new Intl.DateTimeFormat("es", { weekday: "short" });
-const shortDateFmt = new Intl.DateTimeFormat("es", { day: "2-digit", month: "2-digit", year: "2-digit" });
-const copyDateFmt = new Intl.DateTimeFormat("es", { day: "2-digit", month: "2-digit", year: "numeric" });
 const encoder = new TextEncoder();
+
+// ---------- Idioma ----------
+
+// Los textos vienen de GET /api/locale (internal/i18n/locales/<idioma>.json):
+// el idioma del sistema o el elegido en Ajustes, con las claves que le falten
+// tomadas del inglés.
+const i18n = { lang: "en", messages: {} };
+let pluralRules = new Intl.PluralRules("en");
+let timeFmt, dayFmt, weekdayFmt, shortDateFmt, copyDateFmt, expiryFmt;
+
+// t traduce key: params sustituye los {datos} del texto, y params.n elige la
+// forma de plural.
+function t(key, params = {}) {
+  let text = i18n.messages[key];
+  if (text == null) return key;
+  if (typeof text === "object") text = text[pluralRules.select(params.n ?? 0)] ?? text.other;
+  return text.replace(/\{(\w+)\}/g, (all, name) => (name in params ? String(params[name]) : all));
+}
+
+async function loadLocale() {
+  const res = await fetch("/api/locale");
+  if (!res.ok) throw new Error(`/api/locale: ${res.status}`);
+  setLocale(await res.json());
+}
+
+function setLocale({ lang, messages }) {
+  i18n.lang = lang;
+  i18n.messages = messages;
+  pluralRules = new Intl.PluralRules(lang);
+  timeFmt = new Intl.DateTimeFormat(lang, { hour: "2-digit", minute: "2-digit" });
+  dayFmt = new Intl.DateTimeFormat(lang, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  weekdayFmt = new Intl.DateTimeFormat(lang, { weekday: "short" });
+  shortDateFmt = new Intl.DateTimeFormat(lang, { day: "2-digit", month: "2-digit", year: "2-digit" });
+  copyDateFmt = new Intl.DateTimeFormat(lang, { day: "2-digit", month: "2-digit", year: "numeric" });
+  expiryFmt = new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  document.documentElement.lang = lang;
+  translatePage(document);
+}
+
+// translatePage pone los textos de la página marcados con data-i18n (el
+// contenido) y data-i18n-title, -placeholder y -aria-label (esos atributos).
+function translatePage(root) {
+  for (const el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+  for (const [attr, key] of [["title", "i18nTitle"], ["placeholder", "i18nPlaceholder"], ["aria-label", "i18nAriaLabel"]]) {
+    for (const el of root.querySelectorAll(`[data-i18n-${attr}]`)) el.setAttribute(attr, t(el.dataset[key]));
+  }
+}
+
+// compareNames ordena nombres como en el idioma de la página.
+const compareNames = (a, b) => a.localeCompare(b, i18n.lang, { sensitivity: "base" });
+
+// joinNames une nombres como en el idioma: "Ana, Luis y Eva".
+const joinNames = (names) => new Intl.ListFormat(i18n.lang, { type: "conjunction" }).format(names);
 
 // ROOM antecede al id de una sala en state.current; coincide con roomViewPrefix
 // del servidor, que usa la misma clave para no notificar la sala que se ve.
@@ -66,15 +114,15 @@ async function request(method, path, body) {
   try {
     res = await fetch(path, opts);
   } catch {
-    throw new ApiError("LanChat no responde. ¿Se cerró el programa?");
+    throw new ApiError(t("api.noResponse"));
   }
   if (res.status === 401 || res.status === 403) {
     expire();
-    throw new ApiError("Sesión caducada.");
+    throw new ApiError(t("api.expired"));
   }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new ApiError(data?.error ?? `Error ${res.status}`);
+  if (!res.ok) throw new ApiError(data?.error ?? t("api.error", { status: res.status }));
   return data;
 }
 
@@ -99,6 +147,7 @@ const api = {
   reply: (id, body) => request("POST", "/api/messages/reply", { id, body }),
   forward: (ids, peers, rooms) => request("POST", "/api/messages/forward", { ids, peers, rooms }),
   readReceipts: (enabled) => request("POST", "/api/read-receipts", { enabled }),
+  language: (language) => request("POST", "/api/language", { language }),
   previews: (enabled) => request("POST", "/api/previews", { enabled }),
   hideOffline: (hide) => request("POST", "/api/hide-offline", { hide }),
   collapsedGroups: (list) => request("POST", "/api/collapsed-groups", { list }),
@@ -139,7 +188,7 @@ const api = {
 
 function expire() {
   state.expired = true;
-  showBanner("Esta ventana es de una sesión anterior de LanChat. Ciérrala y ábrela desde el icono de la bandeja.");
+  showBanner(t("api.oldSession"));
 }
 
 let bannerTimer;
@@ -178,10 +227,11 @@ async function loadState() {
   state.downloadDir = s.downloadDir;
   state.mobile = s.mobile;
   state.update = s.update;
+  state.languages = s.languages;
   document.body.classList.toggle("mobile", s.mobile);
   if (s.mobile) {
-    $("input").placeholder = "Escribe un mensaje";
-    $("autoaway-text").textContent = "Ponerme Ausente tras 10 minutos con la pantalla apagada";
+    $("input").placeholder = t("composer.placeholderMobile");
+    $("autoaway-text").textContent = t("status.autoAwayMobile");
     // Que abrir Ajustes no despliegue el teclado: el foco va al título y no
     // al campo del nombre.
     const title = $("settings").querySelector("h2");
@@ -229,7 +279,7 @@ window.lanchatOpen = (id) => {
 function sortedContacts() {
   return [...state.contacts.values()].filter((c) => !c.removed).sort(
     (a, b) => lastAt(b) - lastAt(a) || b.online - a.online ||
-      a.displayName.localeCompare(b.displayName, "es", { sensitivity: "base" }),
+      compareNames(a.displayName, b.displayName),
   );
 }
 
@@ -264,16 +314,17 @@ function listTime(ts) {
   const now = new Date();
   if (d.toDateString() === now.toDateString()) return timeFmt.format(d);
   const days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 86400000);
-  if (days === 1) return "Ayer";
+  if (days === 1) return t("time.yesterday");
   if (days > 1 && days < 7) return weekdayFmt.format(d);
   return shortDateFmt.format(d);
 }
 
 // previewText es el comienzo del último mensaje, para la lista.
 function previewText(m) {
-  if (m.deleted) return m.outgoing ? "🚫 Eliminaste este mensaje" : "🚫 Se eliminó este mensaje";
-  if (m.kind === "event" || !m.roomId) return m.body;
-  return `${m.outgoing ? "Tú" : memberName(m.peerId).split(" ")[0]}: ${m.body}`;
+  if (m.deleted) return "🚫 " + t(m.outgoing ? "msg.youDeleted" : "msg.deleted");
+  if (m.kind === "event") return noticeText(m);
+  if (!m.roomId) return m.body;
+  return t("list.author", { name: m.outgoing ? t("msg.you") : memberName(m.peerId).split(" ")[0], text: m.body });
 }
 
 // previewElement es la segunda línea de un contacto o sala con mensajes: las
@@ -285,7 +336,7 @@ function previewElement(m) {
     const ticks = document.createElement("span");
     ticks.className = "ticks" + (m.readAt ? " read" : "");
     ticks.textContent = m.status === "pending" ? "🕓 " : m.readAt ? "✓✓ " : "✓ ";
-    ticks.title = m.status === "pending" ? "Pendiente" : m.readAt ? "Leído" : "Entregado";
+    ticks.title = t(m.status === "pending" ? "ticks.pending" : m.readAt ? "ticks.read" : "ticks.delivered");
     span.append(ticks);
   }
   span.append(previewText(m));
@@ -336,12 +387,12 @@ function totalUnread() {
 
 // ---------- Render: barra lateral ----------
 
-const STATUS_LABELS = { available: "Disponible", away: "Ausente", busy: "Ocupado" };
+const STATUS_KEYS = { available: "status.available", away: "status.away", busy: "status.busy" };
 
 // statusLabel describe el estado de un contacto en línea ("" si no lo está).
 function statusLabel(status, text) {
   if (!status) return "";
-  return STATUS_LABELS[status] + (text ? ` · ${text}` : "");
+  return t(STATUS_KEYS[status] ?? "status.available") + (text ? ` · ${text}` : "");
 }
 
 function dotClass(online, status) {
@@ -368,7 +419,7 @@ function initials(name) {
   const words = name.split(/[\s._-]+/).filter((w) => [...w].some(isChar));
   if (words.length === 0) return "?";
   const first = (w) => [...w].find(isChar);
-  return (first(words[0]) + (words.length > 1 ? first(words.at(-1)) : "")).toLocaleUpperCase("es");
+  return (first(words[0]) + (words.length > 1 ? first(words.at(-1)) : "")).toLocaleUpperCase(i18n.lang);
 }
 
 // photoURL es la dirección de la foto de perfil de un equipo (null si no
@@ -416,11 +467,11 @@ function renderSelf() {
   $("me-name").textContent = s.name || s.hostname;
   $("me-avatar").replaceChildren(selfAvatar());
   if ($("settings").open) renderPhotoSettings();
-  $("me-detail").textContent = s.name ? s.hostname : "Sin nombre: haz clic en ⚙ para elegirlo";
+  $("me-detail").textContent = s.name ? s.hostname : t("self.noName");
   // Inactivo y Disponible: los demás te ven Ausente.
   const shown = s.status === "available" && s.idle ? "away" : s.status;
   $("status-dot").className = dotClass(true, shown);
-  $("status-label").textContent = statusLabel(shown, s.statusText) + (shown !== s.status ? " (inactivo)" : "");
+  $("status-label").textContent = statusLabel(shown, s.statusText) + (shown !== s.status ? ` (${t("status.idle")})` : "");
 }
 
 function openStatus() {
@@ -463,7 +514,7 @@ function savePref(field, value, save) {
   state.self = { ...state.self, [field]: value };
   prefQueue = prefQueue
     .then(() => save(value))
-    .catch((e) => showBanner(`No se pudo guardar la preferencia: ${e.message}`, 5000));
+    .catch((e) => showBanner(t("prefs.saveFailed", { err: e.message }), 5000));
 }
 
 function hideOffline() {
@@ -480,9 +531,15 @@ function setHideOffline(hide) {
 function visibleContact(c, filter) {
   return c.online || filter || !hideOffline() || c.unread > 0 || c.id === state.current;
 }
+// Claves de los grupos fijos en collapsedGroups (guardadas en la
+// configuración: no cambian con el idioma); groupLabel da su nombre.
 const NO_GROUP = "Sin grupo";
 const ROOMS_GROUP = "Salas";
 const CONTACTS_GROUP = "Contactos";
+
+function groupLabel(name) {
+  return { [NO_GROUP]: t("group.none"), [ROOMS_GROUP]: t("group.rooms"), [CONTACTS_GROUP]: t("group.contacts") }[name] ?? name;
+}
 
 function collapsedGroups() {
   return new Set(state.self?.collapsedGroups ?? []);
@@ -500,7 +557,7 @@ function toggleGroup(name) {
 
 function groupNames() {
   const names = new Set(sortedContacts().map((c) => c.group).filter(Boolean));
-  return [...names].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+  return [...names].sort(compareNames);
 }
 
 // groupHeader muestra "▾ Nombre (en línea/total)"; las salas, solo el total.
@@ -510,24 +567,24 @@ function groupHeader(name, members, collapsed, foldable = true) {
   const count = name === ROOMS_GROUP
     ? members.length
     : `${members.filter((c) => c.online).length}/${members.length}`;
-  li.textContent = `${foldable ? (collapsed ? "▸ " : "▾ ") : ""}${name} (${count})`;
+  li.textContent = `${foldable ? (collapsed ? "▸ " : "▾ ") : ""}${groupLabel(name)} (${count})`;
   if (foldable) {
-    li.title = collapsed ? "Mostrar" : "Ocultar";
+    li.title = t(collapsed ? "group.show" : "group.hide");
     li.addEventListener("click", () => toggleGroup(name));
   }
   return li;
 }
 
 function renderContacts() {
-  const filter = $("search").value.trim().toLocaleLowerCase("es");
+  const filter = $("search").value.trim().toLocaleLowerCase(i18n.lang);
   const ul = $("contacts");
   ul.replaceChildren();
   const matching = sortedContacts().filter(
-    (c) => !filter || `${c.displayName} ${c.detail} ${c.group}`.toLocaleLowerCase("es").includes(filter),
+    (c) => !filter || `${c.displayName} ${c.detail} ${c.group}`.toLocaleLowerCase(i18n.lang).includes(filter),
   );
   const list = matching.filter((c) => visibleContact(c, filter));
   const hidden = matching.length - list.length;
-  const rooms = sortedRooms().filter((r) => !filter || r.name.toLocaleLowerCase("es").includes(filter));
+  const rooms = sortedRooms().filter((r) => !filter || r.name.toLocaleLowerCase(i18n.lang).includes(filter));
   const collapsed = filter ? new Set() : collapsedGroups(); // al buscar se muestra todo
   if (rooms.length > 0) {
     ul.append(groupHeader(ROOMS_GROUP, rooms, collapsed.has(ROOMS_GROUP)));
@@ -551,7 +608,7 @@ function renderContacts() {
   $("no-contacts").hidden = sortedContacts().length > 0;
   const btn = $("offline-btn");
   btn.setAttribute("aria-pressed", hideOffline());
-  btn.title = hideOffline() ? "Mostrar los contactos desconectados" : "Ocultar los contactos desconectados";
+  btn.title = t(hideOffline() ? "list.showOffline" : "list.hideOffline");
   btn.setAttribute("aria-label", btn.title);
 
   const total = totalUnread();
@@ -562,11 +619,11 @@ function renderContacts() {
 function hiddenHint(n) {
   const li = document.createElement("li");
   li.className = "hidden-hint";
-  li.append(`${n} ${n === 1 ? "desconectado oculto" : "desconectados ocultos"} · `,
+  li.append(`${t("list.hiddenOffline", { n })} · `,
     Object.assign(document.createElement("button"), {
       type: "button",
       className: "link-btn",
-      textContent: "Mostrar",
+      textContent: t("list.show"),
       onclick: () => setHideOffline(false),
     }));
   return li;
@@ -586,10 +643,10 @@ function incompatibleText(c) {
   const url = `${state.self.repository}/releases`;
   const theirs = c.appVersion ? ` (${c.appVersion})` : "";
   if (c.incompatible === "older") {
-    return `${c.displayName} usa una versión anterior de LanChat${theirs} que ya no es compatible con la tuya: no puedes enviarle ni recibir sus mensajes hasta que actualice. LanChat le envía un aviso automático para que instale la última desde ${url}`;
+    return t("contact.incompatibleOlder", { name: c.displayName, theirs, url });
   }
   if (c.incompatible === "newer") {
-    return `${c.displayName} usa una versión más nueva de LanChat${theirs} que ya no es compatible con la tuya: para volver a escribirse, actualiza desde ${url}`;
+    return t("contact.incompatibleNewer", { name: c.displayName, theirs, url });
   }
   return "";
 }
@@ -598,7 +655,7 @@ function incompatibleText(c) {
 function incompatibleBadge() {
   const span = document.createElement("span");
   span.className = "incompatible";
-  span.textContent = "incompatible";
+  span.textContent = t("contact.incompatible");
   return span;
 }
 
@@ -609,7 +666,7 @@ function contactItem(c) {
   // chat): la segunda línea es para el último mensaje, como en WhatsApp.
   li.title = [
     c.detail,
-    c.online ? statusLabel(c.status, c.statusText) : "Desconectado",
+    c.online ? statusLabel(c.status, c.statusText) : t("status.offline"),
     c.appVersion && `LanChat ${c.appVersion}`,
   ].filter(Boolean).join("\n");
 
@@ -620,14 +677,14 @@ function contactItem(c) {
   name.textContent = c.displayName;
   if (c.identityChanged) {
     name.textContent = `⚠ ${c.displayName}`;
-    li.title = "Su identidad cambió: revisa antes de enviarle algo";
+    li.title = t("contact.identityChanged");
   }
   text.append(nameRow(name, c), secondRow(contactSecondLine(c), c.unread));
   if (c.incompatible) {
     // En su propia línea para que no la corte el ancho de la lista.
     const line = document.createElement("span");
     line.className = "status-line";
-    line.append(incompatibleBadge(), c.incompatible === "older" ? " · debe actualizar" : " · actualiza tu LanChat");
+    line.append(incompatibleBadge(), " · " + t(c.incompatible === "older" ? "contact.mustUpdate" : "contact.updateYours"));
     text.append(line);
     li.title = incompatibleText(c);
   }
@@ -691,19 +748,41 @@ const hasFiles = (e) => e.dataTransfer?.types.includes("Files");
 function sortedRooms() {
   return [...state.rooms.values()].sort(
     (a, b) => a.left - b.left || lastAt(b) - lastAt(a) ||
-      a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+      compareNames(a.name, b.name),
   );
 }
 
 // memberName es el nombre de un miembro de sala tal como lo ve este usuario.
 function memberName(id) {
-  if (id === state.self.id) return "Tú";
-  return state.contacts.get(id)?.displayName ?? "Alguien que no conoces";
+  if (id === state.self.id) return t("msg.you");
+  return state.contacts.get(id)?.displayName ?? t("room.unknownMember");
 }
 
 function roomDetail(r) {
-  if (r.left) return "Ya no estás en esta sala";
-  return `${r.members.length} ${r.members.length === 1 ? "miembro" : "miembros"}`;
+  if (r.left) return t("room.left");
+  return t("room.members", { n: r.members.length });
+}
+
+// NOTICE_KEYS es el texto de cada tipo de aviso de sala (protocol.RoomNotice).
+const NOTICE_KEYS = {
+  created: "notice.created", added: "notice.added", renamed: "notice.renamed", removed: "notice.removed",
+  admin: "notice.admin", unadmin: "notice.unadmin", left: "notice.left",
+};
+
+// noticeText es el aviso de sala m en el idioma de la página, con los nombres
+// como los ve este usuario. Sin datos (de una versión anterior) o de un tipo
+// desconocido, el texto con que llegó.
+function noticeText(m) {
+  const n = m.notice;
+  const key = n && NOTICE_KEYS[n.type];
+  if (!key) return m.body;
+  const selfName = state.self.name || state.self.hostname;
+  const nameOf = (x) => (x.id === state.self.id ? selfName : state.contacts.get(x.id)?.displayName ?? x.name);
+  return t(key, {
+    who: m.outgoing ? selfName : memberName(m.peerId),
+    whom: joinNames((n.members ?? []).map(nameOf)),
+    name: n.name ?? "",
+  });
 }
 
 function roomItem(r) {
@@ -750,7 +829,7 @@ function renderRoomHeader(r) {
   syncComposer();
   const note = $("offline-note");
   note.hidden = !r.left;
-  note.textContent = "Ya no estás en esta sala: no recibes sus mensajes. Para volver, pide a un miembro que te agregue.";
+  note.textContent = t("room.leftNote");
 }
 
 function renderHeader() {
@@ -770,15 +849,15 @@ function renderHeader() {
   let detail = c.detail;
   if (c.online) detail += ` · ${statusLabel(c.status, c.statusText)}`;
   if (c.appVersion && c.appVersion !== state.self.version) {
-    detail += ` · versión ${c.appVersion} (la tuya es ${state.self.version})`;
+    detail += ` · ${t("contact.versionDetail", { theirs: c.appVersion, yours: state.self.version })}`;
   }
   $("peer-detail").textContent = detail;
   $("remove-contact-btn").hidden = c.online;
   const note = $("offline-note");
   note.hidden = c.online;
-  note.textContent = `${c.displayName} está desconectado. Los mensajes que envíes se entregarán cuando se conecte.`;
+  note.textContent = t("contact.offlineNote", { name: c.displayName });
   $("identity-note").hidden = !c.identityChanged;
-  $("identity-note-text").textContent = `La identidad de ${c.displayName} cambió. Si reinstaló LanChat es normal; si no, alguien podría estar haciéndose pasar por ese equipo. Hasta que confíes en la nueva identidad no se le envía nada.`;
+  $("identity-note-text").textContent = t("contact.identityNote", { name: c.displayName });
 }
 
 function dayLabel(ts) {
@@ -786,8 +865,8 @@ function dayLabel(ts) {
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return "Hoy";
-  if (d.toDateString() === yesterday.toDateString()) return "Ayer";
+  if (d.toDateString() === today.toDateString()) return t("time.today");
+  if (d.toDateString() === yesterday.toDateString()) return t("time.yesterday");
   return dayFmt.format(d);
 }
 
@@ -800,11 +879,11 @@ function messageElement(m) {
     : msgClass(m) + (m.kind === "event" ? " event" : "");
   div.dataset.id = m.id;
   if (m.kind === "event") {
-    div.append(document.createTextNode(m.body), metaElement(m));
+    div.append(document.createTextNode(noticeText(m)), metaElement(m));
     return div;
   }
   if (m.deleted) {
-    const text = m.outgoing ? "🚫 Eliminaste este mensaje" : "🚫 Se eliminó este mensaje";
+    const text = "🚫 " + t(m.outgoing ? "msg.youDeleted" : "msg.deleted");
     div.append(document.createTextNode(text), metaElement(m));
     return div;
   }
@@ -817,7 +896,7 @@ function messageElement(m) {
   if (m.broadcast) {
     const tag = document.createElement("span");
     tag.className = "broadcast-tag";
-    tag.textContent = "📢 Mensaje a varios";
+    tag.textContent = "📢 " + t("msg.broadcast");
     div.append(tag);
   }
   if (m.forwarded) div.append(forwardedTag());
@@ -829,7 +908,7 @@ function messageElement(m) {
 // quoteText es lo que se muestra de un mensaje citado: su texto o, de un
 // envío de archivos, su resumen ("📎 informe.pdf (2 MB)").
 function quoteText(m) {
-  return m.deleted ? "🚫 Mensaje eliminado" : m.body;
+  return m.deleted ? "🚫 " + t("msg.deletedQuote") : m.kind === "event" ? noticeText(m) : m.body;
 }
 
 // quoteElement es la cita dentro de una respuesta. Si el original está
@@ -840,11 +919,11 @@ function quoteElement(r) {
   const q = document.createElement("button");
   q.type = "button";
   q.className = "quote";
-  q.title = "Ir al mensaje original";
+  q.title = t("msg.goToOriginal");
   const who = document.createElement("strong");
   who.textContent = memberName(r.author);
   const text = document.createElement("span");
-  text.textContent = orig ? quoteText(orig) : r.deleted ? "🚫 Mensaje eliminado" : r.text;
+  text.textContent = orig ? quoteText(orig) : r.deleted ? "🚫 " + t("msg.deletedQuote") : r.text;
   q.append(who, text);
   q.addEventListener("click", (e) => {
     if (state.selecting) return; // al seleccionar, tocarla marca el mensaje
@@ -865,7 +944,7 @@ async function jumpToMessage(id) {
   }
   const el = [...$("messages").querySelectorAll("[data-id]")].find((x) => x.dataset.id === id);
   if (!el) {
-    showBanner("El mensaje original ya no está en esta conversación.", 4000);
+    showBanner(t("msg.originalGone"), 4000);
     return;
   }
   el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -878,7 +957,7 @@ async function jumpToMessage(id) {
 function forwardedTag() {
   const tag = document.createElement("span");
   tag.className = "broadcast-tag forwarded-tag";
-  tag.textContent = "↪ Reenviado";
+  tag.textContent = "↪ " + t("msg.forwarded");
   return tag;
 }
 
@@ -890,7 +969,7 @@ function forwardedTag() {
 
 // MAX_RECENT: cuántos emojis recuerda la pestaña Recientes (cuatro renglones).
 const MAX_RECENT = 32;
-const RECENT_TAB = { name: "Recientes", icon: "🕒" };
+const RECENT_TAB = { key: "emoji.recent", icon: "🕒" };
 // EMOJI_FONTS: las fuentes de emoji de Windows, Android y macOS.
 const EMOJI_FONTS = '"Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif';
 // Una secuencia que el sistema no conoce se dibuja como varios emojis
@@ -973,7 +1052,7 @@ function renderEmojiPanel() {
     b.type = "button";
     b.className = "emoji-tab" + (g === emojiTab ? " selected" : "");
     b.textContent = g.icon;
-    b.title = g.name;
+    b.title = t(g.key);
     b.setAttribute("role", "tab");
     b.setAttribute("aria-selected", g === emojiTab);
     b.addEventListener("click", () => {
@@ -982,7 +1061,7 @@ function renderEmojiPanel() {
     });
     return b;
   }));
-  $("emoji-title").textContent = emojiTab.name;
+  $("emoji-title").textContent = t(emojiTab.key);
   const list = (emojiTab === RECENT_TAB ? recentEmoji() : emojiTab.list).filter(drawable);
   const grid = $("emoji-grid");
   grid.replaceChildren(...list.map((emoji) => {
@@ -996,9 +1075,7 @@ function renderEmojiPanel() {
   if (list.length === 0) {
     const empty = document.createElement("div");
     empty.className = "emoji-empty";
-    empty.textContent = emojiTab === RECENT_TAB
-      ? "Aquí aparecerán los emojis que uses."
-      : "Este equipo no puede mostrar los emojis de este grupo.";
+    empty.textContent = t(emojiTab === RECENT_TAB ? "emoji.recentEmpty" : "emoji.groupEmpty");
     grid.append(empty);
   }
   grid.scrollTop = 0;
@@ -1078,8 +1155,8 @@ function withActions(div, m) {
   btn.type = "button";
   btn.className = "msg-act";
   btn.textContent = "☺";
-  btn.title = "Reaccionar";
-  btn.setAttribute("aria-label", "Reaccionar u otras opciones del mensaje");
+  btn.title = t("menu.react");
+  btn.setAttribute("aria-label", t("menu.reactOrMore"));
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     openMsgMenu(m.id, btn);
@@ -1138,7 +1215,7 @@ function openMsgMenu(id, anchor, showMore = false, at = null) {
     b.type = "button";
     b.className = "emoji" + (emoji === mine ? " mine" : "");
     b.textContent = emoji;
-    b.title = emoji === mine ? "Quitar mi reacción" : "Reaccionar";
+    b.title = t(emoji === mine ? "menu.removeReaction" : "menu.react");
     b.addEventListener("click", () => react(m, emoji));
     row.append(b);
   }
@@ -1147,7 +1224,7 @@ function openMsgMenu(id, anchor, showMore = false, at = null) {
     more.type = "button";
     more.className = "emoji more";
     more.textContent = "＋";
-    more.title = "Más reacciones";
+    more.title = t("menu.moreReactions");
     more.addEventListener("click", (e) => {
       e.stopPropagation();
       openMsgMenu(id, anchor, true, at);
@@ -1163,27 +1240,28 @@ function openMsgMenu(id, anchor, showMore = false, at = null) {
     b.addEventListener("click", onClick);
     menu.append(b);
   };
-  if (canReply(m)) item("reply", "Responder", () => startReply(m));
+  if (canReply(m)) item("reply", t("menu.reply"), () => startReply(m));
   if (m.kind === "text" || m.transfer) {
-    item("copy", "Copiar", () => {
+    item("copy", t("menu.copy"), () => {
       closeMsgMenu();
-      copyText(copyBody(m), "Mensaje copiado");
+      copyText(copyBody(m), t("copy.done", { n: 1 }));
     });
   }
-  if (canEdit(m)) item("edit", "Editar", () => startEdit(m));
+  if (canEdit(m)) item("edit", t("menu.edit"), () => startEdit(m));
   if (canForward(m)) {
-    item("forward", "Reenviar", () => {
+    item("forward", t("menu.forward"), () => {
       closeMsgMenu();
       openForward([m.id]);
     });
   }
-  item("select", "Seleccionar", () => startSelect(m));
-  if (canDelete(m)) item("trash", "Eliminar para todos", () => deleteForEveryone(m), true);
+  item("select", t("menu.select"), () => startSelect(m));
+  if (canDelete(m)) item("trash", t("menu.deleteForEveryone"), () => deleteForEveryone(m), true);
   if (canDeleteHere(m)) {
-    item("erase", "Borrar de este equipo", () => {
+    item("erase", t("menu.deleteHere"), () => {
       closeMsgMenu();
-      const who = m.outgoing ? memberName(m.peerId) : "el remitente";
-      transferAction("delete", m.id, `¿Borrar este envío de este equipo, con sus vistas previas? ${who} conserva el suyo.`);
+      transferAction("delete", m.id, m.outgoing
+        ? t("transfer.deleteHereOut", { name: memberName(m.peerId) })
+        : t("transfer.deleteHereIn"));
     }, true);
   }
   menu.hidden = false;
@@ -1235,7 +1313,7 @@ async function copyText(text, done) {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      return showBanner("No se pudo copiar al portapapeles.", 4000);
+      return showBanner(t("copy.failed"), 4000);
     }
   }
   showBanner(done, 2000);
@@ -1252,11 +1330,11 @@ const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|heic)$/i;
 // carpetas: "📷 Envió una imagen: foto.jpg", "📎 Envió 3 archivos",
 // "📁 Envió una carpeta: Facturas (8 archivos)" o, si hay de varios tipos,
 // "📎 Envió 2 imágenes, 3 archivos y una carpeta".
-function transferText(t) {
+function transferText(tr) {
   const images = [];
   const files = [];
   const folders = new Map(); // carpeta raíz -> archivos dentro
-  for (const f of t.files) {
+  for (const f of tr.files) {
     if (f.dir) {
       const root = f.dir.split("/")[0];
       folders.set(root, (folders.get(root) ?? 0) + 1);
@@ -1265,22 +1343,21 @@ function transferText(t) {
     }
   }
   const kinds = [
-    { n: images.length, one: "una imagen", many: "imágenes", icon: "📷" },
-    { n: files.length, one: "un archivo", many: "archivos", icon: "📎" },
-    { n: folders.size, one: "una carpeta", many: "carpetas", icon: "📁" },
-  ].filter((k) => k.n > 0);
-  if (kinds.length === 0) return t.files.length === 1 ? "📎 Envió un archivo" : `📎 Envió ${t.files.length} archivos`;
+    { n: images.length, key: "count.images", icon: "📷" },
+    { n: files.length, key: "count.files", icon: "📎" },
+    { n: folders.size, key: "count.folders", icon: "📁" },
+  ].filter((k) => k.n > 0).map((k) => ({ ...k, text: t(k.key, { n: k.n }) }));
+  if (kinds.length === 0) return "📎 " + t("copy.sent", { what: t("count.files", { n: tr.files.length }) });
   if (kinds.length === 1) {
     const k = kinds[0];
-    if (k.n > 1) return `${k.icon} Envió ${k.n} ${k.many}`;
+    if (k.n > 1) return `${k.icon} ${t("copy.sent", { what: k.text })}`;
     if (folders.size === 1) {
       const [[name, count]] = folders;
-      return `📁 Envió una carpeta: ${name} (${count === 1 ? "1 archivo" : `${count} archivos`})`;
+      return "📁 " + t("copy.sentFolder", { name, files: t("count.filesNum", { n: count }) });
     }
-    return `${k.icon} Envió ${k.one}: ${images[0] ?? files[0]}`;
+    return `${k.icon} ${t("copy.sentNamed", { what: k.text, name: images[0] ?? files[0] })}`;
   }
-  const parts = kinds.map((k) => (k.n === 1 ? k.one : `${k.n} ${k.many}`));
-  return `📎 Envió ${parts.slice(0, -1).join(", ")} y ${parts.at(-1)}`;
+  return "📎 " + t("copy.sent", { what: joinNames(kinds.map((k) => k.text)) });
 }
 
 // copySelected copia los mensajes seleccionados como WhatsApp Web: un
@@ -1295,7 +1372,7 @@ function copySelected() {
     return `[${timeFmt.format(d)}, ${copyDateFmt.format(d)}] ${who}: ${copyBody(m)}`;
   }).join("\n");
   endSelect();
-  copyText(text, msgs.length === 1 ? "Mensaje copiado" : `${msgs.length} mensajes copiados`);
+  copyText(text, t("copy.done", { n: msgs.length }));
 }
 
 // react pone la reacción del usuario; elegir la que ya tenía la quita.
@@ -1310,10 +1387,10 @@ async function react(m, emoji) {
 
 async function deleteForEveryone(m) {
   closeMsgMenu();
-  const where = m.roomId ? "todos los miembros de la sala" : memberName(m.peerId);
-  const what = m.kind === "files" ? "este envío" : "este mensaje";
-  const kept = m.transfer?.state === "completed" ? " Los archivos que ya descargó se quedan en su carpeta." : "";
-  if (!confirm(`¿Eliminar ${what} para todos? También se borrará en el equipo de ${where}.${kept}`)) return;
+  const what = t(m.kind === "files" ? "del.thisTransfer" : "del.thisMessage");
+  let question = m.roomId ? t("del.confirmRoom", { what }) : t("del.confirmChat", { what, name: memberName(m.peerId) });
+  if (m.transfer?.state === "completed") question += " " + t("del.filesKept");
+  if (!confirm(question)) return;
   try {
     addMessage(await api.deleteMessage(m.id));
   } catch (e) {
@@ -1334,7 +1411,7 @@ function reactionsElement(m) {
     b.type = "button";
     b.className = "reaction" + (peers.includes("") ? " mine" : "");
     b.textContent = peers.length > 1 ? `${emoji} ${peers.length}` : emoji;
-    b.title = peers.map((p) => (p === "" ? "Tú" : memberName(p))).join(", ");
+    b.title = peers.map((p) => (p === "" ? t("msg.you") : memberName(p))).join(", ");
     b.addEventListener("click", () => react(m, emoji));
     box.append(b);
   }
@@ -1350,12 +1427,12 @@ function metaElement(m) {
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = timeFmt.format(new Date(m.at));
-  if (m.edited && !m.deleted) meta.prepend("editado · ");
+  if (m.edited && !m.deleted) meta.prepend(`${t("msg.edited")} · `);
   if (m.mergedFrom) meta.prepend(mergedElement(m));
-  if (m.status === "pending" && m.roomId) meta.title = "Pendiente: falta entregarlo a algún miembro desconectado";
-  else if (m.status === "pending") meta.title = "Pendiente: se entregará cuando el contacto se conecte";
-  else if (m.outgoing && m.readAt) meta.title = `Leído: ${dayLabel(m.readAt)} ${timeFmt.format(new Date(m.readAt))}`;
-  else if (m.outgoing) meta.title = "Entregado";
+  if (m.status === "pending" && m.roomId) meta.title = t("meta.pendingRoom");
+  else if (m.status === "pending") meta.title = t("meta.pending");
+  else if (m.outgoing && m.readAt) meta.title = t("meta.read", { when: `${dayLabel(m.readAt)} ${timeFmt.format(new Date(m.readAt))}` });
+  else if (m.outgoing) meta.title = t("ticks.delivered");
   return meta;
 }
 
@@ -1365,16 +1442,12 @@ function metaElement(m) {
 function mergedElement(m) {
   const span = document.createElement("span");
   span.className = "merged";
-  span.textContent = `⤷ Combinado de ${m.mergedFrom} · `;
-  span.title = m.outgoing
-    ? `Lo enviaste a otro contacto (${m.mergedFrom}) que quitaste y combinaste con esta conversación.`
-    : `Lo escribió otro contacto (${m.mergedFrom}) que quitaste y combinaste con esta conversación.`;
+  span.textContent = `⤷ ${t("merged.label", { name: m.mergedFrom })} · `;
+  span.title = t(m.outgoing ? "merged.sentTitle" : "merged.receivedTitle", { name: m.mergedFrom });
   return span;
 }
 
 // ---------- Render: archivos ----------
-
-const expiryFmt = new Intl.DateTimeFormat("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 function fmtSize(n) {
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -1395,35 +1468,35 @@ function textButton(label, onClick, primary = false) {
   return b;
 }
 
-function transferStatus(m, t) {
+function transferStatus(m, tr) {
   // Uno combinado fue de otro contacto: se nombra a ese.
-  const who = m.mergedFrom?.split(" · ")[0] || (state.contacts.get(m.peerId)?.displayName ?? "El contacto");
-  const until = `Disponible hasta el ${expiryFmt.format(new Date(t.expiresAt))}.`;
-  const one = t.files.length === 1;
-  if (t.outgoing) {
-    switch (t.state) {
+  const who = m.mergedFrom?.split(" · ")[0] || (state.contacts.get(m.peerId)?.displayName ?? t("transfer.theContact"));
+  const until = t("transfer.until", { when: expiryFmt.format(new Date(tr.expiresAt)) });
+  const n = tr.files.length; // elige la forma: "el archivo" o "los archivos"
+  if (tr.outgoing) {
+    switch (tr.state) {
       case "offered":
         return m.status === "pending"
-          ? `Se le entregará la oferta cuando ${who} se conecte. ${until}`
-          : `Esperando que ${who} ${one ? "lo acepte" : "los acepte"}. ${until}`;
-      case "downloading": return `${who} está descargando…`;
-      case "completed": return `${who} ${one ? "recibió el archivo" : "recibió los archivos"} ✓`;
-      case "rejected": return `${who} ${one ? "rechazó el archivo" : "rechazó los archivos"}.`;
-      case "canceled": return "Envío cancelado.";
-      case "expired": return "La oferta caducó sin descargarse.";
+          ? `${t("transfer.offerQueued", { name: who })} ${until}`
+          : `${t("transfer.waiting", { name: who, n })} ${until}`;
+      case "downloading": return t("transfer.theyDownload", { name: who });
+      case "completed": return t("transfer.theyReceived", { name: who, n }) + " ✓";
+      case "rejected": return t("transfer.theyRejected", { name: who, n });
+      case "canceled": return t("transfer.canceled");
+      case "expired": return t("transfer.expiredUnused");
     }
   } else {
-    switch (t.state) {
-      case "offered": return `${who} quiere enviarte ${one ? "este archivo" : "estos archivos"}. ${until}`;
-      case "downloading": return "Descargando…";
-      case "completed": return `Guardado en ${t.dir}`;
-      case "rejected": return `Rechazaste ${one ? "el archivo" : "los archivos"}.`;
-      case "canceled": return t.error || "Envío cancelado.";
-      case "expired": return t.error || "La oferta caducó; pide que te lo vuelvan a enviar.";
-      case "failed": return `No se pudo descargar: ${t.error}`;
+    switch (tr.state) {
+      case "offered": return `${t("transfer.wantsToSend", { name: who, n })} ${until}`;
+      case "downloading": return t("transfer.downloading");
+      case "completed": return t("transfer.savedIn", { dir: tr.dir });
+      case "rejected": return t("transfer.youRejected", { n });
+      case "canceled": return tr.error || t("transfer.canceled");
+      case "expired": return tr.error || t("transfer.expiredAsk");
+      case "failed": return t("transfer.failed", { err: tr.error });
     }
   }
-  return t.state;
+  return tr.state;
 }
 
 // DELETABLE_TRANSFERS: estados en que una oferta no llegó a nada; se borra
@@ -1431,57 +1504,58 @@ function transferStatus(m, t) {
 const DELETABLE_TRANSFERS = new Set(["canceled", "rejected", "expired"]);
 
 function transferCard(m) {
-  const t = m.transfer;
+  const tr = m.transfer;
   const div = document.createElement("div");
-  div.className = `${msgClass(m)} files ${t.state}`;
+  div.className = `${msgClass(m)} files ${tr.state}`;
   div.dataset.id = m.id;
   if (m.forwarded) div.append(forwardedTag());
 
   const title = document.createElement("div");
   title.className = "files-title";
-  title.textContent = `📎 ${t.files.length === 1 ? "1 archivo" : `${t.files.length} archivos`} · ${fmtSize(t.total)}`;
+  title.textContent = `📎 ${t("count.filesNum", { n: tr.files.length })} · ${fmtSize(tr.total)}`;
   div.append(title);
 
-  const shown = previews(t);
+  const shown = previews(tr);
   if (shown) div.append(shown);
-  div.append(fileList(t));
+  div.append(fileList(tr));
 
-  if (t.state === "downloading") {
+  if (tr.state === "downloading") {
     const bar = document.createElement("div");
     bar.className = "progress";
     bar.append(document.createElement("div"));
     const info = document.createElement("div");
     info.className = "progress-info";
     div.append(bar, info);
-    const done = t.files.filter((f) => f.done).reduce((n, f) => n + f.size, 0);
-    paintProgress(div, state.progress.get(t.id) ?? { done, total: t.total, rate: 0 });
+    const done = tr.files.filter((f) => f.done).reduce((n, f) => n + f.size, 0);
+    paintProgress(div, state.progress.get(tr.id) ?? { done, total: tr.total, rate: 0 });
   }
 
   const status = document.createElement("div");
   status.className = "status";
-  status.textContent = transferStatus(m, t);
+  status.textContent = transferStatus(m, tr);
   div.append(status);
 
   const actions = document.createElement("div");
   actions.className = "actions-row";
   const act = (label, action, primary, confirmText) =>
-    textButton(label, () => transferAction(action, t.id, confirmText), primary);
-  if (!t.outgoing && t.state === "offered") {
-    const accept = act("Aceptar", "accept", true);
-    accept.title = `Guardar en ${state.downloadDir || "Descargas\\LanChat"}`;
+    textButton(label, () => transferAction(action, tr.id, confirmText), primary);
+  if (!tr.outgoing && tr.state === "offered") {
+    const accept = act(t("transfer.accept"), "accept", true);
+    accept.title = t("transfer.saveIn", { dir: state.downloadDir || t("transfer.defaultDir") });
     actions.append(accept);
     // En el teléfono no hay selector de carpetas: todo va a Descargas.
     if (!state.mobile) {
-      const saveAt = textButton("Guardar en…", () => saveAs(t.id));
-      saveAt.title = "Elegir la carpeta donde guardarlo";
+      const saveAt = textButton(t("transfer.saveAs"), () => saveAs(tr.id));
+      saveAt.title = t("transfer.saveAsTitle");
       actions.append(saveAt);
     }
-    actions.append(act("Rechazar", "reject"));
-  } else if (!t.outgoing && t.state === "failed") {
-    actions.append(act("Reintentar", "accept", true), act("Cancelar", "cancel", false, "¿Cancelar la descarga?"));
-  } else if (t.state === "downloading" || (t.outgoing && t.state === "offered")) {
-    actions.append(act(t.outgoing ? "Cancelar envío" : "Cancelar", "cancel", false,
-      t.outgoing ? "¿Cancelar el envío?" : "¿Cancelar la descarga?"));
+    actions.append(act(t("transfer.reject"), "reject"));
+  } else if (!tr.outgoing && tr.state === "failed") {
+    actions.append(act(t("transfer.retry"), "accept", true),
+      act(t("transfer.cancel"), "cancel", false, t("transfer.cancelDownloadAsk")));
+  } else if (tr.state === "downloading" || (tr.outgoing && tr.state === "offered")) {
+    actions.append(act(t(tr.outgoing ? "transfer.cancelSend" : "transfer.cancel"), "cancel", false,
+      t(tr.outgoing ? "transfer.cancelSendAsk" : "transfer.cancelDownloadAsk")));
   }
   if (actions.childElementCount) div.append(actions);
 
@@ -1496,9 +1570,9 @@ const MAX_PREVIEWS = 4;
 // WhatsApp: una sola, grande; varias, en cuadrícula. Llegan con la oferta, así
 // que se ven antes de aceptar. Tocar abre la imagen completa si ya se puede
 // (enviada, o recibida y terminada).
-function previews(t) {
+function previews(tr) {
   if (!state.self.previews) return null;
-  const withThumb = t.files.filter((f) => f.thumb);
+  const withThumb = tr.files.filter((f) => f.thumb);
   if (withThumb.length === 0) return null;
   const shown = withThumb.slice(0, MAX_PREVIEWS);
   const box = document.createElement("div");
@@ -1508,7 +1582,7 @@ function previews(t) {
     cell.type = "button";
     cell.className = "preview";
     const img = document.createElement("img");
-    img.src = `/api/files/thumb?${new URLSearchParams({ id: t.id, index: f.index })}`;
+    img.src = `/api/files/thumb?${new URLSearchParams({ id: tr.id, index: f.index })}`;
     img.alt = f.name;
     img.loading = "lazy";
     cell.append(img);
@@ -1520,10 +1594,10 @@ function previews(t) {
       cell.append(more);
     }
     if (f.view) {
-      cell.title = `Ver ${f.name}`;
-      cell.addEventListener("click", () => openViewer(t, f));
+      cell.title = t("preview.view", { name: f.name });
+      cell.addEventListener("click", () => openViewer(tr, f));
     } else {
-      cell.title = t.outgoing ? f.name : "Acepta para descargarla y verla completa";
+      cell.title = tr.outgoing ? f.name : t("preview.acceptToView");
       cell.disabled = true;
     }
     box.append(cell);
@@ -1532,13 +1606,13 @@ function previews(t) {
 }
 
 // openViewer muestra la imagen completa, leída directo del archivo.
-function openViewer(t, f) {
+function openViewer(tr, f) {
   const img = $("viewer-img");
   img.onerror = () => {
     $("viewer").close();
-    showBanner("No se pudo abrir la imagen: el archivo ya no está o no es una imagen.", 5000);
+    showBanner(t("preview.openFailed"), 5000);
   };
-  img.src = `/api/files/view?${new URLSearchParams({ id: t.id, index: f.index })}`;
+  img.src = `/api/files/view?${new URLSearchParams({ id: tr.id, index: f.index })}`;
   img.alt = f.name;
   $("viewer-name").textContent = f.savedName || f.name;
   $("viewer").showModal();
@@ -1549,12 +1623,12 @@ const MAX_FILE_ROWS = 10;
 
 // fileList muestra los archivos sueltos y, de cada carpeta, una sola fila.
 // Sin escritorio no se pueden abrir carpetas: se lista cada archivo.
-function fileList(t) {
+function fileList(tr) {
   const ul = document.createElement("ul");
   ul.className = "file-list";
   const rows = [];
   const folders = new Map(); // carpeta raíz -> { count, size, done }
-  for (const f of t.files) {
+  for (const f of tr.files) {
     if (!f.dir || state.mobile) {
       rows.push({ file: f });
       continue;
@@ -1579,21 +1653,21 @@ function fileList(t) {
     if (row.folder) {
       const info = folders.get(row.folder);
       name.textContent = `📁 ${row.folder}`;
-      size.textContent = `${info.count} archivos · ${fmtSize(info.size)}`;
+      size.textContent = `${t("count.filesNum", { n: info.count })} · ${fmtSize(info.size)}`;
       li.append(name, size);
-      if (!t.outgoing && info.done > 0 && !state.mobile) {
-        li.append(textButton("Abrir carpeta", () =>
-          api.openDir(t.id, row.folder).catch((e) => showBanner(e.message, 5000))));
+      if (!tr.outgoing && info.done > 0 && !state.mobile) {
+        li.append(textButton(t("files.openFolder"), () =>
+          api.openDir(tr.id, row.folder).catch((e) => showBanner(e.message, 5000))));
       }
     } else {
       const f = row.file;
       name.textContent = (f.dir ? `${f.dir}/` : "") + (f.savedName || f.name);
-      name.title = f.savedName && f.savedName !== f.name ? `Original: ${f.name}` : f.name;
-      size.textContent = fmtSize(f.size) + (f.done && t.state !== "completed" ? " ✓" : "");
+      name.title = f.savedName && f.savedName !== f.name ? t("files.original", { name: f.name }) : f.name;
+      size.textContent = fmtSize(f.size) + (f.done && tr.state !== "completed" ? " ✓" : "");
       li.append(name, size);
-      if (!t.outgoing && f.done) {
-        li.append(textButton("Abrir", () => openReceived(t, f, false)));
-        if (!state.mobile) li.append(textButton("Mostrar en carpeta", () => openReceived(t, f, true)));
+      if (!tr.outgoing && f.done) {
+        li.append(textButton(t("files.open"), () => openReceived(tr, f, false)));
+        if (!state.mobile) li.append(textButton(t("files.showInFolder"), () => openReceived(tr, f, true)));
       }
     }
     ul.append(li);
@@ -1601,7 +1675,7 @@ function fileList(t) {
   if (rows.length > MAX_FILE_ROWS) {
     const li = document.createElement("li");
     li.className = "file-size";
-    li.textContent = `y ${rows.length - MAX_FILE_ROWS} más…`;
+    li.textContent = t("files.andMore", { n: rows.length - MAX_FILE_ROWS });
     ul.append(li);
   }
   return ul;
@@ -1613,7 +1687,7 @@ function paintProgress(card, p) {
   if (!bar || !info) return;
   const pct = p.total > 0 ? Math.min(100, (p.done / p.total) * 100) : 0;
   bar.style.width = `${pct}%`;
-  info.textContent = `${pct.toFixed(0)}% · ${fmtSize(p.done)} de ${fmtSize(p.total)}` +
+  info.textContent = `${pct.toFixed(0)}% · ${t("transfer.progress", { done: fmtSize(p.done), total: fmtSize(p.total) })}` +
     (p.rate > 0 ? ` · ${fmtSize(Math.round(p.rate))}/s` : "");
 }
 
@@ -1640,27 +1714,28 @@ async function transferAction(action, id, confirmText) {
   }
 }
 
-async function openReceived(t, f, reveal) {
+async function openReceived(tr, f, reveal) {
   const name = f.savedName || f.name;
   if (!reveal && RISKY_EXT.test(name)) {
-    const who = state.contacts.get(t.peerId)?.displayName ?? "el remitente";
-    if (!confirm(`"${name}" es un programa o script. Ábrelo solo si confías en ${who} y esperabas este archivo. ¿Abrirlo?`)) return;
+    const who = state.contacts.get(tr.peerId)?.displayName;
+    const question = who ? t("files.riskyFrom", { file: name, name: who }) : t("files.risky", { file: name });
+    if (!confirm(question)) return;
   }
   try {
-    await api.openFile(t.id, f.index, reveal);
+    await api.openFile(tr.id, f.index, reveal);
   } catch (e) {
     showBanner(e.message, 5000);
   }
 }
 
 // Actualiza la oferta guardada en la conversación y su tarjeta en pantalla.
-function updateTransfer(t) {
-  if (t.state !== "downloading") state.progress.delete(t.id);
-  const conv = state.messages.get(t.peerId);
-  const m = conv?.list.find((x) => x.id === t.id);
+function updateTransfer(tr) {
+  if (tr.state !== "downloading") state.progress.delete(tr.id);
+  const conv = state.messages.get(tr.peerId);
+  const m = conv?.list.find((x) => x.id === tr.id);
   if (!m) return;
-  m.transfer = t;
-  const old = t.peerId === state.current ? cardElement(t.id) : null;
+  m.transfer = tr;
+  const old = tr.peerId === state.current ? cardElement(tr.id) : null;
   if (old) old.replaceWith(messageElement(m));
 }
 
@@ -1706,18 +1781,18 @@ async function droppedFiles(entries) {
 // defecto, la abierta). Si se soltó sobre un contacto de la lista, antes abre
 // su conversación.
 async function uploadDropped(dt, to = state.current) {
-  if (!to) return showBanner("Elige primero a quién enviarle los archivos.", 4000);
+  if (!to) return showBanner(t("upload.pickFirst"), 4000);
   // Las entradas se toman ya, antes de cualquier await: el DataTransfer deja
   // de servir tras el evento.
   const entries = [...dt.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
   const loose = [...dt.files];
   if (to !== state.current) await openChat(to);
-  showBanner("Preparando archivos…");
+  showBanner(t("upload.preparing"));
   let items;
   try {
     items = entries.length ? await droppedFiles(entries) : loose.map((file) => ({ file, dir: "" }));
   } catch (e) {
-    return showBanner(`No se pudieron leer los archivos: ${e.message}`, 5000);
+    return showBanner(t("upload.readFailed", { err: e.message }), 5000);
   }
   await uploadItems(items, to);
 }
@@ -1732,11 +1807,11 @@ function uploadPicked(input) {
 // uploadItems copia los archivos ([{file, dir}]) a este equipo y los ofrece
 // en la conversación de to (por defecto, la abierta).
 async function uploadItems(items, to = state.current) {
-  if (items.length === 0) return showBanner("No hay archivos para enviar (¿carpetas vacías?).", 5000);
+  if (items.length === 0) return showBanner(t("transfer.emptyFolders"), 5000);
   if (items.length > MAX_OFFER_FILES) {
-    return showBanner(`Son más de ${MAX_OFFER_FILES} archivos; comprímelos en un .zip o envíalos en partes.`, 6000);
+    return showBanner(t("transfer.tooManyFiles", { max: MAX_OFFER_FILES }), 6000);
   }
-  showBanner(`Preparando ${items.length === 1 ? items[0].file.name : `${items.length} archivos`}…`);
+  showBanner(t("upload.preparingWhat", { what: items.length === 1 ? items[0].file.name : t("count.filesNum", { n: items.length }) }));
   try {
     addMessage(await api.upload(to, uploadForm(items)));
     hideBanner();
@@ -1773,7 +1848,7 @@ function openShare(share) {
   const text = share.text ?? "";
   if (files.length === 0 && !text) return shareFinished();
   if (files.length > MAX_OFFER_FILES) {
-    showBanner(`Son más de ${MAX_OFFER_FILES} archivos; compártelos en partes.`, 6000);
+    showBanner(t("share.tooMany", { max: MAX_OFFER_FILES }), 6000);
     return shareFinished();
   }
   currentShare = share;
@@ -1782,10 +1857,9 @@ function openShare(share) {
   const open = document.querySelector("dialog[open]");
   if (open && open.id !== "share-dialog") open.close();
   const total = files.reduce((n, f) => n + Math.max(f.size, 0), 0);
-  $("share-title").textContent = files.length === 0 ? "Enviar mensaje"
-    : files.length === 1 ? "Enviar 1 archivo" : `Enviar ${files.length} archivos`;
+  $("share-title").textContent = files.length === 0 ? t("share.titleText") : t("share.titleFiles", { n: files.length });
   const names = files.slice(0, 3).map((f) => f.name).join(", ");
-  const more = files.length > 3 ? ` y ${files.length - 3} más` : "";
+  const more = files.length > 3 ? " " + t("files.andMore", { n: files.length - 3 }) : "";
   $("share-files").textContent = files.length ? `${names}${more}${total ? ` · ${fmtSize(total)}` : ""}` : "";
   $("share-files").hidden = files.length === 0;
   $("share-list").replaceChildren(...sortedContacts().map(pickItem));
@@ -1812,7 +1886,7 @@ async function sendShare(ev) {
   err.hidden = true;
   if (!share) return $("share-dialog").close();
   if (peers.length === 0) {
-    err.textContent = "Elige al menos un contacto.";
+    err.textContent = t("app.pickContact");
     err.hidden = false;
     return;
   }
@@ -1821,16 +1895,16 @@ async function sendShare(ev) {
   try {
     let items = [];
     if (share.files?.length) {
-      showBanner("Preparando los archivos…");
+      showBanner(t("upload.preparing"));
       items = await Promise.all(share.files.map(async (f) => {
         const resp = await fetch(f.url);
-        if (!resp.ok) throw new Error(`No se pudo leer ${f.name}`);
+        if (!resp.ok) throw new Error(t("share.readFailed", { name: f.name }));
         return { file: new File([await resp.blob()], f.name), dir: "" };
       }));
     }
     for (const [i, peer] of peers.entries()) {
       if (items.length) {
-        showBanner(peers.length === 1 ? "Enviando…" : `Enviando a ${i + 1} de ${peers.length}…`);
+        showBanner(peers.length === 1 ? t("share.sending") : t("share.sendingTo", { i: i + 1, n: peers.length }));
         addMessage(await api.upload(peer, uploadForm(items)));
       }
       if (text) addMessage(await api.send(peer, text));
@@ -1838,7 +1912,7 @@ async function sendShare(ev) {
     hideBanner();
     $("share-dialog").close();
     if (peers.length === 1) openChat(peers[0]);
-    else showBanner(`Enviado a ${peers.length} contactos.`, 4000);
+    else showBanner(t("share.sent", { n: peers.length }), 4000);
   } catch (e) {
     hideBanner();
     err.textContent = e.message;
@@ -2045,7 +2119,7 @@ async function sendMessage() {
   closeEmojiPanel();
   if (!state.current) return;
   if (encoder.encode(body).length > state.limits.maxMessageBytes) {
-    err.textContent = `El mensaje es demasiado largo (máximo ${state.limits.maxMessageBytes / 1024} KB).`;
+    err.textContent = t("protocol.messageTooLong", { max: state.limits.maxMessageBytes / 1024 });
     err.hidden = false;
     return;
   }
@@ -2090,9 +2164,9 @@ function markReadIfVisible() {
 }
 
 function autoGrow() {
-  const t = $("input");
-  t.style.height = "auto";
-  t.style.height = `${t.scrollHeight}px`;
+  const box = $("input");
+  box.style.height = "auto";
+  box.style.height = `${box.scrollHeight}px`;
 }
 
 // ---------- Editar un mensaje ----------
@@ -2130,7 +2204,7 @@ async function saveEdit(body) {
   const m = findMessage(state.editing);
   if (!m) return cancelEdit();
   if (!body.trim()) {
-    err.textContent = "El mensaje no puede quedar vacío. Para quitarlo, usa «Eliminar para todos».";
+    err.textContent = t("edit.empty");
     err.hidden = false;
     return;
   }
@@ -2153,7 +2227,7 @@ function startReply(m) {
   endSelect();
   cancelEdit();
   state.replyTo = m.id;
-  $("reply-who").textContent = m.outgoing ? "Responder a tu mensaje" : `Responder a ${memberName(m.peerId)}`;
+  $("reply-who").textContent = m.outgoing ? t("reply.toYours") : t("reply.to", { name: memberName(m.peerId) });
   $("reply-original").textContent = quoteText(m);
   $("send-error").hidden = true;
   syncComposer();
@@ -2180,7 +2254,7 @@ function syncComposer() {
   $("composer").hidden = state.selecting || !canWrite();
   $("edit-bar").hidden = $("composer").hidden || !state.editing;
   $("reply-bar").hidden = $("composer").hidden || !state.replyTo;
-  $("send-btn").textContent = state.editing ? "Guardar" : "Enviar";
+  $("send-btn").textContent = t(state.editing ? "composer.save" : "composer.send");
   if (state.selecting) updateSelectBar();
 }
 
@@ -2226,13 +2300,12 @@ function updateSelectBar() {
   const msgs = selectedMessages();
   const n = msgs.length;
   $("select-n").textContent = n;
-  $("select-word").textContent = n === 1 ? " seleccionado" : " seleccionados";
+  $("select-word").textContent = " " + t("select.selected", { n });
   const forward = n > 0 && msgs.every(canForward);
-  setUnavailable($("select-forward"), !forward,
-    "Solo se reenvían los mensajes de texto y los archivos enviados o ya descargados");
+  setUnavailable($("select-forward"), !forward, t("select.cantForward"));
   const del = n > 0 && msgs.every(canDelete);
   setUnavailable($("select-delete"), !del,
-    `Solo se eliminan para todos tus propios mensajes de los últimos ${Math.round(state.limits.deleteWindowMs / 60000)} minutos`);
+    t("select.cantDelete", { min: Math.round(state.limits.deleteWindowMs / 60000) }));
 }
 
 // setUnavailable apaga un botón sin desactivarlo: uno desactivado no responde
@@ -2259,11 +2332,11 @@ async function deleteSelected() {
     updateSelectBar();
     return showBanner($("select-delete").title, 5000);
   }
-  const where = msgs[0].roomId ? "todos los miembros de la sala" : memberName(msgs[0].peerId);
-  const what = msgs.length === 1 ? "este mensaje" : `estos ${msgs.length} mensajes`;
-  const kept = msgs.some((m) => m.transfer?.state === "completed")
-    ? " Los archivos que ya se descargaron se quedan en su carpeta." : "";
-  if (!confirm(`¿Eliminar ${what} para todos? También se borrarán en el equipo de ${where}.${kept}`)) return;
+  const what = t("del.theseMessages", { n: msgs.length });
+  let question = msgs[0].roomId ? t("del.confirmRoom", { what })
+    : t("del.confirmChat", { what, name: memberName(msgs[0].peerId) });
+  if (msgs.some((m) => m.transfer?.state === "completed")) question += " " + t("del.filesKept");
+  if (!confirm(question)) return;
   const errors = [];
   for (const m of msgs) {
     try {
@@ -2274,7 +2347,7 @@ async function deleteSelected() {
   }
   endSelect();
   if (errors.length) {
-    showBanner(`${errors.length === 1 ? "Uno no se pudo eliminar" : `${errors.length} no se pudieron eliminar`}: ${errors[0]}`, 6000);
+    showBanner(t("del.someFailed", { n: errors.length, err: errors[0] }), 6000);
   }
 }
 
@@ -2288,13 +2361,11 @@ function openForward(ids) {
   if (msgs.length === 0) return;
   forwardIds = msgs.map((m) => m.id);
   const withFiles = msgs.some((m) => m.kind === "files");
-  $("forward-title").textContent = msgs.length === 1 ? "Reenviar mensaje" : `Reenviar ${msgs.length} mensajes`;
+  $("forward-title").textContent = t("forward.title", { n: msgs.length });
   $("forward-what").textContent = forwardSummary(msgs);
   const rooms = sortedRooms().filter((r) => !r.left).map((r) => roomPickItem(r, withFiles));
   $("forward-list").replaceChildren(...rooms, ...sortedContacts().map(pickItem));
-  $("forward-help").textContent = withFiles
-    ? "Los archivos se ofrecen otra vez y cada quien decide si los acepta. A las salas no se envían archivos."
-    : "Cada uno lo recibe marcado como reenviado. Los desconectados lo reciben al conectarse.";
+  $("forward-help").textContent = t(withFiles ? "forward.helpFiles" : "forward.help");
   $("forward-search").value = "";
   $("forward-error").hidden = true;
   $("forward-send").disabled = false;
@@ -2309,9 +2380,9 @@ function forwardSummary(msgs) {
   const lines = msgs.slice(0, 3).map((m) => {
     if (m.kind !== "files") return cut(m.body.replace(/\s+/g, " "), 80);
     const files = m.transfer?.files ?? [];
-    return `📎 ${cut(files.slice(0, 3).map((f) => f.name).join(", "), 80)}${files.length > 3 ? ` y ${files.length - 3} más` : ""}`;
+    return `📎 ${cut(files.slice(0, 3).map((f) => f.name).join(", "), 80)}${files.length > 3 ? " " + t("files.andMore", { n: files.length - 3 }) : ""}`;
   });
-  if (msgs.length > 3) lines.push(`… y ${msgs.length - 3} más`);
+  if (msgs.length > 3) lines.push("… " + t("files.andMore", { n: msgs.length - 3 }));
   return lines.join("\n");
 }
 
@@ -2334,8 +2405,8 @@ function roomPickItem(r, withFiles) {
   detail.textContent = roomDetail(r);
   if (withFiles) {
     box.disabled = true;
-    detail.append(" · no recibe archivos");
-    label.title = "A las salas no se pueden enviar archivos";
+    detail.append(" · " + t("forward.roomNoFiles"));
+    label.title = t("forward.roomNoFilesTitle");
   }
   label.append(box, icon, name, detail);
   li.append(label);
@@ -2343,9 +2414,9 @@ function roomPickItem(r, withFiles) {
 }
 
 function filterForward() {
-  const q = $("forward-search").value.trim().toLocaleLowerCase("es");
+  const q = $("forward-search").value.trim().toLocaleLowerCase(i18n.lang);
   for (const li of $("forward-list").children) {
-    li.hidden = q !== "" && !li.textContent.toLocaleLowerCase("es").includes(q);
+    li.hidden = q !== "" && !li.textContent.toLocaleLowerCase(i18n.lang).includes(q);
   }
 }
 
@@ -2358,7 +2429,7 @@ async function sendForward(ev) {
   const err = $("forward-error");
   err.hidden = true;
   if (checked.length === 0) {
-    err.textContent = "Elige al menos un contacto o una sala.";
+    err.textContent = t("forward.pickTarget");
     err.hidden = false;
     return;
   }
@@ -2369,14 +2440,14 @@ async function sendForward(ev) {
     endSelect();
     if (res.error) {
       // Lo que sí se envió no se repite: el botón queda desactivado.
-      err.textContent = `Se reenvió solo en parte: ${res.error}`;
+      err.textContent = t("forward.partial", { err: res.error });
       err.hidden = false;
       return;
     }
     $("forward-dialog").close();
     const targets = [...peers, ...rooms.map((r) => ROOM + r)];
     if (targets.length === 1) openChat(targets[0]);
-    else showBanner(`Reenviado a ${targets.length} conversaciones.`, 3000);
+    else showBanner(t("forward.done", { n: targets.length }), 3000);
   } catch (e) {
     err.textContent = e.message;
     err.hidden = false;
@@ -2391,7 +2462,7 @@ function openSettings() {
   $("name-input").value = s.name;
   $("name-input").placeholder = s.hostname;
   $("name-input").maxLength = state.limits.maxName;
-  $("name-help").textContent = `Así te verán los demás. Vacío = se usa el nombre del equipo (${s.hostname}).`;
+  $("name-help").textContent = t("settings.nameHelp", { host: s.hostname });
   $("peers-input").value = (state.manualPeers ?? []).join("\n");
   $("download-input").value = state.downloadDir;
   $("receipts-input").checked = state.self.readReceipts;
@@ -2402,6 +2473,7 @@ function openSettings() {
   $("about").textContent = [`LanChat ${s.version} · ${s.hostname}`, s.copyright, s.license].join("\n");
   $("settings-error").hidden = true;
   renderPhotoSettings();
+  renderLanguage();
   renderAndroid();
   renderUpdate();
   $("settings").showModal();
@@ -2439,7 +2511,7 @@ function renderUpdate() {
   }
   const canInstall = !!u.latest && u.latest !== u.current &&
     (u.phase === "available" || u.phase === "error" || (u.phase === "installing" && state.mobile));
-  btn.textContent = canInstall ? `Actualizar a ${u.latest}` : "Buscar actualizaciones";
+  btn.textContent = canInstall ? t("update.installTo", { version: u.latest }) : t("update.check");
   btn.dataset.action = canInstall ? "install" : "check";
   btn.disabled = u.phase === "checking" || u.phase === "downloading" || (u.phase === "installing" && !state.mobile);
   $("update-status").textContent = updateStatusText(u);
@@ -2447,15 +2519,13 @@ function renderUpdate() {
 
 function updateStatusText(u) {
   switch (u.phase) {
-    case "checking": return "Buscando…";
-    case "current": return `Tienes la última versión (${u.current}) ✓`;
-    case "available": return `Disponible: LanChat ${u.latest} (tienes ${u.current})`;
-    case "downloading": return `Descargando LanChat ${u.latest}… ${u.percent}%`;
-    case "installing": return state.mobile
-      ? "Confirma la instalación en la ventana de Android"
-      : "Instalando; LanChat se reiniciará en un momento…";
+    case "checking": return t("update.checking");
+    case "current": return t("update.current", { version: u.current }) + " ✓";
+    case "available": return t("update.availableStatus", { latest: u.latest, current: u.current });
+    case "downloading": return t("update.downloading", { version: u.latest, percent: u.percent });
+    case "installing": return t(state.mobile ? "update.confirmAndroid" : "update.installing");
     case "error": return u.error;
-    default: return `Versión ${u.current}`;
+    default: return t("update.version", { version: u.current });
   }
 }
 
@@ -2483,9 +2553,8 @@ function askUpdate() {
   const u = state.update;
   const dialog = $("update-dialog");
   if (!u?.ask || dialog.open) return;
-  $("update-text").textContent = `LanChat ${u.latest} está disponible (tienes la ${u.current}). ` + (state.mobile
-    ? "Se descargará y Android te pedirá confirmar la instalación."
-    : "Se descargará e instalará; LanChat se cerrará y volverá a abrirse en unos segundos. Tus mensajes y ajustes se conservan.");
+  $("update-text").textContent = t("update.ask", { latest: u.latest, current: u.current }) + " " +
+    t(state.mobile ? "update.askAndroid" : "update.askDesktop");
   dialog.returnValue = "";
   dialog.addEventListener("close", () => {
     const action = dialog.returnValue === "install" ? api.updateInstall() : api.updateLater();
@@ -2516,7 +2585,7 @@ function renderSystem(sys) {
   $("system-section").hidden = !sys.supported;
   $("uninstall-row").hidden = !sys.supported;
   $("autostart-input").checked = sys.autostart;
-  $("firewall-status").textContent = sys.firewall ? "Permitido ✓" : "Sin configurar";
+  $("firewall-status").textContent = sys.firewall ? t("system.firewallAllowed") + " ✓" : t("system.firewallNotSet");
   $("firewall-btn").hidden = sys.firewall;
 }
 
@@ -2529,7 +2598,7 @@ function renderAndroid() {
   $("android-autostart").checked = android.autostart();
   $("android-downloads").textContent = friendlyDir(state.downloadDir);
   const restricted = android.backgroundRestricted();
-  $("battery-status").textContent = restricted ? "Android puede pausarlo para ahorrar batería" : "Sin restricción ✓";
+  $("battery-status").textContent = restricted ? t("android.batteryRestricted") : t("android.batteryFree") + " ✓";
   $("battery-btn").hidden = !restricted;
 }
 
@@ -2546,11 +2615,29 @@ function renderPhotoSettings() {
   const big = selfAvatar();
   big.classList.add("big");
   $("settings-avatar").replaceChildren(big);
-  $("photo-pick").textContent = has ? "Cambiar foto…" : "Elegir foto…";
+  $("photo-pick").textContent = t(has ? "photo.change" : "photo.pick");
   $("photo-remove").hidden = !has;
-  $("photo-help").textContent = has
-    ? "Los demás la ven en su lista de contactos. Se aplica en el acto."
-    : "Sin foto, los demás ven tus iniciales sobre un color.";
+  $("photo-help").textContent = t(has ? "photo.helpSet" : "photo.helpNone");
+}
+
+// renderLanguage llena la lista de idiomas de Ajustes: el del sistema y cada
+// idioma traducido, con su nombre en ese idioma.
+function renderLanguage() {
+  const select = $("language-input");
+  select.replaceChildren(new Option(t("settings.languageAuto"), ""),
+    ...(state.languages ?? []).map((l) => new Option(l.name, l.code)));
+  select.value = state.self.language ?? "";
+}
+
+// changeLanguage aplica el idioma elegido: la página se vuelve a cargar con
+// los textos nuevos.
+async function changeLanguage() {
+  try {
+    await api.language($("language-input").value);
+    location.reload();
+  } catch (e) {
+    settingsError(e);
+  }
 }
 
 // photoChanged guarda la respuesta del servidor y repinta donde se ve la foto.
@@ -2610,15 +2697,15 @@ async function togglePreviews() {
 
 function renderThumbsUsage(u) {
   $("thumbs-usage").textContent = u.count === 0
-    ? "No hay miniaturas guardadas"
-    : `${u.count} ${u.count === 1 ? "miniatura guardada" : "miniaturas guardadas"} (${fmtSize(u.bytes)})`;
+    ? t("thumbs.none")
+    : t("thumbs.stored", { n: u.count, size: fmtSize(u.bytes) });
   $("thumbs-clear-btn").disabled = u.count === 0;
 }
 
 // clearThumbs borra las miniaturas ya guardadas; las tarjetas cargadas dejan
 // de mostrarlas sin esperar a recargar la conversación.
 async function clearThumbs() {
-  if (!confirm("¿Borrar todas las miniaturas guardadas? Las imágenes no se borran, pero sus vistas previas no se pueden recuperar.")) return;
+  if (!confirm(t("thumbs.clearAsk"))) return;
   const btn = $("thumbs-clear-btn");
   btn.disabled = true; // compactar la base puede tardar
   try {
@@ -2644,7 +2731,7 @@ async function toggleAutostart() {
 async function allowFirewall() {
   const btn = $("firewall-btn");
   btn.disabled = true;
-  $("firewall-status").textContent = "Esperando el permiso de administrador…";
+  $("firewall-status").textContent = t("system.waitingAdmin");
   try {
     renderSystem(await api.firewall());
   } catch (e) {
@@ -2679,7 +2766,7 @@ async function saveSettings(ev) {
 function openAbout() {
   const s = state.self;
   $("about-name").textContent = s.appName;
-  $("about-version").textContent = `Versión ${s.version}`;
+  $("about-version").textContent = t("update.version", { version: s.version });
   $("about-license").textContent = s.licenseName;
   $("about-repo").replaceChildren(...breakAfterSlashes(s.repository));
   $("about-copyright").textContent = s.copyright;
@@ -2755,7 +2842,7 @@ async function sendMany(ev) {
   const err = $("many-error");
   err.hidden = true;
   if (peers.length === 0) {
-    err.textContent = "Elige al menos un contacto.";
+    err.textContent = t("app.pickContact");
     err.hidden = false;
     return;
   }
@@ -2763,13 +2850,13 @@ async function sendMany(ev) {
     const res = await api.sendMany(peers, body);
     for (const m of res.messages) addMessage(m);
     if (res.error) {
-      err.textContent = `Se envió a ${res.messages.length}, pero falló con otros: ${res.error}`;
+      err.textContent = t("many.partial", { n: res.messages.length, err: res.error });
       err.hidden = false;
       return;
     }
     $("many-text").value = "";
     $("many-dialog").close();
-    showBanner(`Mensaje enviado a ${res.messages.length} ${res.messages.length === 1 ? "contacto" : "contactos"}.`, 3000);
+    showBanner(t("many.sent", { n: res.messages.length }), 3000);
   } catch (e) {
     err.textContent = e.message;
     err.hidden = false;
@@ -2779,8 +2866,8 @@ async function sendMany(ev) {
 function openIdentity() {
   const c = state.contacts.get(state.current);
   if (!c) return;
-  $("identity-who").textContent = c.displayName;
-  $("identity-theirs").textContent = c.fingerprint || "(todavía no se conoce)";
+  $("identity-title").textContent = t("identity.title", { name: c.displayName });
+  $("identity-theirs").textContent = c.fingerprint || `(${t("identity.unknownYet")})`;
   $("identity-new-box").hidden = !c.identityChanged;
   $("identity-new").textContent = c.newFingerprint;
   $("identity-mine").textContent = state.self.fingerprint;
@@ -2790,7 +2877,7 @@ function openIdentity() {
 async function trustIdentity() {
   const c = state.contacts.get(state.current);
   if (!c) return;
-  if (!confirm(`¿Confiar en la nueva identidad de ${c.displayName}? Hazlo solo si confirmaste con esa persona que reinstaló LanChat (puedes comparar las huellas en "Identidad").`)) return;
+  if (!confirm(t("identity.trustAsk", { name: c.displayName }))) return;
   try {
     await request("POST", "/api/trust", { peer: c.id });
   } catch (e) {
@@ -2801,7 +2888,7 @@ async function trustIdentity() {
 function openGroup() {
   const c = state.contacts.get(state.current);
   if (!c) return;
-  $("group-who").textContent = c.displayName;
+  $("group-label").textContent = t("group.labelFor", { name: c.displayName });
   $("group-input").value = c.group;
   $("group-input").maxLength = state.limits.maxName;
   const list = $("group-names");
@@ -2855,9 +2942,9 @@ let roomMode = "create";
 function openRoomDialog(mode) {
   roomMode = mode;
   const r = currentRoom();
-  const titles = { create: "Nueva sala", add: `Agregar a «${r?.name}»`, rename: "Renombrar la sala" };
+  const titles = { create: t("roomDialog.createTitle"), add: t("roomDialog.addTitle", { name: r?.name }), rename: t("roomDialog.renameTitle") };
   $("room-title").textContent = titles[mode];
-  $("room-save").textContent = { create: "Crear", add: "Agregar", rename: "Guardar" }[mode];
+  $("room-save").textContent = t({ create: "roomDialog.create", add: "roomDialog.add", rename: "composer.save" }[mode]);
   $("room-name-box").hidden = mode === "add";
   $("room-members-box").hidden = mode === "rename";
   $("room-name").value = mode === "rename" ? r.name : "";
@@ -2866,8 +2953,8 @@ function openRoomDialog(mode) {
   const candidates = sortedContacts().filter((c) => !members.has(c.id));
   $("room-list").replaceChildren(...candidates.map(pickItem));
   $("room-help").textContent = mode === "create"
-    ? `Quedas como administrador: puedes sacar miembros y nombrar más administradores. Todos pueden escribir, agregar a otros y cambiar el nombre. Hasta ${MAX_ROOM_MEMBERS} miembros.`
-    : "Verán los mensajes a partir de ahora, no los anteriores.";
+    ? t("roomDialog.createHelp", { max: MAX_ROOM_MEMBERS })
+    : t("roomDialog.addHelp");
   $("room-error").hidden = true;
   $("room-dialog").showModal();
   (mode === "add" ? $("room-list").querySelector("input") : $("room-name"))?.focus();
@@ -2910,25 +2997,25 @@ function renderMembers() {
   if (!r) return $("members-dialog").close();
   const me = state.self.id;
   const iAdmin = !r.left && r.admins.includes(me);
-  $("members-title").textContent = `Miembros de «${r.name}» (${r.members.length})`;
+  $("members-title").textContent = t("members.title", { name: r.name, n: r.members.length });
   $("members-list").replaceChildren(...r.members.map((id) => {
     const li = document.createElement("li");
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = id === me ? `${state.self.name || state.self.hostname} (tú)` : memberName(id);
+    name.textContent = id === me ? `${state.self.name || state.self.hostname} (${t("members.you")})` : memberName(id);
     li.append(name);
     const admin = r.admins.includes(id);
     if (admin) {
       const tag = document.createElement("span");
       tag.className = "admin-tag";
-      tag.textContent = "Administrador";
+      tag.textContent = t("members.admin");
       li.append(tag);
     }
     if (iAdmin && id !== me) {
-      li.append(textButton(admin ? "Quitar admin" : "Hacer admin", () =>
+      li.append(textButton(t(admin ? "members.unadmin" : "members.makeAdmin"), () =>
         memberAction("admin", r.id, { member: id, admin: !admin })));
-      const kick = textButton("Sacar", () => {
-        if (confirm(`¿Sacar a ${memberName(id)} de «${r.name}»? Dejará de recibir los mensajes de la sala.`)) {
+      const kick = textButton(t("members.remove"), () => {
+        if (confirm(t("members.removeAsk", { name: memberName(id), room: r.name }))) {
           memberAction("kick", r.id, { member: id });
         }
       });
@@ -2937,11 +3024,7 @@ function renderMembers() {
     }
     return li;
   }));
-  $("members-help").textContent = r.left
-    ? "Ya no estás en esta sala: esta es la lista de cuando saliste."
-    : iAdmin
-      ? "Como administrador puedes sacar a otros miembros y nombrar o quitar administradores."
-      : "Solo los administradores pueden sacar a otros miembros o nombrar administradores.";
+  $("members-help").textContent = t(r.left ? "members.helpLeft" : iAdmin ? "members.helpAdmin" : "members.help");
   $("members-add").hidden = r.left;
   // Sin nadie más, el administrador puede eliminar la sala.
   $("members-destroy").hidden = !(iAdmin && r.members.length === 1);
@@ -2959,7 +3042,7 @@ async function memberAction(action, room, extra) {
 
 async function destroyRoom() {
   const r = currentRoom();
-  if (!r || !confirm(`¿Eliminar la sala «${r.name}»? Se borrará de este equipo con todos sus mensajes.`)) return;
+  if (!r || !confirm(t("room.destroyAsk", { name: r.name }))) return;
   $("members-dialog").close();
   try {
     await api.room("destroy", r.id); // el evento "cleared" la quita de la lista
@@ -2970,7 +3053,7 @@ async function destroyRoom() {
 
 async function leaveRoom() {
   const r = currentRoom();
-  if (!r || !confirm(`¿Salir de «${r.name}»? Conservarás el historial, pero ya no recibirás sus mensajes.`)) return;
+  if (!r || !confirm(t("room.leaveAsk", { name: r.name }))) return;
   try {
     await api.room("leave", r.id);
   } catch (e) {
@@ -2980,7 +3063,6 @@ async function leaveRoom() {
 
 // ---------- Privacidad ----------
 
-const WIPE_WORD = "BORRAR";
 
 // exportData descarga la copia de la base (el navegador la guarda en Descargas).
 function exportData() {
@@ -2991,16 +3073,16 @@ function exportData() {
   document.body.append(a);
   a.click();
   a.remove();
-  showBanner("Descargando la copia de tus datos…", 4000);
+  showBanner(t("export.downloading"), 4000);
 }
 
 // saveExport: sin escritorio (la WebView no descarga), el núcleo guarda la
 // copia directamente en la carpeta de archivos recibidos.
 async function saveExport() {
-  showBanner("Guardando la copia de tus datos…");
+  showBanner(t("export.saving"));
   try {
     const { name, dir } = await request("POST", "/api/data/export", {});
-    showBanner(`Copia guardada en ${friendlyDir(dir)} › ${name}`, 8000);
+    showBanner(t("export.saved", { path: `${friendlyDir(dir)} › ${name}` }), 8000);
   } catch (e) {
     showBanner(e.message, 6000);
   }
@@ -3008,7 +3090,7 @@ async function saveExport() {
 
 // friendlyDir muestra la carpeta como el explorador de archivos de Android.
 function friendlyDir(dir) {
-  return dir.endsWith("/Download/LanChat") ? "Descargas › LanChat" : dir;
+  return dir.endsWith("/Download/LanChat") ? t("android.downloadsDir") : dir;
 }
 
 async function deleteChat() {
@@ -3016,11 +3098,9 @@ async function deleteChat() {
   const c = state.contacts.get(state.current);
   let question;
   if (room) {
-    question = room.left
-      ? `¿Borrar la sala «${room.name}» y todos sus mensajes de este equipo?`
-      : `¿Borrar todos los mensajes de «${room.name}» de este equipo? Sigues en la sala; los demás conservan sus mensajes.`;
+    question = t(room.left ? "clear.roomLeftAsk" : "clear.roomAsk", { name: room.name });
   } else if (c) {
-    question = `¿Borrar toda la conversación con ${c.displayName} de este equipo? Se cancelan los archivos pendientes con este contacto. ${c.displayName} conserva su copia.`;
+    question = t("clear.chatAsk", { name: c.displayName });
   } else {
     return;
   }
@@ -3041,12 +3121,12 @@ async function deleteChat() {
 function openRemove() {
   const c = state.contacts.get(state.current);
   if (!c || c.online) return;
-  $("remove-who").textContent = c.displayName;
+  $("remove-title").textContent = t("remove.title", { name: c.displayName });
   const candidates = mergeCandidates(c);
   const select = $("remove-into");
   select.replaceChildren(...candidates.map((o) => Object.assign(document.createElement("option"), {
     value: o.id,
-    textContent: `${o.displayName} · ${o.detail}${o.online ? "" : " (desconectado)"}`,
+    textContent: `${o.displayName} · ${o.detail}${o.online ? "" : ` (${t("status.offline").toLocaleLowerCase(i18n.lang)})`}`,
   })));
   const conv = state.messages.get(c.id);
   const hasMessages = c.unread > 0 || !conv || conv.list.length > 0;
@@ -3062,7 +3142,7 @@ function openRemove() {
 
 // samePerson: mismo nombre propio o mismo nombre de equipo.
 function samePerson(a, b) {
-  const same = (x, y) => Boolean(x) && x.toLocaleLowerCase("es") === y.toLocaleLowerCase("es");
+  const same = (x, y) => Boolean(x) && x.toLocaleLowerCase(i18n.lang) === y.toLocaleLowerCase(i18n.lang);
   return same(a.name, b.name) || same(a.hostname, b.hostname);
 }
 
@@ -3081,7 +3161,7 @@ async function removeContact(ev) {
   const merge = !$("remove-choice").hidden && $("remove-form").elements["remove-mode"].value === "merge";
   const into = merge ? $("remove-into").value : "";
   if (!$("remove-choice").hidden && !merge &&
-      !confirm(`¿Borrar toda la conversación con ${c.displayName} de este equipo?`)) return;
+      !confirm(t("remove.deleteAsk", { name: c.displayName }))) return;
   try {
     await api.removeContact(c.id, into);
     $("remove-dialog").close();
@@ -3136,8 +3216,9 @@ function cleared(ev) {
 function openWipe() {
   $("settings").close();
   $("wipe-input").value = "";
+  $("wipe-label").textContent = t("wipe.typeWord", { word: t("wipe.word") });
   $("wipe-btn").disabled = true;
-  $("wipe-downloads").textContent = state.downloadDir || "Descargas\\LanChat";
+  $("wipe-downloads").textContent = state.downloadDir || t("transfer.defaultDir");
   $("wipe-error").hidden = true;
   $("wipe-dialog").showModal();
 }
@@ -3160,7 +3241,7 @@ async function reloadAll() {
   state.progress.clear();
   showEmpty();
   await loadState().catch((e) => showBanner(e.message));
-  showBanner("Se borraron todos tus datos de este equipo.", 5000);
+  showBanner(t("wipe.done"), 5000);
 }
 
 // ---------- Eventos en vivo ----------
@@ -3181,7 +3262,7 @@ function connectEvents() {
   es.addEventListener("error", async () => {
     if (state.expired) return es.close();
     wasDown = true;
-    showBanner("Reconectando con LanChat…");
+    showBanner(t("api.reconnecting"));
     // Si el servidor responde pero rechaza el token, la sesión caducó.
     try {
       const res = await fetch("/api/state");
@@ -3223,6 +3304,8 @@ function connectEvents() {
 
   es.addEventListener("self", (e) => {
     state.self = JSON.parse(e.data);
+    // Se cambió el idioma (en esta u otra ventana): textos nuevos.
+    if (state.self.lang && state.self.lang !== i18n.lang) return location.reload();
     renderSelf();
   });
 
@@ -3247,7 +3330,7 @@ function connectEvents() {
   es.addEventListener("quit", () => {
     es.close();
     window.close();
-    showBanner("LanChat se cerró. Puedes cerrar esta ventana.");
+    showBanner(t("api.closed"));
   });
 }
 
@@ -3314,7 +3397,7 @@ function bind() {
   $("wipe-open-btn").addEventListener("click", openWipe);
   $("wipe-form").addEventListener("submit", wipe);
   $("wipe-input").addEventListener("input", () =>
-    ($("wipe-btn").disabled = $("wipe-input").value.trim() !== WIPE_WORD));
+    ($("wipe-btn").disabled = $("wipe-input").value.trim() !== t("wipe.word")));
   $("about-btn").addEventListener("click", openAbout);
   $("settings-about").addEventListener("click", () => {
     $("settings").close();
@@ -3425,6 +3508,7 @@ function bind() {
   $("stop-btn").addEventListener("click", () => window.LanChatAndroid?.stop());
   $("android-autostart").addEventListener("change", (e) =>
     window.LanChatAndroid?.setAutostart(e.currentTarget.checked));
+  $("language-input").addEventListener("change", changeLanguage);
   $("open-downloads").addEventListener("click", () =>
     api.openDownloadDir().catch((e) => showBanner(e.message, 5000)));
 
@@ -3434,7 +3518,7 @@ function bind() {
   chat.addEventListener("dragenter", (e) => {
     if (!hasFiles(e) || !state.current || roomId(state.current)) return;
     dragDepth++;
-    $("drop-overlay").textContent = `Suelta para enviar a ${state.contacts.get(state.current)?.displayName ?? ""}`;
+    $("drop-overlay").textContent = t("drop.sendTo", { name: state.contacts.get(state.current)?.displayName ?? "" });
     $("drop-overlay").hidden = false;
   });
   chat.addEventListener("dragleave", () => {
@@ -3476,7 +3560,9 @@ window.lanchatResume = () => {
 };
 
 bind();
-loadState()
+loadLocale()
+  .catch((e) => console.error("textos:", e)) // sin textos se ven las claves, pero LanChat sirve
+  .then(loadState)
   .then(connectEvents)
   .then(askAutostart)
   .then(askUpdate)
