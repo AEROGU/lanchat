@@ -181,6 +181,11 @@ var migrations = [][]string{
 		// photo_id es protocol.PhotoID de data.
 		`CREATE TABLE photos (peer_id TEXT PRIMARY KEY, photo_id TEXT NOT NULL, data BLOB NOT NULL)`,
 	},
+	{
+		// notice: en un aviso de sala, protocol.RoomNotice en JSON ('' = sin datos;
+		// se muestra body).
+		`ALTER TABLE messages ADD COLUMN notice TEXT NOT NULL DEFAULT ''`,
+	},
 }
 
 // busyTimeout: espera máxima de una escritura si la base está ocupada.
@@ -405,6 +410,9 @@ type Message struct {
 	Forwarded bool
 	// Reply: el mensaje responde a otro de la conversación (Reply.ID vacío si no).
 	Reply Reply
+	// Notice: en un aviso de sala, sus datos (protocol.RoomNotice en JSON) para
+	// mostrarlo en el idioma de cada quien; vacío si no los trae.
+	Notice string
 	// Reactions: nil si no se consultaron (Message e historiales sí las traen).
 	Reactions []Reaction
 }
@@ -433,15 +441,15 @@ const (
 // messageColumns son las que se escriben al insertar; messageSelect agrega las
 // que solo cambian después.
 const messageColumns = `id, peer_id, outgoing, body, at, sent_at, status, unread, kind, broadcast, room_id, forwarded,
-	reply_id, reply_author, reply_text`
+	reply_id, reply_author, reply_text, notice`
 
 // messagePlaceholders son los parámetros de un INSERT con messageColumns.
-const messagePlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
+const messagePlaceholders = `?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
 
 // messageArgs son los valores de m para un INSERT con messageColumns.
 func messageArgs(m Message) []any {
 	return []any{m.ID, m.PeerID, m.Outgoing, m.Body, m.At.UnixMilli(), m.SentAt.UnixMilli(), m.Status, m.Unread, m.Kind,
-		m.Broadcast, m.RoomID, m.Forwarded, m.Reply.ID, m.Reply.Author, m.Reply.Text}
+		m.Broadcast, m.RoomID, m.Forwarded, m.Reply.ID, m.Reply.Author, m.Reply.Text, m.Notice}
 }
 
 const messageSelect = messageColumns + `, read_at, deleted, merged_from, edited_at`
@@ -618,7 +626,7 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 		var m Message
 		var at, sent, readAt, editedAt int64
 		if err := rows.Scan(&m.ID, &m.PeerID, &m.Outgoing, &m.Body, &at, &sent, &m.Status, &m.Unread,
-			&m.Kind, &m.Broadcast, &m.RoomID, &m.Forwarded, &m.Reply.ID, &m.Reply.Author, &m.Reply.Text,
+			&m.Kind, &m.Broadcast, &m.RoomID, &m.Forwarded, &m.Reply.ID, &m.Reply.Author, &m.Reply.Text, &m.Notice,
 			&readAt, &m.Deleted, &m.MergedFrom, &editedAt); err != nil {
 			return nil, err
 		}

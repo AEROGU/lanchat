@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
@@ -70,27 +71,41 @@ func toWireRoom(r store.Room) *wireRoom {
 	return &wireRoom{ID: r.ID, Name: r.Name, Members: r.Members, Admins: r.Admins, Version: r.Version}
 }
 
-// SendRoom envía body a los demás miembros de la sala y a extra (quien acaba
-// de ser sacado de la sala también debe recibir el aviso). Con event es un
-// aviso de la sala ("Ana agregó a Luis"); se puede enviar aunque este equipo
-// ya haya salido (para avisar que salió).
-func (s *Service) SendRoom(ctx context.Context, roomID, body string, event bool, extra ...string) (store.Message, error) {
-	return s.sendRoom(ctx, roomID, body, event, false, store.Reply{}, extra)
+// SendRoom envía body a los demás miembros de la sala.
+func (s *Service) SendRoom(ctx context.Context, roomID, body string) (store.Message, error) {
+	return s.sendRoom(ctx, roomID, body, nil, false, store.Reply{}, nil)
+}
+
+// SendRoomNotice envía un aviso de la sala ("Ana agregó a Luis") a los demás
+// miembros y a extra (quien acaba de ser sacado también debe recibirlo); se
+// puede enviar aunque este equipo ya haya salido (para avisar que salió).
+// body es el texto para las versiones que no conocen n.
+func (s *Service) SendRoomNotice(ctx context.Context, roomID, body string, n protocol.RoomNotice, extra ...string) (store.Message, error) {
+	return s.sendRoom(ctx, roomID, body, &n, false, store.Reply{}, extra)
 }
 
 // ForwardRoom reenvía body a la sala (llega marcado como reenviado).
 func (s *Service) ForwardRoom(ctx context.Context, roomID, body string) (store.Message, error) {
-	return s.sendRoom(ctx, roomID, body, false, true, store.Reply{}, nil)
+	return s.sendRoom(ctx, roomID, body, nil, true, store.Reply{}, nil)
 }
 
 // ReplyRoom envía a la sala body como respuesta a otro mensaje, con su cita.
 func (s *Service) ReplyRoom(ctx context.Context, roomID, body string, r store.Reply) (store.Message, error) {
-	return s.sendRoom(ctx, roomID, body, false, false, r, nil)
+	return s.sendRoom(ctx, roomID, body, nil, false, r, nil)
 }
 
-func (s *Service) sendRoom(ctx context.Context, roomID, body string, event, forwarded bool, reply store.Reply, extra []string) (store.Message, error) {
+func (s *Service) sendRoom(ctx context.Context, roomID, body string, notice *protocol.RoomNotice, forwarded bool, reply store.Reply, extra []string) (store.Message, error) {
 	if err := protocol.ValidateMessage(body); err != nil {
 		return store.Message{}, err
+	}
+	event := notice != nil
+	var noticeJSON string
+	if event {
+		if err := protocol.ValidateRoomNotice(*notice); err != nil {
+			return store.Message{}, err
+		}
+		b, _ := json.Marshal(notice)
+		noticeJSON = string(b)
 	}
 	room, ok, err := s.store.Room(ctx, roomID)
 	if err != nil {
@@ -111,7 +126,7 @@ func (s *Service) sendRoom(ctx context.Context, roomID, body string, event, forw
 	now := time.Now()
 	m := store.Message{
 		ID: ids.New(), Outgoing: true, Body: body, At: now, SentAt: now,
-		Status: store.StatusPending, RoomID: roomID, Forwarded: forwarded, Reply: reply,
+		Status: store.StatusPending, RoomID: roomID, Forwarded: forwarded, Reply: reply, Notice: noticeJSON,
 	}
 	if event {
 		m.Kind = store.KindRoomEvent
@@ -147,7 +162,7 @@ func (s *Service) flushRoom(p discovery.Peer) bool {
 				ID: m.ID, From: s.self.ID, FromName: s.self.Name(), FromHost: s.self.Hostname,
 				Body: m.Body, SentAt: m.SentAt.UnixMilli(),
 				Room: toWireRoom(room), Event: m.Kind == store.KindRoomEvent, Forwarded: m.Forwarded,
-				Reply: toWireReply(m.Reply),
+				Reply: toWireReply(m.Reply), Notice: wireNotice(m.Notice),
 			})
 			switch {
 			case err != nil || status >= 500:
@@ -269,6 +284,7 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 	}
 	if wm.Event {
 		m.Kind = store.KindRoomEvent
+		m.Notice = storedNotice(wm.Notice)
 	} else {
 		m.Reply = wm.reply()
 	}

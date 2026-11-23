@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -72,8 +71,7 @@ func (a *App) CreateRoom(ctx context.Context, name string, members []string) (st
 	if err := a.saveRoom(ctx, r); err != nil {
 		return store.Room{}, err
 	}
-	_, err = a.chat.SendRoom(ctx, r.ID, fmt.Sprintf("%s creó la sala «%s»", a.selfName(), name), true)
-	return r, err
+	return r, a.sendNotice(ctx, r.ID, protocol.RoomNotice{Type: protocol.NoticeCreated, Name: name})
 }
 
 // AddRoomMembers agrega contactos a la sala (cualquier miembro puede hacerlo).
@@ -92,12 +90,7 @@ func (a *App) AddRoomMembers(ctx context.Context, roomID string, members []strin
 	if err := a.saveRoom(ctx, r); err != nil {
 		return err
 	}
-	names := make([]string, len(added))
-	for i, id := range added {
-		names[i] = a.contactName(ctx, id)
-	}
-	_, err = a.chat.SendRoom(ctx, roomID, fmt.Sprintf("%s agregó a %s", a.selfName(), joinNames(names)), true)
-	return err
+	return a.sendNotice(ctx, roomID, protocol.RoomNotice{Type: protocol.NoticeAdded, Members: a.noticeMembers(ctx, added...)})
 }
 
 // RenameRoom cambia el nombre de la sala para todos los miembros.
@@ -118,8 +111,7 @@ func (a *App) RenameRoom(ctx context.Context, roomID, name string) error {
 	if err := a.saveRoom(ctx, r); err != nil {
 		return err
 	}
-	_, err = a.chat.SendRoom(ctx, roomID, fmt.Sprintf("%s cambió el nombre de la sala a «%s»", a.selfName(), name), true)
-	return err
+	return a.sendNotice(ctx, roomID, protocol.RoomNotice{Type: protocol.NoticeRenamed, Name: name})
 }
 
 // RemoveRoomMember saca a otro miembro de la sala; solo un administrador
@@ -135,9 +127,7 @@ func (a *App) RemoveRoomMember(ctx context.Context, roomID, memberID string) err
 	if err := a.saveRoom(ctx, r); err != nil {
 		return err
 	}
-	_, err = a.chat.SendRoom(ctx, roomID,
-		fmt.Sprintf("%s sacó a %s de la sala", a.selfName(), a.contactName(ctx, memberID)), true, memberID)
-	return err
+	return a.sendNotice(ctx, roomID, protocol.RoomNotice{Type: protocol.NoticeRemoved, Members: a.noticeMembers(ctx, memberID)}, memberID)
 }
 
 // SetRoomAdmin hace administrador a otro miembro o le quita el privilegio;
@@ -151,20 +141,19 @@ func (a *App) SetRoomAdmin(ctx context.Context, roomID, memberID string, admin b
 	if slices.Contains(admins, memberID) == admin {
 		return nil
 	}
-	text := "%s hizo administrador a %s"
+	notice := protocol.RoomNotice{Type: protocol.NoticeAdmin, Members: a.noticeMembers(ctx, memberID)}
 	if admin {
 		admins = append(admins, memberID)
 	} else {
 		admins = slices.DeleteFunc(admins, func(id string) bool { return id == memberID })
-		text = "%s le quitó a %s el privilegio de administrador"
+		notice.Type = protocol.NoticeUnadmin
 	}
 	r.Admins = admins
 	r.Version++
 	if err := a.saveRoom(ctx, r); err != nil {
 		return err
 	}
-	_, err = a.chat.SendRoom(ctx, roomID, fmt.Sprintf(text, a.selfName(), a.contactName(ctx, memberID)), true)
-	return err
+	return a.sendNotice(ctx, roomID, notice)
 }
 
 // adminRoom devuelve la sala si este equipo la administra y memberID es otro
@@ -202,8 +191,7 @@ func (a *App) LeaveRoom(ctx context.Context, roomID string) error {
 	if err := a.saveRoom(ctx, r); err != nil {
 		return err
 	}
-	_, err = a.chat.SendRoom(ctx, roomID, fmt.Sprintf("%s salió de la sala", a.selfName()), true)
-	return err
+	return a.sendNotice(ctx, roomID, protocol.RoomNotice{Type: protocol.NoticeLeft})
 }
 
 // DeleteForEveryone elimina para todos un mensaje de texto propio (de una
@@ -219,7 +207,7 @@ func (a *App) React(ctx context.Context, msgID, emoji string) (store.Message, er
 
 // SendRoom envía un mensaje a la sala.
 func (a *App) SendRoom(ctx context.Context, roomID, body string) (store.Message, error) {
-	return a.chat.SendRoom(ctx, roomID, body, false)
+	return a.chat.SendRoom(ctx, roomID, body)
 }
 
 func (a *App) RoomHistory(ctx context.Context, roomID, beforeID string, limit int) ([]store.Message, error) {
@@ -297,10 +285,47 @@ func (a *App) contactName(ctx context.Context, id string) string {
 	return id
 }
 
-// joinNames: "Ana", "Ana y Luis", "Ana, Luis y Eva".
-func joinNames(names []string) string {
+// sendNotice envía un aviso de la sala hecho por este equipo: n para las
+// versiones que lo conocen (cada una lo muestra en su idioma) y el texto en
+// español para las anteriores, que solo estaban en español.
+func (a *App) sendNotice(ctx context.Context, roomID string, n protocol.RoomNotice, extra ...string) error {
+	_, err := a.chat.SendRoomNotice(ctx, roomID, NoticeText("es", a.selfName(), n), n, extra...)
+	return err
+}
+
+// noticeMembers nombra a los miembros de un aviso como los ve este equipo.
+func (a *App) noticeMembers(ctx context.Context, ids ...string) []protocol.NoticeMember {
+	out := make([]protocol.NoticeMember, len(ids))
+	for i, id := range ids {
+		out[i] = protocol.NoticeMember{ID: id, Name: a.contactName(ctx, id)}
+	}
+	return out
+}
+
+// noticeKeys son los textos de cada tipo de aviso (también los usa la página).
+var noticeKeys = map[string]string{
+	protocol.NoticeCreated: "notice.created",
+	protocol.NoticeAdded:   "notice.added",
+	protocol.NoticeRenamed: "notice.renamed",
+	protocol.NoticeRemoved: "notice.removed",
+	protocol.NoticeAdmin:   "notice.admin",
+	protocol.NoticeUnadmin: "notice.unadmin",
+	protocol.NoticeLeft:    "notice.left",
+}
+
+// NoticeText es el aviso n hecho por who, en el idioma lang.
+func NoticeText(lang, who string, n protocol.RoomNotice) string {
+	names := make([]string, len(n.Members))
+	for i, m := range n.Members {
+		names[i] = m.Name
+	}
+	return i18n.TL(lang, noticeKeys[n.Type], "who", who, "whom", joinNames(lang, names), "name", n.Name)
+}
+
+// joinNames une nombres: "Ana, Luis y Eva".
+func joinNames(lang string, names []string) string {
 	if len(names) <= 1 {
 		return strings.Join(names, "")
 	}
-	return strings.Join(names[:len(names)-1], ", ") + " y " + names[len(names)-1]
+	return i18n.TL(lang, "fmt.and", "list", strings.Join(names[:len(names)-1], ", "), "last", names[len(names)-1])
 }

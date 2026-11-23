@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"time"
 
@@ -192,6 +193,9 @@ type messageJSON struct {
 	Forwarded bool `json:"forwarded"`
 	// Reply: la cita del mensaje al que responde (ausente si no responde a nada).
 	Reply *replyJSON `json:"reply,omitempty"`
+	// Notice: en un aviso de sala, sus datos (protocol.RoomNotice) para
+	// mostrarlo en el idioma de la página; ausente si solo trae el texto.
+	Notice json.RawMessage `json:"notice,omitempty"`
 }
 
 // replyJSON es la cita de una respuesta (ver store.Reply).
@@ -248,7 +252,15 @@ func toMessageJSON(m store.Message) messageJSON {
 		Edited:     !m.EditedAt.IsZero() && !m.Deleted,
 		Forwarded:  m.Forwarded,
 		Reply:      toReplyJSON(m),
+		Notice:     noticeJSON(m.Notice),
 	}
+}
+
+func noticeJSON(stored string) json.RawMessage {
+	if stored == "" {
+		return nil
+	}
+	return json.RawMessage(stored)
 }
 
 func toReplyJSON(m store.Message) *replyJSON {

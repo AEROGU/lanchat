@@ -103,6 +103,32 @@ type wireMessage struct {
 	// Reply: responde a otro mensaje de la conversación. Las versiones que no
 	// lo conocen lo muestran como un mensaje normal, sin la cita.
 	Reply *wireReply `json:"reply,omitempty"`
+	// Notice: en un aviso de sala, sus datos para mostrarlo en el idioma de
+	// quien lo recibe. Las versiones que no lo conocen muestran Body.
+	Notice *protocol.RoomNotice `json:"notice,omitempty"`
+}
+
+// wireNotice convierte el aviso guardado (JSON) en el que viaja.
+func wireNotice(stored string) *protocol.RoomNotice {
+	if stored == "" {
+		return nil
+	}
+	var n protocol.RoomNotice
+	if json.Unmarshal([]byte(stored), &n) != nil {
+		return nil
+	}
+	return &n
+}
+
+// storedNotice valida el aviso recibido y lo deja en JSON para guardarlo; uno
+// inválido o de un tipo desconocido (de una versión futura) se descarta y se
+// muestra el texto.
+func storedNotice(n *protocol.RoomNotice) string {
+	if n == nil || protocol.ValidateRoomNotice(*n) != nil {
+		return ""
+	}
+	b, _ := json.Marshal(n)
+	return string(b)
 }
 
 // wireReply es la cita del mensaje al que se responde (ver store.Reply).

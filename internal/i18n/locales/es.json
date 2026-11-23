@@ -265,5 +265,14 @@
   "config.portRange": "Puerto {port} fuera de rango",
   "identity.createFailed": "Creando la identidad: {err}",
   "identity.readFailed": "Leyendo la identidad ({path}): {err}",
-  "uninstall.notDataDir": "No parece una carpeta de datos de LanChat: {dir}"
+  "uninstall.notDataDir": "No parece una carpeta de datos de LanChat: {dir}",
+  "fmt.and": "{list} y {last}",
+  "notice.created": "{who} creó la sala «{name}»",
+  "notice.added": "{who} agregó a {whom}",
+  "notice.renamed": "{who} cambió el nombre de la sala a «{name}»",
+  "notice.removed": "{who} sacó a {whom} de la sala",
+  "notice.admin": "{who} hizo administrador a {whom}",
+  "notice.unadmin": "{who} le quitó a {whom} el privilegio de administrador",
+  "notice.left": "{who} salió de la sala",
+  "protocol.badNotice": "Aviso de sala inválido"
 }

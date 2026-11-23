@@ -6,6 +6,7 @@ import (
 
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/testutil"
 )
@@ -46,6 +47,9 @@ func TestRooms(t *testing.T) {
 	if ev.Message.Kind != store.KindRoomEvent || ev.Message.Unread {
 		t.Errorf("el aviso debía ser un evento ya leído: %+v", ev.Message)
 	}
+	if ev.Message.Notice != `{"type":"created","name":"Proyecto"}` {
+		t.Errorf("datos del aviso: %q", ev.Message.Notice)
+	}
 
 	// Mensaje de B: le llega a A con B como autor.
 	if _, err := b.app.SendRoom(ctx, room.ID, "hola sala"); err != nil {
@@ -70,7 +74,13 @@ func TestRooms(t *testing.T) {
 	if err := b.app.AddRoomMembers(ctx, room.ID, []string{idC}); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, c, "C recibe el aviso", chatEvent(chat.MessageReceived, "PC-B agregó a PC-C"))
+	ev = waitFor(t, c, "C recibe el aviso", chatEvent(chat.MessageReceived, "PC-B agregó a PC-C")).(chat.Event)
+	if want := `{"type":"added","members":[{"id":"` + idC + `","name":"PC-C"}]}`; ev.Message.Notice != want {
+		t.Errorf("datos del aviso: %q; quería %q", ev.Message.Notice, want)
+	}
+	if got := NoticeText("en", "PC-B", protocol.RoomNotice{Type: protocol.NoticeAdded, Members: []protocol.NoticeMember{{Name: "Ana"}, {Name: "Luis"}, {Name: "Eva"}}}); got != "PC-B added Ana, Luis and Eva" {
+		t.Errorf("NoticeText = %q", got)
+	}
 	waitFor(t, a, "A ve a C en la sala", roomEvent(func(r store.Room) bool { return len(r.Members) == 3 }))
 	if _, err := c.app.SendRoom(ctx, room.ID, "soy nuevo"); err != nil {
 		t.Fatal(err)

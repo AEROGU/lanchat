@@ -265,5 +265,14 @@
   "config.portRange": "Port {port} out of range",
   "identity.createFailed": "Creating the identity: {err}",
   "identity.readFailed": "Reading the identity ({path}): {err}",
-  "uninstall.notDataDir": "This doesn't look like a LanChat data folder: {dir}"
+  "uninstall.notDataDir": "This doesn't look like a LanChat data folder: {dir}",
+  "fmt.and": "{list} and {last}",
+  "notice.created": "{who} created the room “{name}”",
+  "notice.added": "{who} added {whom}",
+  "notice.renamed": "{who} renamed the room to “{name}”",
+  "notice.removed": "{who} removed {whom} from the room",
+  "notice.admin": "{who} made {whom} an admin",
+  "notice.unadmin": "{who} removed admin rights from {whom}",
+  "notice.left": "{who} left the room",
+  "protocol.badNotice": "Invalid room notice"
 }

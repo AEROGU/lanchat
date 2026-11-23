@@ -76,7 +76,7 @@ func TestHandleRoomMessage(t *testing.T) {
 	if h, _ := s.store.RoomHistory(ctx, "sala1", "", 10); len(h) != 3 {
 		t.Errorf("historial tras salir: %d mensajes", len(h))
 	}
-	if _, err := s.SendRoom(ctx, "sala1", "hola", false); err == nil {
+	if _, err := s.SendRoom(ctx, "sala1", "hola"); err == nil {
 		t.Error("no debía poder escribir tras salir")
 	}
 }
