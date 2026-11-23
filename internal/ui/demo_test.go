@@ -5,7 +5,8 @@ package ui
 // Oficina de demostración para las capturas de pantalla del README: la
 // interfaz real con datos ficticios en memoria (sin red ni base de datos).
 //
-// "go tool mage screenshots" la usa para regenerar docs/screenshots. A mano:
+// "go tool mage screenshots" la usa para regenerar docs/screenshots/<idioma>
+// (LANCHAT_LANG elige el idioma de la página y de los datos). A mano:
 //
 //	go test -c -tags demo -o demo.exe ./internal/ui
 //	demo.exe -test.run ^TestDemo$ -test.timeout 0
@@ -53,7 +54,15 @@ func today(h, m int) time.Time {
 	return time.Date(n.Year(), n.Month(), n.Day(), h, m, 0, 0, time.Local)
 }
 
+// newDemoBackend arma la oficina en el idioma en uso: en español o, en
+// cualquier otro, en inglés.
 func newDemoBackend() *demoBackend {
+	tr := func(es, en string) string {
+		if i18n.Current() == "es" {
+			return es
+		}
+		return en
+	}
 	fp := func(seed string) string {
 		const hex = "0123456789abcdef"
 		b := make([]byte, 64)
@@ -73,15 +82,15 @@ func newDemoBackend() *demoBackend {
 		return c
 	}
 	d := &demoBackend{
-		self: app.Self{ID: "yo", Name: "Laura", Hostname: "RECEPCION", Status: protocol.StatusAvailable,
+		self: app.Self{ID: "yo", Name: "Laura", Hostname: tr("RECEPCION", "FRONT-DESK"), Status: protocol.StatusAvailable,
 			AutoAwayEnabled: true, ReadReceipts: true, Fingerprint: fp("yo")},
 		contacts: []app.Contact{
-			contact("c1", "Carlos Ruiz", "PC-CONTA01", "192.168.1.21", "Contabilidad", protocol.StatusAvailable, "", true, 0),
-			contact("c2", "María Fernanda Ortiz", "PC-CONTA02", "192.168.1.22", "Contabilidad", protocol.StatusAway, "En junta hasta las 12", true, 0),
-			contact("c3", "Jorge Salinas", "PC-VENTAS01", "192.168.1.35", "Ventas", protocol.StatusBusy, "Llamada con cliente", true, 0),
-			contact("c4", "Sofía Herrera", "PC-VENTAS02", "192.168.1.36", "Ventas", protocol.StatusAvailable, "", true, 1),
-			contact("c5", "Almacén", "PC-ALMACEN", "10.0.5.20", "Operación", protocol.StatusAvailable, "", true, 0),
-			contact("c6", "Roberto Díaz", "PC-DIRECCION", "192.168.1.10", "Operación", "", "", false, 0),
+			contact("c1", "Carlos Ruiz", tr("PC-CONTA01", "PC-ACCT01"), "192.168.1.21", tr("Contabilidad", "Accounting"), protocol.StatusAvailable, "", true, 0),
+			contact("c2", tr("María Fernanda Ortiz", "Mary Ortiz"), tr("PC-CONTA02", "PC-ACCT02"), "192.168.1.22", tr("Contabilidad", "Accounting"), protocol.StatusAway, tr("En junta hasta las 12", "In a meeting until 12"), true, 0),
+			contact("c3", tr("Jorge Salinas", "George Salinas"), tr("PC-VENTAS01", "PC-SALES01"), "192.168.1.35", tr("Ventas", "Sales"), protocol.StatusBusy, tr("Llamada con cliente", "On a call with a client"), true, 0),
+			contact("c4", tr("Sofía Herrera", "Sophie Herrera"), tr("PC-VENTAS02", "PC-SALES02"), "192.168.1.36", tr("Ventas", "Sales"), protocol.StatusAvailable, "", true, 1),
+			contact("c5", tr("Almacén", "Warehouse"), tr("PC-ALMACEN", "PC-WAREHOUSE"), "10.0.5.20", tr("Operación", "Operations"), protocol.StatusAvailable, "", true, 0),
+			contact("c6", tr("Roberto Díaz", "Robert Diaz"), tr("PC-DIRECCION", "PC-MANAGER"), "192.168.1.10", tr("Operación", "Operations"), "", "", false, 0),
 		},
 		history:   map[string][]store.Message{},
 		transfers: map[string]store.Transfer{},
@@ -109,30 +118,40 @@ func newDemoBackend() *demoBackend {
 
 	// Conversación con Carlos: texto, una carpeta enviada y una oferta recibida.
 	var invoices []store.TransferFile
-	for i, name := range []string{"F-1021 Papelería Central.pdf", "F-1022 Servicios de limpieza.pdf",
+	names := []string{"F-1021 Papelería Central.pdf", "F-1022 Servicios de limpieza.pdf",
 		"F-1023 Telefonía.pdf", "F-1024 Mantenimiento.pdf", "F-1025 Paquetería Express.pdf",
-		"F-1026 Cafetería.pdf", "F-1027 Software contable.pdf", "F-1028 Arrendamiento.pdf"} {
+		"F-1026 Cafetería.pdf", "F-1027 Software contable.pdf", "F-1028 Arrendamiento.pdf"}
+	if i18n.Current() != "es" {
+		names = []string{"INV-1021 Central Stationery.pdf", "INV-1022 Cleaning services.pdf",
+			"INV-1023 Phone.pdf", "INV-1024 Maintenance.pdf", "INV-1025 Express Courier.pdf",
+			"INV-1026 Cafeteria.pdf", "INV-1027 Accounting software.pdf", "INV-1028 Lease.pdf"}
+	}
+	for i, name := range names {
 		invoices = append(invoices, store.TransferFile{Index: i, Name: name, Size: int64(380_000 + i*95_000),
-			Dir: "Facturas septiembre", Done: true})
+			Dir: tr("Facturas septiembre", "September invoices"), Done: true})
 	}
 	d.transfers["m3"] = store.Transfer{ID: "m3", PeerID: "c1", Outgoing: true, State: store.TransferCompleted,
 		ExpiresAt: today(9, 15).Add(24 * time.Hour), Files: invoices}
 	d.transfers["m5"] = store.Transfer{ID: "m5", PeerID: "c1", State: store.TransferOffered,
 		ExpiresAt: today(9, 22).Add(24 * time.Hour),
-		Files:     []store.TransferFile{{Name: "Conciliación bancaria septiembre.xlsx", Size: 2_458_112}}}
+		Files:     []store.TransferFile{{Name: tr("Conciliación bancaria septiembre.xlsx", "September bank reconciliation.xlsx"), Size: 2_458_112}}}
 	files := func(m store.Message) store.Message { m.Kind = store.KindFiles; return m }
 	d.history["c1"] = []store.Message{
-		in("m1", "c1", today(9, 12), "Buenos días, Laura. ¿Ya llegaron las facturas de proveedores de septiembre?"),
-		react(out("m2", "c1", today(9, 14), "Sí, las escaneé hace rato. Te paso la carpeta.", true), "👍", "c1"),
-		files(out("m3", "c1", today(9, 15), "📁 Facturas septiembre (8 archivos)", true)),
-		in("m4", "c1", today(9, 21), "Perfecto, ya las tengo 👍\nTe mando la conciliación para que la revises."),
-		files(in("m5", "c1", today(9, 22), "📎 Conciliación bancaria septiembre.xlsx")),
-		react(out("m6", "c1", today(9, 24), "Gracias, la reviso después de la junta.", true), "🙏", "c1"),
+		in("m1", "c1", today(9, 12), tr("Buenos días, Laura. ¿Ya llegaron las facturas de proveedores de septiembre?",
+			"Good morning, Laura. Did the September supplier invoices arrive?")),
+		react(out("m2", "c1", today(9, 14), tr("Sí, las escaneé hace rato. Te paso la carpeta.",
+			"Yes, I scanned them a while ago. I'll send you the folder."), true), "👍", "c1"),
+		files(out("m3", "c1", today(9, 15), tr("📁 Facturas septiembre (8 archivos)", "📁 September invoices (8 files)"), true)),
+		in("m4", "c1", today(9, 21), tr("Perfecto, ya las tengo 👍\nTe mando la conciliación para que la revises.",
+			"Perfect, got them 👍\nI'm sending you the reconciliation to review.")),
+		files(in("m5", "c1", today(9, 22), tr("📎 Conciliación bancaria septiembre.xlsx", "📎 September bank reconciliation.xlsx"))),
+		react(out("m6", "c1", today(9, 24), tr("Gracias, la reviso después de la junta.", "Thanks, I'll review it after the meeting."), true), "🙏", "c1"),
 	}
 	d.history["c4"] = []store.Message{
-		in("s1", "c4", today(10, 2), "¿Tienes a la mano el teléfono del proveedor de tóner?"),
+		in("s1", "c4", today(10, 2), tr("¿Tienes a la mano el teléfono del proveedor de tóner?", "Do you have the toner supplier's phone number handy?")),
 	}
-	broadcast := out("b1", "c2", today(8, 30), "Hoy a las 2 se corta la luz 15 minutos por mantenimiento. Guarden su trabajo.", true)
+	broadcast := out("b1", "c2", today(8, 30), tr("Hoy a las 2 se corta la luz 15 minutos por mantenimiento. Guarden su trabajo.",
+		"The power will be off for 15 minutes at 2 today for maintenance. Save your work."), true)
 	broadcast.Broadcast = true
 	d.history["c2"] = []store.Message{broadcast}
 
@@ -141,10 +160,14 @@ func newDemoBackend() *demoBackend {
 		return app.Room{Room: store.Room{ID: id, Name: name, Members: append([]string{"yo"}, members...), Version: 3}, Unread: unread}
 	}
 	d.rooms = []app.Room{
-		room("r1", "Cierre de mes", 0, "c1", "c2", "c3"),
-		room("r2", "Proyecto Norte", 3, "c4", "c5"),
+		room("r1", tr("Cierre de mes", "Month-end close"), 0, "c1", "c2", "c3"),
+		room("r2", tr("Proyecto Norte", "North Project"), 3, "c4", "c5"),
 	}
-	ev := func(m store.Message) store.Message { m.Kind = store.KindRoomEvent; m.Unread = false; return m }
+	// Los avisos llevan sus datos, como en LanChat real: se ven en el idioma de la página.
+	ev := func(m store.Message, notice string) store.Message {
+		m.Kind, m.Unread, m.Notice = store.KindRoomEvent, false, notice
+		return m
+	}
 	inRoom := func(id, room, peer string, at time.Time, body string) store.Message {
 		m := in(id, peer, at, body)
 		m.RoomID = room
@@ -160,14 +183,16 @@ func newDemoBackend() *demoBackend {
 		return m
 	}
 	d.history[roomViewPrefix+"r1"] = []store.Message{
-		ev(outRoom("e1", "r1", today(8, 40), "Laura creó la sala «Cierre de mes»")),
-		react(inRoom("r1a", "r1", "c2", today(8, 42), "Recuerden que el viernes cerramos la contabilidad de septiembre."),
-			"👍", "", "c1", "c3"),
-		inRoom("r1b", "r1", "c1", today(8, 45), "A mí me faltan dos facturas de Ventas."),
-		ev(inRoom("e2", "r1", "c2", today(8, 46), "María Fernanda Ortiz agregó a Jorge Salinas")),
-		react(replyTo(inRoom("r1c", "r1", "c3", today(8, 51), "Las mando hoy antes de las 3 🙌"),
-			"r1b", "c1", "A mí me faltan dos facturas de Ventas."), "❤️", "c2"),
-		outRoom("r1d", "r1", today(8, 53), "Gracias a todos. Cualquier duda, aquí estoy."),
+		ev(outRoom("e1", "r1", today(8, 40), "Laura creó la sala «Cierre de mes»"),
+			`{"type":"created","name":"`+tr("Cierre de mes", "Month-end close")+`"}`),
+		react(inRoom("r1a", "r1", "c2", today(8, 42), tr("Recuerden que el viernes cerramos la contabilidad de septiembre.",
+			"Remember we close September's books on Friday.")), "👍", "", "c1", "c3"),
+		inRoom("r1b", "r1", "c1", today(8, 45), tr("A mí me faltan dos facturas de Ventas.", "I'm still missing two invoices from Sales.")),
+		ev(inRoom("e2", "r1", "c2", today(8, 46), "María Fernanda Ortiz agregó a Jorge Salinas"),
+			`{"type":"added","members":[{"id":"c3","name":"Jorge Salinas"}]}`),
+		react(replyTo(inRoom("r1c", "r1", "c3", today(8, 51), tr("Las mando hoy antes de las 3 🙌", "I'll send them today before 3 🙌")),
+			"r1b", "c1", tr("A mí me faltan dos facturas de Ventas.", "I'm still missing two invoices from Sales.")), "❤️", "c2"),
+		outRoom("r1d", "r1", today(8, 53), tr("Gracias a todos. Cualquier duda, aquí estoy.", "Thanks, everyone. Any questions, I'm here.")),
 	}
 	// Como en LanChat real, la lista se ordena por el último mensaje.
 	for i, c := range d.contacts {
@@ -416,16 +441,18 @@ const wait = async (sel) => {
 };
 const scene = new URLSearchParams(location.hash.slice(1));
 await wait("#contacts .contact");
+// chat=c1 y room=r1 abren esa conversación; many, el mensaje a varios con el
+// primer grupo elegido. Los ids no cambian con el idioma.
 if (scene.has("chat")) {
-  [...document.querySelectorAll("#contacts .contact:not(.room)")]
-    .find((li) => li.querySelector(".name").textContent === scene.get("chat"))?.click();
+  window.lanchatOpen(scene.get("chat"));
 } else if (scene.has("room")) {
-  [...document.querySelectorAll("#contacts .room")]
-    .find((li) => li.querySelector(".name").textContent === scene.get("room"))?.click();
+  window.lanchatOpen("room:" + scene.get("room"));
 } else if (scene.has("many")) {
   document.getElementById("many-btn").click();
-  for (const b of document.querySelectorAll("#many-groups button")) if (b.textContent === scene.get("many")) b.click();
-  document.getElementById("many-text").value = "Hoy a las 2 se corta la luz 15 minutos por mantenimiento. Guarden su trabajo.";
+  document.querySelector("#many-groups button")?.click();
+  document.getElementById("many-text").value = document.documentElement.lang === "es"
+    ? "Hoy a las 2 se corta la luz 15 minutos por mantenimiento. Guarden su trabajo."
+    : "The power will be off for 15 minutes at 2 today for maintenance. Save your work.";
 }
 await new Promise((r) => setTimeout(r, 300));
 // &emoji: además, el selector de emojis abierto.

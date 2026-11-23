@@ -15,23 +15,28 @@ import (
 
 const screenshotsDir = "docs/screenshots"
 
+// screenshotLanguages: un juego de capturas por idioma, en
+// docs/screenshots/<idioma> (README.md usa en; README.es.md, es).
+var screenshotLanguages = []string{"en", "es"}
+
 // scene es una captura del README: archivo, fragmento de la dirección que
-// abre la escena (ver internal/ui/demo_test.go) y si va en tema oscuro.
+// abre la escena (ver demoScript en internal/ui/demo_test.go) y si va en tema
+// oscuro.
 type scene struct {
 	name, fragment string
 	dark           bool
 }
 
 var scenes = []scene{
-	{"conversacion", "chat=Carlos%20Ruiz", false},
-	{"sala", "room=Cierre%20de%20mes", false},
-	{"mensaje-a-varios", "many=Contabilidad", false},
-	{"emojis", "chat=Carlos%20Ruiz&emoji", false},
-	{"tema-oscuro", "chat=Carlos%20Ruiz", true},
+	{"conversation", "chat=c1", false},
+	{"room", "room=r1", false},
+	{"broadcast", "many", false},
+	{"emoji", "chat=c1&emoji", false},
+	{"dark-theme", "chat=c1", true},
 }
 
-// Screenshots regenera docs/screenshots/*.png y docs/logo.png con la oficina
-// de demostración (datos ficticios) y Edge sin ventana.
+// Screenshots regenera docs/screenshots/<idioma>/*.png y docs/logo.png con la
+// oficina de demostración (datos ficticios) y Edge sin ventana.
 func Screenshots() error {
 	edge, err := findEdge()
 	if err != nil {
@@ -52,10 +57,19 @@ func Screenshots() error {
 	if out, err := logo.CombinedOutput(); err != nil {
 		return fmt.Errorf("logotipo: %w\n%s", err, out)
 	}
+	for _, lang := range screenshotLanguages {
+		if err := screenshotsIn(lang, demo, edge, tmp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	urlFile := filepath.Join(tmp, "url.txt")
+// screenshotsIn hace las capturas con la demostración en el idioma lang.
+func screenshotsIn(lang, demo, edge, tmp string) error {
+	urlFile := filepath.Join(tmp, "url-"+lang+".txt")
 	server := exec.Command(demo, "-test.run", "^TestDemo$", "-test.timeout", "0")
-	server.Env = append(os.Environ(), "LANCHAT_DEMO_URL="+urlFile)
+	server.Env = append(os.Environ(), "LANCHAT_DEMO_URL="+urlFile, "LANCHAT_LANG="+lang)
 	if err := server.Start(); err != nil {
 		return err
 	}
@@ -68,11 +82,12 @@ func Screenshots() error {
 		return err
 	}
 
-	if err := os.MkdirAll(screenshotsDir, 0o755); err != nil {
+	dir := filepath.Join(screenshotsDir, lang)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	for _, s := range scenes {
-		out, err := filepath.Abs(filepath.Join(screenshotsDir, s.name+".png"))
+		out, err := filepath.Abs(filepath.Join(dir, s.name+".png"))
 		if err != nil {
 			return err
 		}
@@ -87,7 +102,8 @@ func Screenshots() error {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		// Un perfil nuevo por captura: si no, Edge se une al proceso anterior.
 		err = exec.CommandContext(ctx, edge, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-			"--no-first-run", "--user-data-dir="+filepath.Join(tmp, "edge-"+s.name),
+			"--no-first-run", "--user-data-dir="+filepath.Join(tmp, "edge-"+lang+"-"+s.name),
+			"--lang="+lang,
 			"--window-size=1100,680", "--force-device-scale-factor=1",
 			"--blink-settings=preferredColorScheme="+scheme, "--virtual-time-budget=8000",
 			"--screenshot="+out, url+"#"+s.fragment).Run()

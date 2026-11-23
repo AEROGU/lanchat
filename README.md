@@ -5,319 +5,324 @@
 <h1 align="center">LanChat</h1>
 
 <p align="center">
-  Mensajería y envío de archivos para la red local de la oficina.<br>
-  Sin servidor, sin cuentas, sin Internet: se instala en cada PC y teléfono Android, y listo.
+  Messaging and file sharing for the office's local network.<br>
+  No server, no accounts, no Internet: install it on each PC and Android phone, and you're done.
 </p>
 
 <p align="center">
-  <a href="https://github.com/AEROGU/lanchat/releases/latest"><img alt="Última versión" src="https://img.shields.io/github/v/release/AEROGU/lanchat?label=versi%C3%B3n"></a>
-  <a href="https://github.com/AEROGU/lanchat/actions/workflows/ci.yml"><img alt="Pruebas" src="https://github.com/AEROGU/lanchat/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="Licencia GPL v3" src="https://img.shields.io/badge/licencia-GPL%20v3-blue"></a>
-  <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4">
-  <img alt="Android 7 o posterior" src="https://img.shields.io/badge/Android-7%2B-3DDC84">
+  <a href="https://github.com/AEROGU/lanchat/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/AEROGU/lanchat?label=release"></a>
+  <a href="https://github.com/AEROGU/lanchat/actions/workflows/ci.yml"><img alt="Tests" src="https://github.com/AEROGU/lanchat/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="GPL v3 license" src="https://img.shields.io/badge/license-GPL%20v3-blue"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4">
+  <img alt="Android 7 or later" src="https://img.shields.io/badge/Android-7%2B-3DDC84">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/conversacion.png" alt="Conversación con un contacto: mensajes, una carpeta enviada y un archivo por aceptar" width="880">
+  <b>English</b> · <a href="README.es.md">Español</a>
 </p>
 
-*[English summary below](#english).*
+<p align="center">
+  <img src="docs/screenshots/en/conversation.png" alt="Conversation with a contact: messages, a sent folder and a file waiting to be accepted" width="880">
+</p>
 
-## Características
+## Features
 
-- **Sin servidor ni configuración**: las PCs de la red se encuentran solas. De
-  otra subred basta agregar una sola PC (por IP o nombre de equipo): las
-  demás de esa subred llegan a través de ella ([detalles](#equipos-de-otras-subredes)).
-- **Sin cuentas**: cada quien elige su nombre y, si quiere, una **foto de
-  perfil** (sin foto se ven sus iniciales sobre un color). El nombre del
-  equipo y su IP se ven en la conversación y al pasar el mouse por el
-  contacto. A cada contacto le puedes poner un alias y un grupo.
-- **Lista como en WhatsApp**: arriba la conversación con actividad más
-  reciente, con el comienzo del último mensaje, su hora, ✓/✓✓ si es tuyo y
-  los mensajes sin leer.
-- **Mensajes** 1 a 1 con historial, entrega a los desconectados cuando se
-  conectan, ✓ entregado y ✓✓ leído (desactivable).
-- **Reacciones** con emoji a cualquier mensaje y **eliminar para todos** un
-  mensaje propio durante los 15 minutos siguientes a enviarlo. Un envío de
-  archivos también, una vez descargado, cancelado, rechazado o caducado: lo
-  descargado se queda en la carpeta del otro. Un envío que no llegó a nada
-  se puede **borrar de este equipo** en cualquier momento.
-- **Editar** un mensaje propio en el mismo plazo de 15 minutos (aparece
-  "editado"), y **reenviar** mensajes a otros contactos o salas (aparecen
-  "Reenviado"). Se pueden **copiar** y **seleccionar varios** para
-  copiarlos (Ctrl+C, con hora y autor como en WhatsApp Web), reenviarlos o
-  eliminarlos para todos. En la PC, el clic derecho sobre un mensaje abre su
-  menú. Un archivo se reenvía mientras siga en la carpeta
-  de descargas (o, si lo enviaste tú, donde estaba); a las salas solo se
-  reenvían textos.
-- **Responder** a un mensaje o envío de archivos anterior, como en
-  WhatsApp: la respuesta lleva arriba la cita del original y, al tocarla,
-  la conversación salta a él. Si el autor edita el original, la cita se
-  actualiza; si lo elimina para todos, la cita queda como "Mensaje
-  eliminado".
-- **Selector de emojis** 😊 junto a la caja de texto, con todos los de
-  Unicode por categoría y los usados recientemente, en la PC y en el
-  teléfono.
-- **Salas** de chat grupales con administradores (quien la crea puede sacar
-  miembros y nombrar más administradores) y **mensajes a varios** contactos
-  o a un grupo.
-- **Archivos y carpetas** (botón o arrastrar y soltar en la conversación o
-  sobre un contacto de la lista): el otro debe
-  aceptarlos (en su carpeta de descargas, o en la PC con **Guardar en…** en
-  la carpeta que elija), se descargan una sola vez, se reanudan si se corta la red y se
-  verifican con SHA-256. Las imágenes (JPG, PNG, GIF, WebP) llegan con
-  **vista previa** antes de aceptarlas y se abren completas con un clic.
-- **Estados** Disponible, Ausente y Ocupado, con mensaje y ausente automático.
-- **Cifrado** TLS 1.3 entre PCs, con aviso si la identidad de un equipo cambia.
-- **Privacidad**: descargar una copia de tus datos o borrarlos (todos, o una
-  conversación), por ejemplo cuando alguien deja la empresa.
-- Icono en la bandeja del sistema, notificaciones de Windows, inicio con
-  Windows, tema claro y oscuro. Un solo `.exe`, sin instalar nada más.
+- **No server, no setup**: PCs on the network find each other on their own.
+  For another subnet, adding a single PC (by IP or computer name) is enough:
+  the rest of that subnet comes through it ([details](#devices-on-other-subnets)).
+- **No accounts**: everyone picks their own name and, optionally, a
+  **profile photo** (without one, their initials show on a color). The
+  computer name and IP show in the conversation and when hovering over the
+  contact. You can give each contact an alias and a group.
+- **WhatsApp-style list**: the conversation with the most recent activity
+  on top, with the start of the last message, its time, ✓/✓✓ if it's yours
+  and the unread count.
+- **One-to-one messages** with history, delivery to offline contacts when
+  they connect, ✓ delivered and ✓✓ read (can be turned off).
+- **Emoji reactions** on any message, and **delete for everyone** your own
+  message within 15 minutes of sending it. A file transfer too, once it was
+  downloaded, canceled, declined or expired: whatever was downloaded stays in
+  the other person's folder. A transfer that went nowhere can be **deleted
+  from this device** at any time.
+- **Edit** your own message within the same 15 minutes (it shows "edited"),
+  and **forward** messages to other contacts or rooms (they show
+  "Forwarded"). Messages can be **copied**, and you can **select several**
+  to copy them (Ctrl+C, with time and author like WhatsApp Web), forward them
+  or delete them for everyone. On the PC, right-clicking a message opens its
+  menu. A file can be forwarded while it's still in the downloads folder (or,
+  if you sent it, where it was); only text is forwarded to rooms.
+- **Reply** to an earlier message or file transfer, like in WhatsApp: the
+  reply carries a quote of the original on top and tapping it jumps there. If
+  the author edits the original, the quote updates; if they delete it for
+  everyone, the quote shows "Deleted message".
+- **Emoji picker** 😊 next to the text box, with all of Unicode's emoji by
+  category and the recently used ones, on the PC and on the phone.
+- **Group chat rooms** with admins (whoever creates a room can remove
+  members and make others admins) and **messages to several** contacts or to
+  a group.
+- **Files and folders** (button, or drag and drop onto the conversation or a
+  contact in the list): the other person has to accept them (into their
+  downloads folder or, on the PC, with **Save to…** into the folder they
+  choose); they're downloaded only once, resume if the network drops and are
+  verified with SHA-256. Images (JPG, PNG, GIF, WebP) arrive with a
+  **preview** before being accepted and open full size with a click.
+- **Status**: Available, Away and Busy, with a message and automatic away.
+- **Encryption**: TLS 1.3 between PCs, with a warning if a device's identity
+  changes.
+- **Privacy**: download a copy of your data or delete it (all of it, or one
+  conversation), for example when someone leaves the company.
+- **English and Spanish**: it uses the Windows or phone language (any other
+  untranslated language falls back to English) and can be changed in
+  **Settings > Language**. In a room with people using different languages,
+  everyone sees the notices ("Ann added Luis") in their own. [More languages
+  can be added](#translations).
+- System tray icon, Windows notifications, start with Windows, light and dark
+  theme. A single `.exe`, nothing else to install.
 
-| Salas de chat | Emojis | Mensaje a varios | Tema oscuro |
+| Chat rooms | Emoji | Message to several | Dark theme |
 |---|---|---|---|
-| [![Sala de chat con varios miembros](docs/screenshots/sala.png)](docs/screenshots/sala.png) | [![Selector de emojis por categoría](docs/screenshots/emojis.png)](docs/screenshots/emojis.png) | [![Mensaje a varios, eligiendo un grupo](docs/screenshots/mensaje-a-varios.png)](docs/screenshots/mensaje-a-varios.png) | [![La conversación en tema oscuro](docs/screenshots/tema-oscuro.png)](docs/screenshots/tema-oscuro.png) |
+| [![Chat room with several members](docs/screenshots/en/room.png)](docs/screenshots/en/room.png) | [![Emoji picker by category](docs/screenshots/en/emoji.png)](docs/screenshots/en/emoji.png) | [![Message to several, choosing a group](docs/screenshots/en/broadcast.png)](docs/screenshots/en/broadcast.png) | [![The conversation in dark theme](docs/screenshots/en/dark-theme.png)](docs/screenshots/en/dark-theme.png) |
 
-## Descargar
+## Download
 
-1. Descarga `LanChat-<versión>.zip` de la [última versión](https://github.com/AEROGU/lanchat/releases/latest).
-2. Descomprímelo en una carpeta fija (p. ej. `C:\LanChat` o Documentos) y
-   ejecuta `LanChat.exe` (`LanChat_x86.exe` si la PC tiene Windows de 32
-   bits; en lo que sigue, donde dice `LanChat.exe`, en esas PCs es ese).
-3. Cuando Windows lo pregunte, permite el acceso en **redes privadas**.
-4. Repite en cada PC de la oficina.
+1. Download `LanChat-<version>.zip` from the [latest release](https://github.com/AEROGU/lanchat/releases/latest).
+2. Unzip it into a permanent folder (e.g. `C:\LanChat` or Documents) and run
+   `LanChat.exe` (`LanChat_x86.exe` if the PC has 32-bit Windows; wherever
+   this page says `LanChat.exe`, on those PCs it's that one).
+3. When Windows asks, allow access on **private networks**.
+4. Repeat on every PC in the office.
 
-Requisitos: Windows 10 u 11 (de 64 o 32 bits) con Microsoft Edge (viene
-con Windows). La red debe estar marcada como **privada** en Windows y permitir
-UDP 50000 y TCP 50001 entre las PCs. Si ves a alguien pero no le llegan los
-mensajes, mira [esta sección](#se-ve-a-alguien-pero-no-le-llegan-los-mensajes).
+Requirements: Windows 10 or 11 (64 or 32 bits) with Microsoft Edge (it comes
+with Windows). The network must be marked as **private** in Windows and allow
+UDP 50000 and TCP 50001 between the PCs. If you can see someone but your
+messages don't reach them, see [this section](#you-can-see-someone-but-messages-dont-reach-them).
 
-### En Android
+### On Android
 
-1. Descarga `LanChat-<versión>.apk` de la [última versión](https://github.com/AEROGU/lanchat/releases/latest)
-   en el teléfono y ábrelo. Android pedirá permitir "instalar apps
-   desconocidas" a la app con que lo abriste (navegador, Archivos…).
-2. Al abrir LanChat, permite las **notificaciones** y, en el aviso de
-   batería, elige **Continuar** y luego **Permitir**.
-3. En **OPPO, Xiaomi, Huawei, Vivo** y similares: en LanChat, Ajustes > "la
-   información de la app" > Uso de la batería, activa **Permitir actividad
-   en segundo plano**. Si no, el teléfono congela LanChat con la pantalla
-   apagada y los mensajes llegan tarde.
+1. Download `LanChat-<version>.apk` from the [latest release](https://github.com/AEROGU/lanchat/releases/latest)
+   on the phone and open it. Android will ask to allow "install unknown apps"
+   for the app you opened it with (browser, Files…).
+2. When LanChat opens, allow **notifications** and, on the battery notice,
+   choose **Continue** and then **Allow**.
+3. On **OPPO, Xiaomi, Huawei, Vivo** and similar phones: in LanChat, Settings
+   > "the app info" > Battery usage, turn on **Allow background activity**.
+   Otherwise the phone freezes LanChat with the screen off and messages
+   arrive late.
 
-Requisitos: Android 7 o posterior, conectado al Wi-Fi de la oficina. Es la
-misma interfaz que en la PC; LanChat arranca solo al encender el teléfono
-(se desactiva en Ajustes) y se detiene desde su notificación. Para que los
-teléfonos vean a las PCs con la pantalla apagada, las PCs deben tener la
-misma versión o una posterior.
+Requirements: Android 7 or later, connected to the office Wi-Fi. It's the same
+interface as on the PC; LanChat starts by itself when the phone turns on (it
+can be turned off in Settings) and is stopped from its notification. For
+phones to see the PCs with the screen off, the PCs must have the same version
+or a later one.
 
-Desde otras apps (Galería, Archivos, WhatsApp…), **Compartir > LanChat** envía
-fotos, archivos o un texto: LanChat se abre y pregunta a qué contactos
-enviarlos.
+From other apps (Gallery, Files, WhatsApp…), **Share > LanChat** sends
+photos, files or text: LanChat opens and asks which contacts to send them to.
 
-### Aviso de Windows SmartScreen
+### Windows SmartScreen warning
 
-LanChat no está firmado con un certificado de firma de código (cuestan
-dinero cada año). Por eso, la primera vez que se abre un `LanChat.exe`
-descargado de Internet, Windows puede mostrar **"Windows protegió su PC"**.
-Para abrirlo:
+LanChat isn't signed with a code signing certificate (they cost money every
+year). So the first time a `LanChat.exe` downloaded from the Internet is
+opened, Windows may show **"Windows protected your PC"**. To open it:
 
-1. Haz clic en **Más información**.
-2. Haz clic en **Ejecutar de todas formas**.
+1. Click **More info**.
+2. Click **Run anyway**.
 
-Solo hace falta la primera vez en cada PC. Descarga LanChat únicamente de la
-página oficial del proyecto (https://github.com/AEROGU/lanchat). Para
-comprobar que el zip no fue alterado, compara su SHA-256
-(`Get-FileHash LanChat-<versión>.zip` en PowerShell) con el de
-`SHA256SUMS.txt` de la misma versión, o compila tú mismo el código fuente
-(ver [Compilar](#compilar)).
+It's only needed the first time on each PC. Download LanChat only from the
+project's official page (https://github.com/AEROGU/lanchat). To check that
+the zip wasn't altered, compare its SHA-256 (`Get-FileHash
+LanChat-<version>.zip` in PowerShell) with the one in `SHA256SUMS.txt` of the
+same release, or build the source code yourself (see [Building](#building)).
 
-## Uso
+## Usage
 
-`LanChat.exe` abre la ventana y queda en la bandeja del sistema (clic
-izquierdo: abrir; clic derecho: menú con **Salir**). Cerrar la ventana no
-cierra LanChat. Abrirlo de nuevo con LanChat ya abierto solo muestra la ventana.
+`LanChat.exe` opens the window and stays in the system tray (left click:
+open; right click: menu with **Quit**). Closing the window doesn't close
+LanChat. Opening it again while LanChat is already open just shows the window.
 
-La primera vez Windows pedirá permiso de red: hay que permitirlo en **redes
-privadas** (UDP 50000 y TCP 50001). También se puede crear la regla desde
-Ajustes > Firewall de Windows, o con `LanChat.exe -firewall add`.
+The first time, Windows will ask for network permission: allow it on
+**private networks** (UDP 50000 and TCP 50001). The rule can also be created
+from Settings > Windows Firewall, or with `LanChat.exe -firewall add`.
 
-### Actualizaciones
+### Updates
 
-LanChat busca versiones nuevas en
-[Releases](https://github.com/AEROGU/lanchat/releases) al abrirse, una vez al
-día y cuando aparece en la red otro equipo con una versión más nueva. Si hay
-una, **pregunta** antes de instalar ("Ahora no" la deja hasta la próxima vez
-que se abra). Al aceptar:
+LanChat looks for new versions in
+[Releases](https://github.com/AEROGU/lanchat/releases) when it opens, once a
+day, and when another device with a newer version shows up on the network. If
+there is one, it **asks** before installing ("Not now" leaves it until the
+next time it opens). When you accept:
 
-- **En Windows** descarga el zip, comprueba su SHA-256 con el
-  `SHA256SUMS.txt` de la misma versión, pone el ejecutable que corresponde
-  (`LanChat.exe` o `LanChat_x86.exe`) en lugar del actual, borra el zip y
-  reinicia LanChat. El inicio con Windows y la regla del firewall siguen
-  valiendo, porque la ruta no cambia. Si LanChat está en una carpeta
-  protegida (p. ej. `C:\Program Files`) no puede reemplazarse: avisa y hay que
-  actualizar a mano.
-- **En Android** descarga el APK (también comprobado con `SHA256SUMS.txt`) y
-  abre el instalador de Android, que pide confirmarlo. La primera vez Android
-  pide permitir "Instalar apps desconocidas" para LanChat.
+- **On Windows** it downloads the zip, checks its SHA-256 against the
+  `SHA256SUMS.txt` of the same release, puts the matching executable
+  (`LanChat.exe` or `LanChat_x86.exe`) in place of the current one, deletes
+  the zip and restarts LanChat. Starting with Windows and the firewall rule
+  keep working, because the path doesn't change. If LanChat is in a protected
+  folder (e.g. `C:\Program Files`) it can't be replaced: it says so and you
+  have to update manually.
+- **On Android** it downloads the APK (also checked against
+  `SHA256SUMS.txt`) and opens the Android installer, which asks for
+  confirmation. The first time, Android asks to allow "Install unknown apps"
+  for LanChat.
 
-En **Ajustes > Actualizaciones** están el botón **Buscar actualizaciones** y la
-casilla **Buscar actualizaciones automáticamente** (con ella desactivada,
-LanChat solo consulta GitHub al pulsar el botón). La versión que anuncia otro
-equipo solo sirve de aviso: lo que se instala siempre viene de GitHub. Las
-compilaciones propias con cambios sin commit (`-dirty`) no se actualizan solas.
+**Settings > Updates** has the **Check for updates** button and the **Check
+for updates automatically** checkbox (with it off, LanChat only contacts
+GitHub when you press the button). The version another device announces is
+only a hint: what gets installed always comes from GitHub. Your own builds
+with uncommitted changes (`-dirty`) don't update themselves.
 
-### Equipos de otras subredes
+### Devices on other subnets
 
-Basta con agregar **una sola PC** de la otra subred, y en **una sola PC** de
-la tuya: Ajustes > "Equipos de otras subredes", con su IP o su nombre de
-equipo. Los equipos comparten cada 2 minutos la lista de los que conocen, así
-que llegan todas las PCs de esa subred y tus compañeros también las ven.
-Conviene elegir una PC que casi siempre esté encendida y con IP fija (o
-agregar dos). El nombre de equipo sigue a la PC aunque cambie de IP, pero solo
-si la red resuelve nombres entre subredes (`ping NOMBRE` lo comprueba). Los
-routers deben dejar pasar el tráfico entre las dos subredes; si no, LanChat no
-puede llegar.
+It's enough to add **a single PC** from the other subnet, on **a single PC**
+of yours: Settings > "Devices on other subnets", with its IP or computer name.
+Devices share the list of the ones they know every 2 minutes, so all the PCs
+of that subnet arrive and your coworkers see them too. It's best to pick a PC
+that's almost always on and has a fixed IP (or add two). The computer name
+follows the PC even if its IP changes, but only if the network resolves names
+across subnets (`ping NAME` checks it). Routers must let traffic through
+between the two subnets; otherwise LanChat can't get there.
 
-### Se ve a alguien pero no le llegan los mensajes
+### You can see someone but messages don't reach them
 
-Que aparezca en la lista solo prueba el descubrimiento (UDP 50000, que sale de
-cada PC). Los mensajes y archivos **entran** por TCP 50001, y eso lo bloquea el
-firewall del equipo que recibe. Pasa sobre todo si su red está como "Pública"
-o si la PC tiene varias redes (p. ej. Ethernet y Wi-Fi). La solución es una
-regla **de entrada** para `LanChat.exe` en **todas las redes** (privada,
-pública y dominio); no hace falta regla de salida. En una ventana de
-comandos como administrador, con la ruta de ese equipo:
+Showing up in the list only proves discovery (UDP 50000, which goes out from
+each PC). Messages and files come **in** through TCP 50001, and that's
+blocked by the receiving device's firewall. It happens mostly if its network
+is set as "Public" or if the PC has several networks (e.g. Ethernet and
+Wi-Fi). The fix is an **inbound** rule for `LanChat.exe` on **all networks**
+(private, public and domain); no outbound rule is needed. In a command prompt
+as administrator, with that device's path:
 
 ```bat
 netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\LanChat.exe"
 ```
 
-La regla va ligada a la ruta del `.exe`: si se mueve de carpeta, hay que
-crearla de nuevo. Si existe una regla de **bloqueo** para `LanChat.exe` (se
-crea si alguna vez se canceló el aviso de Windows), bórrala en *Firewall de
-Windows > Configuración avanzada > Reglas de entrada*. Para comprobarlo desde
-otra PC: `Test-NetConnection <IP> -Port 50001` en PowerShell debe decir
+The rule is tied to the `.exe` path: if it moves to another folder, it has to
+be created again. If there's a **block** rule for `LanChat.exe` (it's created
+if the Windows prompt was ever canceled), delete it in *Windows Firewall >
+Advanced settings > Inbound Rules*. To check from another PC:
+`Test-NetConnection <IP> -Port 50001` in PowerShell must say
 `TcpTestSucceeded : True`.
 
-La primera vez LanChat pregunta si debe iniciar con Windows (en la bandeja); se
-desactiva en Ajustes. Con `-dir` no se toca, para no reemplazar el de la
-instalación normal.
+The first time, LanChat asks whether it should start with Windows (in the
+tray); it can be turned off in Settings. With `-dir` it's left alone, so as
+not to replace the one of the normal installation.
 
-Opciones:
+Options:
 
-| Opción | Uso |
+| Option | Use |
 |---|---|
-| `-tray` | arrancar solo en la bandeja (para el inicio con Windows) |
-| `-dir carpeta` | otra carpeta de datos (por defecto `%APPDATA%\LanChat`) |
-| `-version` | mostrar la versión |
-| `-firewall add` / `remove` | crear o quitar la regla del Firewall de Windows (pide administrador) |
-| `-uninstall` | desinstalar LanChat de esta PC (pregunta antes de borrar; ver [Desinstalar](#desinstalar)) |
+| `-tray` | start only in the tray (for starting with Windows) |
+| `-dir folder` | another data folder (default `%APPDATA%\LanChat`) |
+| `-version` | show the version |
+| `-firewall add` / `remove` | create or remove the Windows Firewall rule (asks for administrator) |
+| `-uninstall` | uninstall LanChat from this PC (asks before deleting; see [Uninstalling](#uninstalling)) |
 
-Para diagnóstico, `go tool mage debug` compila `dist/lanchat-debug.exe`, que
-tiene consola:
+For troubleshooting, `go tool mage debug` builds `dist/lanchat-debug.exe`,
+which has a console:
 
-| Opción | Uso |
+| Option | Use |
 |---|---|
-| `-debug` | registro detallado en la consola en vez de `lanchat.log` |
-| `-console` | usar LanChat desde la consola, sin ventana (`/ayuda` lista los comandos) |
+| `-debug` | detailed log in the console instead of `lanchat.log` |
+| `-console` | use LanChat from the console, without a window (`/ayuda` lists the commands, in Spanish) |
 
-## Seguridad
+## Security
 
-Toda la comunicación entre PCs (mensajes, archivos, avisos) va cifrada con
-**TLS 1.3 mutuo**. Cada instalación crea su propia identidad (clave ECDSA
-P-256 en `identity.key`) y los demás la reconocen por su **huella**:
+All communication between PCs (messages, files, notices) is encrypted with
+**mutual TLS 1.3**. Each installation creates its own identity (an ECDSA
+P-256 key in `identity.key`) and the others recognize it by its
+**fingerprint**:
 
-- La primera vez que una PC ve a otra, guarda su huella (confianza en el
-  primer uso, como SSH). Desde entonces solo se comunica con esa identidad.
-- Si la huella cambia (reinstalaron LanChat, o alguien intenta hacerse pasar
-  por esa PC), los envíos se detienen y la conversación muestra un aviso con
-  **Confiar en la nueva identidad**.
-- Las huellas se ven en el botón **Identidad** de cada conversación; para
-  verificar, compáralas con la otra persona.
-- El descubrimiento por UDP no va cifrado (nombre, hostname, estado y huella
-  anunciados son visibles en la red), pero no permite suplantar a nadie: la
-  conexión TLS comprueba la huella.
-- La foto de perfil viaja cifrada, pero cualquier LanChat de la red puede
-  pedirla, igual que todos ven el nombre que se anuncia.
-- Los archivos recibidos llevan la "marca de la Web" de Windows, como los
-  descargados con un navegador, y LanChat pide confirmación antes de abrir
-  programas o scripts.
+- The first time a PC sees another, it stores its fingerprint (trust on first
+  use, like SSH). From then on it only talks to that identity.
+- If the fingerprint changes (LanChat was reinstalled, or someone is trying
+  to impersonate that PC), sending stops and the conversation shows a warning
+  with **Trust the new identity**.
+- Fingerprints show under the **Identity** button of each conversation; to
+  verify, compare them with the other person.
+- Discovery over UDP isn't encrypted (the announced name, hostname, status
+  and fingerprint are visible on the network), but it doesn't allow
+  impersonating anyone: the TLS connection checks the fingerprint.
+- The profile photo travels encrypted, but any LanChat on the network can ask
+  for it, just as everyone sees the announced name.
+- Received files carry Windows' "mark of the Web", like files downloaded with
+  a browser, and LanChat asks for confirmation before opening programs or
+  scripts.
 
-Desde la 0.18 se usa el protocolo v3, que no se comunica con versiones
-anteriores: así todos los equipos respetan "Eliminar para todos" (también en
-los envíos de archivos). En la lista, junto a la IP, se ve la versión de
-LanChat de cada contacto; uno con una versión anterior (o más nueva) aparece
-como **incompatible** en rojo y no se le puede escribir ni se reciben sus
-mensajes. LanChat le envía una sola vez un aviso automático para que
-actualice desde https://github.com/AEROGU/lanchat/releases. Lo que estaba en
-cola para él se entrega cuando actualice. Hay que actualizar todas las PCs y
-teléfonos.
+Since 0.18, protocol v3 is used, which doesn't talk to earlier versions: that
+way every device honors "Delete for everyone" (file transfers included). In
+the list, next to the IP, you can see each contact's LanChat version; one
+with an earlier (or newer) version shows as **incompatible** in red, and you
+can't write to it or receive its messages. LanChat sends it a one-time
+automatic notice to update from https://github.com/AEROGU/lanchat/releases.
+Whatever was queued for it is delivered when it updates. All PCs and phones
+need to be updated.
 
-## Privacidad
+## Privacy
 
-En **Ajustes > Privacidad**:
+In **Settings > Privacy**:
 
-- **Descargar mis datos**: guarda en Descargas una copia de `lanchat.db`
-  (historial, contactos, salas, ofertas de archivos y fotos de perfil). Se abre con cualquier
-  programa para SQLite, p. ej. DB Browser for SQLite.
-- **Borrar todos mis datos** (p. ej. cuando alguien deja la empresa): sale de
-  las salas avisando a los demás, cancela los archivos pendientes y borra las
-  conversaciones, salas, alias y grupos de contactos, el nombre, el mensaje
-  de estado y la foto de perfil (también las guardadas de los contactos). Pide escribir `BORRAR` para confirmar. Conserva la configuración
-  de red y la identidad de la PC. Los archivos ya recibidos quedan en su
-  carpeta.
+- **Download my data**: saves a copy of `lanchat.db` to Downloads (history,
+  contacts, rooms, file offers and profile photos). It opens with any SQLite
+  program, e.g. DB Browser for SQLite.
+- **Delete all my data** (e.g. when someone leaves the company): leaves the
+  rooms notifying the others, cancels pending files and deletes the
+  conversations, rooms, contact aliases and groups, the name, the status
+  message and the profile photo (and the stored ones of your contacts). It
+  asks you to type `DELETE` (`BORRAR` with LanChat in Spanish) to confirm. It
+  keeps the network settings and the PC's identity. Files already received
+  stay in their folder.
 
-Cada conversación (o sala) tiene además el botón **Borrar**: borra sus
-mensajes y cancela los archivos pendientes con ese contacto; el contacto se
-conserva. Borrar una sala de la que ya saliste la quita de la lista.
+Each conversation (or room) also has the **Delete** button: it deletes its
+messages and cancels pending files with that contact; the contact is kept.
+Deleting a room you already left removes it from the list.
 
-Un contacto **desconectado** tiene también **Quitar**: lo saca de la lista.
-Sirve cuando alguien reinstaló LanChat (o borró sus datos) y aparece de nuevo
-con otra identidad: LanChat pregunta si combinar su conversación con la de
-otro contacto (sugiere el que tiene el mismo nombre o equipo) o borrarla. Si
-ese equipo vuelve a conectarse, reaparece en la lista. Cada mensaje combinado
-lleva una leyenda pequeña con su origen ("⤷ Combinado de Angelika · OPPO
-Reno10 5G · 192.168.1.149", con el nombre que ese equipo anunciaba, no el
-alias), para que nadie lo haga pasar por escrito por el otro contacto.
+An **offline** contact also has **Remove**: it takes it out of the list. It's
+useful when someone reinstalled LanChat (or deleted their data) and shows up
+again with another identity: LanChat asks whether to merge their conversation
+with another contact's (it suggests the one with the same name or computer)
+or delete it. If that device connects again, it reappears in the list. Each
+merged message carries a small label with its origin ("⤷ Merged from Angelika
+· OPPO Reno10 5G · 192.168.1.149", with the name that device announced, not
+the alias), so nobody can pass it off as written by the other contact.
 
-Los mensajes y archivos nunca salen de la red local. Lo único que se conecta a
-Internet es la búsqueda de actualizaciones, que consulta github.com (ver
-[Actualizaciones](#actualizaciones); se desactiva en Ajustes).
+Messages and files never leave the local network. The only thing that
+connects to the Internet is the update check, which contacts github.com (see
+[Updates](#updates); it can be turned off in Settings).
 
-Lo borrado no queda recuperable en `lanchat.db`: la base usa `secure_delete`
-(sobrescribe con ceros) y se vacía su registro (`-wal`). Borrar es solo en
-esta PC: los demás conservan su copia de las conversaciones.
+Deleted data can't be recovered from `lanchat.db`: the database uses
+`secure_delete` (it overwrites with zeros) and its log (`-wal`) is emptied.
+Deleting only happens on this PC: the others keep their copy of the
+conversations.
 
-## Desinstalar
+## Uninstalling
 
-**En Windows**, cualquiera de estas tres formas abre el desinstalador:
+**On Windows**, any of these three ways opens the uninstaller:
 
-- **Ajustes > Desinstalar LanChat de esta PC…**
-- doble clic en **`Desinstalar LanChat.cmd`**, junto a `LanChat.exe`
+- **Settings > Uninstall LanChat from this PC…**
+- double-click **`Desinstalar LanChat.cmd`**, next to `LanChat.exe`
 - `LanChat.exe -uninstall`
 
-El desinstalador pregunta antes de borrar nada. Luego cierra LanChat y quita:
+The uninstaller asks before deleting anything. Then it closes LanChat and
+removes:
 
-- el inicio con Windows y el registro de notificaciones;
-- las reglas del Firewall de Windows (pide permiso de administrador);
-- la carpeta de datos `%APPDATA%\LanChat`: conversaciones, contactos, salas,
-  ajustes, la identidad de la PC y el registro. La carpeta solo se elimina si
-  no tiene archivos ajenos a LanChat;
-- si respondes que sí a la segunda pregunta, los **archivos recibidos**.
-  `Descargas\LanChat` se borra entera; si elegiste otra carpeta en Ajustes,
-  solo se borran los archivos que LanChat guardó ahí, no los tuyos.
+- starting with Windows and the notification registration;
+- the Windows Firewall rules (it asks for administrator permission);
+- the data folder `%APPDATA%\LanChat`: conversations, contacts, rooms,
+  settings, the PC's identity and the log. The folder is only removed if it
+  has no files unrelated to LanChat;
+- if you answer yes to the second question, the **received files**.
+  `Downloads\LanChat` is deleted entirely; if you chose another folder in
+  Settings, only the files LanChat saved there are deleted, not yours.
 
-Al final abre la carpeta del programa para que la borres: es lo único que el
-desinstalador no puede quitar, porque `LanChat.exe` está en uso.
+At the end it opens the program folder for you to delete: it's the only thing
+the uninstaller can't remove, because `LanChat.exe` is in use.
 
-Desinstalar borra tus datos sin avisar a los demás. Si estás en salas y
-quieres que los otros miembros sepan que saliste, usa antes **Ajustes >
-Privacidad > Borrar todos mis datos**.
+Uninstalling deletes your data without notifying the others. If you're in
+rooms and want the other members to know you left, use **Settings > Privacy >
+Delete all my data** first.
 
-### A mano, sin dejar rastros
+### Manually, leaving no trace
 
-1. Cierra LanChat: clic derecho en el icono de la bandeja > **Salir**.
-2. Inicio con Windows y notificaciones (en una ventana de comandos):
+1. Close LanChat: right-click the tray icon > **Quit**.
+2. Starting with Windows and notifications (in a command prompt):
 
    ```bat
    reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v LanChat /f
@@ -325,129 +330,142 @@ Privacidad > Borrar todos mis datos**.
    reg delete "HKCU\Software\Classes\AppUserModelId\LanChat" /f
    ```
 
-   Si alguna dice que no encuentra la clave, es que no existía.
-3. Firewall: `LanChat.exe -firewall remove` (pide administrador), o en
-   *Firewall de Windows > Configuración avanzada > Reglas de entrada* borra
-   las reglas de LanChat y `LanChat.exe`.
-4. Datos: borra la carpeta `%APPDATA%\LanChat` (pégalo tal cual en la barra
-   de direcciones del Explorador). Ahí están la base de datos `lanchat.db`,
-   la identidad, los ajustes y el registro.
-5. Archivos recibidos: borra `Descargas\LanChat`, o la carpeta que hayas
-   elegido en Ajustes.
-6. Borra la carpeta donde descomprimiste LanChat.
+   If one says it can't find the key, it didn't exist.
+3. Firewall: `LanChat.exe -firewall remove` (asks for administrator), or in
+   *Windows Firewall > Advanced settings > Inbound Rules* delete the LanChat
+   and `LanChat.exe` rules.
+4. Data: delete the `%APPDATA%\LanChat` folder (paste it as is into File
+   Explorer's address bar). It holds the `lanchat.db` database, the identity,
+   the settings and the log.
+5. Received files: delete `Downloads\LanChat`, or the folder you chose in
+   Settings.
+6. Delete the folder where you unzipped LanChat.
 
-LanChat no guarda nada en otro lugar. Windows y los antivirus pueden
-conservar por su cuenta registros de que el programa se ejecutó (por ejemplo,
-en sus historiales); eso no depende de LanChat.
+LanChat doesn't store anything anywhere else. Windows and antivirus software
+may keep their own records that the program ran (for example, in their
+histories); that doesn't depend on LanChat.
 
-**En Android**: desinstala la app como cualquier otra (mantén pulsado su
-icono > Desinstalar); eso borra sus datos. Los archivos recibidos quedan en
-*Descargas > LanChat*: bórralos desde la app Archivos si no los quieres.
+**On Android**: uninstall the app like any other (long-press its icon >
+Uninstall); that deletes its data. Received files stay in *Downloads >
+LanChat*: delete them from the Files app if you don't want them.
 
-## Archivos en `%APPDATA%\LanChat`
+## Files in `%APPDATA%\LanChat`
 
-| Archivo | Contenido |
+| File | Contents |
 |---|---|
-| `config.json` | ID del equipo, nombre, puertos, equipos de otras subredes |
-| `identity.key`, `identity.crt` | identidad de esta PC; no copiarlos a otra PC (si se borran, los demás verán "identidad cambió") |
-| `lanchat.db` | contactos, alias e historial (SQLite) |
-| `lanchat.log` | registro (se rota al pasar de 1 MB); no guarda mensajes |
-| `ui.json` | puerto y token de la ventana; existe mientras LanChat está abierto |
-| `icon.png` | icono que usan las notificaciones |
-| `edge\` | perfil de Edge de la ventana de LanChat |
+| `config.json` | device ID, name, language, ports, devices on other subnets |
+| `identity.key`, `identity.crt` | this PC's identity; don't copy them to another PC (if they're deleted, the others will see "identity changed") |
+| `lanchat.db` | contacts, aliases and history (SQLite) |
+| `lanchat.log` | log (rotated past 1 MB); it doesn't store messages |
+| `ui.json` | port and token of the window; it exists while LanChat is open |
+| `icon.png` | icon used by notifications |
+| `edge\` | Edge profile of LanChat's window |
 
-## Compilar
+## Building
 
-Requiere Go (la versión indicada en `go.mod`). Mage, staticcheck y govulncheck
-se instalan solos como herramientas del módulo (`tool` en `go.mod`), no hace
-falta nada más.
+Requires Go (the version in `go.mod`). Mage, staticcheck and govulncheck
+install themselves as module tools (`tool` in `go.mod`); nothing else is
+needed.
 
 ```bash
-go tool mage              # lista los targets con su descripción
-go tool mage build        # compila dist/LanChat.exe (sin consola)
-go tool mage build32      # compila dist/LanChat_x86.exe, para Windows de 32 bits
-go tool mage debug        # compila dist/lanchat-debug.exe, con consola
-go tool mage check        # gofmt, go vet, staticcheck, compilación para Android y pruebas: antes de cada commit
-go tool mage race         # pruebas con detector de carreras (requiere gcc)
-go tool mage vuln         # vulnerabilidades conocidas en el código y sus librerías
-go tool mage dist         # dist/LanChat-<versión>.zip (exe de 64 y 32 bits, LEEME, licencia, avisos) y SHA256SUMS.txt
-go tool mage screenshots  # regenera docs/screenshots y docs/logo.png (requiere Edge)
-go tool mage emoji        # regenera la lista de emojis del selector desde Unicode (requiere internet)
-go tool mage android      # android/app/libs/lanchat.aar para la app de Android (en desarrollo, ver docs/ANDROID.md)
-go tool mage apk          # dist/LanChat-<versión>-debug.apk para probar en el teléfono (firma de depuración)
-go tool mage apkRelease   # dist/LanChat-<versión>.apk firmado con la clave propia (ver docs/ANDROID.md)
+go tool mage              # lists the targets with their description
+go tool mage build        # builds dist/LanChat.exe (no console)
+go tool mage build32      # builds dist/LanChat_x86.exe, for 32-bit Windows
+go tool mage debug        # builds dist/lanchat-debug.exe, with a console
+go tool mage check        # gofmt, go vet, staticcheck, Android build and tests: before each commit
+go tool mage race         # tests with the race detector (requires gcc)
+go tool mage vuln         # known vulnerabilities in the code and its libraries
+go tool mage dist         # dist/LanChat-<version>.zip (64- and 32-bit exe, LEEME, license, notices) and SHA256SUMS.txt
+go tool mage screenshots  # regenerates docs/screenshots/<language> and docs/logo.png (requires Edge)
+go tool mage emoji        # regenerates the picker's emoji list from Unicode (requires Internet)
+go tool mage android      # android/app/libs/lanchat.aar for the Android app (see docs/ANDROID.md, in Spanish)
+go tool mage apk          # dist/LanChat-<version>-debug.apk to try on the phone (debug signature)
+go tool mage apkRelease   # dist/LanChat-<version>.apk signed with your own key (see docs/ANDROID.md)
 ```
 
-`build` y `build32` generan antes `cmd/lanchat/rsrc_windows_amd64.syso` y
-`rsrc_windows_386.syso` (ícono, versión y manifest del .exe, target
-`resources`); no se versionan. Go 1.21 en adelante ya no funciona en
-Windows 7 ni 8, así que el .exe de 32 bits también pide Windows 10. El texto de
-`LEEME.txt` del zip está en `packaging/LEEME.txt`.
+`build` and `build32` first generate `cmd/lanchat/rsrc_windows_amd64.syso`
+and `rsrc_windows_386.syso` (the .exe's icon, version and manifest, target
+`resources`); they aren't versioned. Go 1.21 and later no longer work on
+Windows 7 or 8, so the 32-bit .exe also requires Windows 10. The text of the
+zip's `LEEME.txt` is in `packaging/LEEME.txt`.
 
-La versión del ejecutable sale de `git describe`: la etiqueta `v1.0.0` da la
-versión 1.0.0.
+The executable's version comes from `git describe`: the tag `v1.0.0` gives
+version 1.0.0.
 
-Las capturas de pantalla se hacen con la interfaz real y una oficina de
-demostración con datos ficticios (`internal/ui/demo_test.go`), así que se
-pueden regenerar cuando cambie la interfaz. El diseño y el protocolo están
-en [PLAN.md](PLAN.md).
+Screenshots are taken with the real interface and a demo office with
+fictitious data (`internal/ui/demo_test.go`), in each language, so they can
+be regenerated whenever the interface changes. The design and the protocol
+are described in [PLAN.md](PLAN.md) (in Spanish).
+
+### Translations
+
+The texts of the interface, errors and tray are in one file per language,
+`internal/i18n/locales/<code>.json` (`en.json`, `es.json`), with flat keys
+and `{placeholders}`:
+
+```json
+{
+  "_name": "English",
+  "select.count": { "one": "{n} selected", "other": "{n} selected" }
+}
+```
+
+To add a language (e.g. French):
+
+1. Copy `en.json` to `fr.json`, set `"_name"` to the language's name in that
+   language (`"Français"`) and translate the texts (not the keys or the
+   `{placeholders}`).
+2. Copy `android/app/src/main/res/values/strings.xml` to `values-fr/` and
+   translate it, and add `<locale android:name="fr" />` to
+   `android/app/src/main/res/xml/locales_config.xml`.
+3. Optional: add `"fr"` to `screenshotLanguages` in
+   `magefiles/screenshots.go` (and its data to the demo office) to get
+   screenshots in that language.
+
+The language shows up in Settings by itself. `go tool mage check` fails if a
+language is missing a key or a `{placeholder}`, or if Android is missing its
+translation.
 
 ### GitHub Actions
 
-- `.github/workflows/ci.yml`: en cada push a `main` o `develop` y en cada
-  pull request corre `check`, `race`, `vuln` y `build` en Windows, y compila
-  el APK de prueba en Ubuntu.
-- `.github/workflows/release.yml`: al subir una etiqueta `vX.Y.Z` verifica
-  todo, arma el zip, compila el APK firmado (con la clave de los *secrets*,
-  ver [docs/ANDROID.md](docs/ANDROID.md#clave-de-firma)) y crea la Release
-  con los dos y `SHA256SUMS.txt`. El texto de la Release es el mensaje de la
-  etiqueta:
+- `.github/workflows/ci.yml`: on every push to `main` or `develop` and on
+  every pull request it runs `check`, `race`, `vuln` and `build` on Windows,
+  and builds the test APK on Ubuntu.
+- `.github/workflows/release.yml`: when a `vX.Y.Z` tag is pushed it checks
+  everything, builds the zip, builds the signed APK (with the key from the
+  *secrets*, see [docs/ANDROID.md](docs/ANDROID.md#clave-de-firma)) and
+  creates the Release with both and `SHA256SUMS.txt`. The Release text is
+  the tag message:
 
   ```bash
-  git tag -a v1.0.0 -m "LanChat 1.0.0: lo nuevo de esta versión"
+  git tag -a v1.0.0 -m "LanChat 1.0.0: what's new in this version"
   git push origin v1.0.0
   ```
 
-  Una etiqueta con guion (`v1.1.0-rc.1`) se publica como versión
-  preliminar: no pasa a ser la "última versión". Lanzado a mano
-  (`gh workflow run release.yml`), solo compila y firma el APK, sin publicar.
+  A tag with a hyphen (`v1.1.0-rc.1`) is published as a pre-release: it
+  doesn't become the "latest release". Run manually
+  (`gh workflow run release.yml`), it only builds and signs the APK, without
+  publishing.
 
-- `.github/dependabot.yml`: pull requests semanales con las versiones nuevas
-  de las librerías de Go, de las acciones y de la app de Android.
+- `.github/dependabot.yml`: weekly pull requests with new versions of the Go
+  libraries, the actions and the Android app.
 
-## Licencia
+## License
 
 Copyright © 2026 Arturo Enrique Rosas Gutiérrez.
 
-LanChat es software libre: puedes usarlo, estudiarlo, modificarlo y
-redistribuirlo bajo los términos de la **Licencia Pública General de GNU,
-versión 3** (GPL v3), publicada por la Free Software Foundation. Quien
-distribuya LanChat o una versión modificada debe conservar este aviso y la
-mención del autor original, y publicar el código fuente bajo la misma
-licencia.
+LanChat is free software: you can use, study, modify and redistribute it
+under the terms of the **GNU General Public License, version 3** (GPL v3),
+published by the Free Software Foundation. Anyone distributing LanChat or a
+modified version must keep this notice and the credit to the original
+author, and publish the source code under the same license.
 
-Se distribuye con la esperanza de que sea útil, pero **sin ninguna
-garantía**, ni siquiera la implícita de comerciabilidad o de idoneidad para
-un propósito particular. Ver el texto completo en [LICENSE](LICENSE).
+It's distributed in the hope that it will be useful, but **without any
+warranty**, not even the implied warranty of merchantability or fitness for
+a particular purpose. See the full text in [LICENSE](LICENSE).
 
-La lista de emojis del selector sale de los datos de Unicode (Unicode License
-v3). Las librerías de terceros incluidas en el ejecutable (todas con licencias
-BSD, MIT o Apache 2.0, compatibles con la GPL v3) se listan con sus avisos
-en `THIRD_PARTY_NOTICES.txt`, que genera `go tool mage notices` y se incluye
-en el zip.
-
-## English
-
-LanChat is a serverless LAN messenger and file-sharing app for Windows 10/11
-and Android 7+, similar to classic office LAN messengers. Devices discover
-each other automatically (UDP broadcast and unicast, plus manually added
-peers for other subnets), with no accounts and no Internet connection.
-Features: one-to-one chat with offline delivery and read receipts, group
-rooms, broadcast messages, file and folder transfers that must be accepted
-(one-time download, resumable, SHA-256 verified) with image previews,
-presence status, mutual TLS 1.3 with trust-on-first-use identity pinning,
-and options to export or securely wipe your data. On Windows it is a single
-executable written in Go, with a local web UI shown in an Edge app window
-and a system tray icon; on Android the same Go core (via gomobile) runs in a
-foreground service and the same UI in a WebView. The interface is in Spanish.
-Licensed under the GPL v3.
+The picker's emoji list comes from Unicode's data (Unicode License v3). The
+third-party libraries included in the executable (all under BSD, MIT or
+Apache 2.0 licenses, compatible with the GPL v3) are listed with their
+notices in `THIRD_PARTY_NOTICES.txt`, generated by `go tool mage notices`
+and included in the zip.
