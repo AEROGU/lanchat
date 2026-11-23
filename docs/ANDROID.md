@@ -17,19 +17,24 @@ App Android (Kotlin, carpeta android/)
 
 ## Ya hecho (en la PC de la oficina)
 
-- El núcleo compila para Android (arm64, arm, amd64). `go tool mage check`
-  lo comprueba en cada commit con el target `portable`.
+- El núcleo compila para Android (arm64 y arm; amd64 no, ver "El emulador
+  no sirve" más abajo). `go tool mage check` lo comprueba en cada commit con
+  el target `portable`.
 - `internal/ui/gui.go` (bandeja y ventana de Edge) solo se compila en
   escritorio. La decisión de cuándo y con qué texto notificar quedó en
   `Server.Notification`, que comparten Windows y Android.
 - Paquete [`mobile/`](../mobile/mobile.go): la API para Kotlin, con pruebas
   que corren en Windows.
-  - `Mobile.start(dataDir, deviceName, downloadDir, host): String` arranca
-    LanChat y devuelve la dirección para la WebView.
-  - `Mobile.stop()`, `Mobile.running()`, `Mobile.version()`.
+  - `Mobile.start(dataDir, deviceName, downloadDir, languages, chosen, host): String`
+    arranca LanChat y devuelve la dirección para la WebView. `languages` son
+    los idiomas del sistema en orden (`"es-MX,en-US"`) y `chosen`, el idioma
+    por app de Android 13+ (`""` si no hay); ver "Idiomas" en el punto 4.
+  - `Mobile.stop()`, `Mobile.running()`, `Mobile.version()` y
+    `Mobile.setNetworks(cidrs)` (punto 2).
   - `Host` (lo implementa Kotlin): `notify(title, body, chat)`,
     `unreadChanged(total)`, `openFile(path)`, `openURL(url)`,
-    `idleSeconds()`, `installUpdate(path)` y `notifyUpdate(title, body)`.
+    `idleSeconds()`, `installUpdate(path)`, `notifyUpdate(title, body)` y
+    `languageChanged(language)`.
 - Target `go tool mage android`: genera `android/app/libs/lanchat.aar`
   (~17 MB). Probado en la laptop con NDK 30 y el JDK 25 de Android Studio.
 - `.gitignore` ya excluye lo generado por Android Studio, el `.aar` y las
@@ -207,7 +212,7 @@ Versión mínima hecha para la prueba de red; falta pulir:
     conversación en pantalla angosta). Si no había nada, `moveTaskToBack`:
     la app pasa a segundo plano sin cerrarse. En el teléfono, abrir Ajustes
     o una conversación no despliega el teclado.
-  - [ ] `WebChromeClient.onShowFileChooser` para `<input type="file">`
+  - [x] `WebChromeClient.onShowFileChooser` para `<input type="file">`
     (punto 5).
 - [x] Optimización de batería (`BatteryOptimization`): la primera vez, tras
   el permiso de notificaciones, un diálogo explica por qué y abre el del
@@ -243,6 +248,26 @@ Versión mínima hecha para la prueba de red; falta pulir:
   abrir la app arranca de nuevo. `LanChatService.running` evita que un aviso
   de no leídos tardío vuelva a poner el aviso fijo.
   - [x] Probado el botón "Detener" de la notificación.
+- [x] **Idiomas** (inglés y español, como en Windows):
+  - Los textos de Android están en inglés en `res/values/strings.xml` (el
+    predeterminado, para cualquier idioma sin traducción) y en español en
+    `res/values-es/strings.xml`. `res/xml/locales_config.xml` (en el
+    manifiesto, `android:localeConfig`) lista los idiomas para el ajuste de
+    idioma por app de Android 13+. Una prueba de Go
+    (`TestAndroidLanguages`) falla si no coinciden con los catálogos de
+    `internal/i18n/locales`.
+  - Manda el idioma elegido en **Ajustes > Idioma** de LanChat (lo guarda el
+    núcleo; "Automático" = el del sistema). `Language` (Kotlin) pasa al
+    núcleo los idiomas del sistema y, en Android 13+, el elegido en *Ajustes
+    > Apps > LanChat > Idioma*: si es otro y hay traducción, pasa a ser el de
+    LanChat.
+  - Al cambiarlo en LanChat, `Host.languageChanged` lo guarda, lo refleja en
+    el idioma por app (13+) y recrea los canales de avisos con sus nombres
+    traducidos. En Android 7 a 12, `MainActivity` y los avisos usan
+    `Language.wrap` (`createConfigurationContext`).
+  - [ ] Probar en el teléfono: inglés con el teléfono en inglés, cambiar a
+    Español en Ajustes de LanChat (página, aviso fijo, avisos de mensajes,
+    diálogo de batería) y elegir el idioma desde Ajustes de Android.
 
 ### 5. Ajustes a la interfaz web y al núcleo
 
@@ -298,16 +323,18 @@ En el núcleo, `ui.Server.Shell` reemplaza las funciones del escritorio
 
 ### 6. Distribución
 
-- [ ] Clave de firma: crearla (ver abajo). **Guardar copia segura y nunca
-  subirla al repositorio**: sin ella no se pueden publicar actualizaciones.
+- [x] Clave de firma: creada (ver abajo), con sus *secrets* en GitHub.
+  **Guardar copia segura y nunca subirla al repositorio**: sin ella no se
+  pueden publicar actualizaciones. La contraseña va en un gestor de
+  contraseñas, no en un archivo junto al `.jks`.
 - [x] `go tool mage apkRelease` compila el APK firmado (`dist/LanChat-<versión>.apk`).
   Probado con una clave desechable: firma v2 válida (`apksigner verify`).
 - [x] GitHub Actions: `ci.yml` compila el APK de prueba en Ubuntu en cada
   cambio (`.github/actions/android`: Java, NDK y gomobile); `release.yml`, al
   subir una etiqueta, compila el firmado con la clave de los *secrets* y lo
   publica en la Release junto al zip, con su hash en `SHA256SUMS.txt` e
-  instrucciones de instalación. Validado con `actionlint`; falta la primera
-  corrida real en GitHub.
+  instrucciones de instalación. Funciona: la Release v0.22.0 trae el APK
+  firmado, el zip y `SHA256SUMS.txt`.
 - [ ] Más adelante, si se quiere: Google Play (cuenta de 25 USD, revisión
   del servicio en primer plano y del permiso de batería).
 - [x] Instalación en Android documentada en README, LEEME y el texto de la
