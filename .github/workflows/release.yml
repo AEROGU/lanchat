@@ -128,6 +128,30 @@ jobs:
             git tag -l --format='%(contents)' "$GITHUB_REF_NAME"
             cat <<EOF
 
+          ## Installing on Windows
+
+          1. Download \`LanChat-$VERSION.zip\`, unzip it and run \`LanChat.exe\`
+             (\`LanChat_x86.exe\` on 32-bit Windows).
+          2. If Windows shows "Windows protected your PC" (SmartScreen), choose
+             **More info > Run anyway**: the program is not signed with a paid
+             certificate. See \`LEEME.txt\`.
+          3. Allow access on **private networks** when Windows asks.
+
+          ## Installing on Android (7 or later)
+
+          1. Download \`LanChat-$VERSION.apk\` on the phone and open it. Android
+             will ask to allow "install unknown apps" for the app you opened it
+             with (browser, Files…).
+          2. When LanChat opens, allow **notifications** and, in the battery
+             notice, choose **Continue** and then **Allow**.
+          3. On OPPO, Xiaomi, Huawei, Vivo and similar: in LanChat, Settings >
+             "the app info" > Battery usage, turn on **Allow background
+             activity** (otherwise the phone freezes it with the screen off and
+             messages arrive late).
+
+          To check that the files were not altered, compare their SHA-256 with
+          \`SHA256SUMS.txt\` (in PowerShell: \`Get-FileHash LanChat-$VERSION.zip\`).
+
           ## Instalación en Windows
 
           1. Descarga \`LanChat-$VERSION.zip\`, descomprímelo y ejecuta \`LanChat.exe\`
