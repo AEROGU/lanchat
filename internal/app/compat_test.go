@@ -104,9 +104,11 @@ func TestIncompatiblePeerNotifiedOnce(t *testing.T) {
 	if got := old.received()[0]; !strings.Contains(got, version.Releases) || !strings.Contains(got, "0.17.0") {
 		t.Errorf("aviso: %q", got)
 	}
-	if v, _ := a.app.store.NotifiedProtocol(ctx, old.id); v != protocol.Version {
-		t.Errorf("aviso guardado = %d, quería %d", v, protocol.Version)
-	}
+	// Se guarda después de enviarlo: puede tardar un poco más que la llegada.
+	waitUntil(t, "el aviso queda guardado", func() bool {
+		v, _ := a.app.store.NotifiedProtocol(ctx, old.id)
+		return v == protocol.Version
+	})
 
 	// Más anuncios, y LanChat reiniciado: no se vuelve a avisar.
 	for range 3 {
