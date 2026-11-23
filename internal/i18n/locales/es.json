@@ -554,6 +554,7 @@
   "settings.previewsHelp": "Desactivadas, no se guardan miniaturas de las imágenes nuevas (ni las llevan las que envías). Las anteriores se conservan por si las vuelves a activar.",
   "thumbs.clear": "Borrar miniaturas guardadas",
   "system.autostart": "Iniciar LanChat al encender la PC (en la bandeja)",
+  "system.autostartHelp": "Algunos antivirus podrían borrar LanChat.exe por esta opción. Si te pasa, déjala apagada y pon un acceso directo a LanChat en la carpeta shell:startup (Win+R).",
   "system.firewall": "Firewall de Windows",
   "system.allow": "Permitir",
   "system.firewallHelp": "Hace falta para recibir mensajes y archivos en redes privadas. Pide permiso de administrador.",

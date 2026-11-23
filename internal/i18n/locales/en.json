@@ -554,6 +554,7 @@
   "settings.previewsHelp": "When off, no thumbnails are stored for new images (and the ones you send don't carry them). Earlier ones are kept in case you turn them back on.",
   "thumbs.clear": "Delete stored thumbnails",
   "system.autostart": "Start LanChat when the PC turns on (in the tray)",
+  "system.autostartHelp": "Some antivirus programs may delete LanChat.exe because of this option. If that happens, leave it off and put a shortcut to LanChat in the shell:startup folder (Win+R).",
   "system.firewall": "Windows Firewall",
   "system.allow": "Allow",
   "system.firewallHelp": "Needed to receive messages and files on private networks. It asks for administrator permission.",
