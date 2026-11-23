@@ -2,11 +2,11 @@ package chat
 
 import (
 	"cmp"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/ids"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/version"
@@ -83,10 +83,9 @@ func (s *Service) sendNotice(p discovery.Peer) {
 
 // noticeText es el mensaje que recibe un equipo con una versión anterior.
 func noticeText(who, theirs string) string {
+	// Las versiones anteriores solo estaban en español.
 	if theirs != "" {
 		theirs = " (" + theirs + ")"
 	}
-	return fmt.Sprintf("⚠️ Aviso automático de LanChat: %s actualizó a la versión %s, que ya no puede "+
-		"comunicarse con la tuya%s. Para seguir escribiéndose, instala la última versión desde %s",
-		who, version.App, theirs, version.Releases)
+	return i18n.TL("es", "chat.legacyNotice", "who", who, "version", version.App, "theirs", theirs, "url", version.Releases)
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/protocol"
 )
 
@@ -21,7 +22,7 @@ const maxReadRequestBytes = protocol.MaxReceiptIDs*(protocol.MaxIDLen+8) + 256
 
 func (r wireRead) validate() error {
 	if len(r.IDs) == 0 || len(r.IDs) > protocol.MaxReceiptIDs {
-		return errors.New("cantidad de mensajes inválida")
+		return i18n.E("chat.badCount")
 	}
 	errs := []error{protocol.ValidateID(r.From)}
 	for _, id := range r.IDs {
@@ -54,7 +55,7 @@ func (s *Service) handleRead(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxReadRequestBytes)
 	var req wireRead
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "json inválido", http.StatusBadRequest)
+		http.Error(w, i18n.T("err.badJSON"), http.StatusBadRequest)
 		return
 	}
 	if err := req.validate(); err != nil {
@@ -67,7 +68,7 @@ func (s *Service) handleRead(w http.ResponseWriter, r *http.Request) {
 	msgs, err := s.store.MarkReadByPeer(r.Context(), req.From, req.IDs, time.Now())
 	if err != nil {
 		s.log.Error("guardando lectura", "err", err)
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	for _, m := range msgs {

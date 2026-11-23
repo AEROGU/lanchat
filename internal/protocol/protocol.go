@@ -9,13 +9,13 @@ package protocol
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // Version es la versión del protocolo (paquetes UDP y API HTTP). Se
@@ -79,14 +79,14 @@ func ReplySnippet(s string) string {
 // válido: el mensaje citado se eliminó).
 func ValidateReplyText(s string) error {
 	if utf8.RuneCountInString(s) > MaxReplyTextLen || !utf8.ValidString(s) || hasControl(s, true) {
-		return errors.New("cita inválida")
+		return i18n.E("protocol.badQuote")
 	}
 	return nil
 }
 
 func ValidateID(s string) error {
 	if s == "" || len(s) > MaxIDLen || hasControl(s, false) {
-		return errors.New("id inválido")
+		return i18n.E("protocol.badID")
 	}
 	return nil
 }
@@ -94,24 +94,24 @@ func ValidateID(s string) error {
 // ValidateName valida un nombre propio o alias (vacío es válido).
 func ValidateName(s string) error {
 	if utf8.RuneCountInString(s) > MaxNameLen {
-		return fmt.Errorf("el nombre admite máximo %d caracteres", MaxNameLen)
+		return i18n.E("protocol.nameTooLong", "max", MaxNameLen)
 	}
 	if !utf8.ValidString(s) || hasControl(s, false) {
-		return errors.New("el nombre contiene caracteres no permitidos")
+		return i18n.E("protocol.nameChars")
 	}
 	return nil
 }
 
 func ValidateHostname(s string) error {
 	if len(s) > MaxHostnameLen || !utf8.ValidString(s) || hasControl(s, false) {
-		return errors.New("hostname inválido")
+		return i18n.E("protocol.badHostname")
 	}
 	return nil
 }
 
 func ValidateAppVersion(s string) error {
 	if len(s) > MaxAppVersionLen || hasControl(s, false) {
-		return errors.New("versión inválida")
+		return i18n.E("protocol.badVersion")
 	}
 	return nil
 }
@@ -122,13 +122,13 @@ func ValidateAppVersion(s string) error {
 func ValidateMessage(s string) error {
 	switch {
 	case strings.TrimSpace(s) == "":
-		return errors.New("mensaje vacío")
+		return i18n.E("protocol.emptyMessage")
 	case len(s) > MaxMessageBytes:
-		return fmt.Errorf("mensaje demasiado largo (máximo %d KB)", MaxMessageBytes>>10)
+		return i18n.E("protocol.messageTooLong", "max", MaxMessageBytes>>10)
 	case !utf8.ValidString(s):
-		return errors.New("el mensaje no es UTF-8 válido")
+		return i18n.E("protocol.messageUTF8")
 	case hasControl(s, true):
-		return errors.New("el mensaje contiene caracteres de control")
+		return i18n.E("protocol.messageControl")
 	}
 	return nil
 }
@@ -168,10 +168,10 @@ func NormalizeStatus(s string) string {
 // ValidateStatusText valida el texto de estado (vacío es válido).
 func ValidateStatusText(s string) error {
 	if utf8.RuneCountInString(s) > MaxStatusTextLen {
-		return fmt.Errorf("el estado admite máximo %d caracteres", MaxStatusTextLen)
+		return i18n.E("protocol.statusTooLong", "max", MaxStatusTextLen)
 	}
 	if !utf8.ValidString(s) || hasControl(s, false) {
-		return errors.New("el estado contiene caracteres no permitidos")
+		return i18n.E("protocol.statusChars")
 	}
 	return nil
 }
@@ -182,7 +182,7 @@ const FingerprintLen = 64
 // ValidateFingerprint valida una huella: 64 caracteres hex en minúsculas.
 func ValidateFingerprint(s string) error {
 	if len(s) != FingerprintLen || strings.Trim(s, "0123456789abcdef") != "" {
-		return errors.New("huella inválida")
+		return i18n.E("protocol.badFingerprint")
 	}
 	return nil
 }
@@ -201,7 +201,7 @@ func PhotoID(jpeg []byte) string {
 // ValidatePhotoID valida el identificador de una foto (vacío es válido: sin foto).
 func ValidatePhotoID(s string) error {
 	if s != "" && (len(s) != PhotoIDLen || strings.Trim(s, "0123456789abcdef") != "") {
-		return errors.New("identificador de foto inválido")
+		return i18n.E("protocol.badPhotoID")
 	}
 	return nil
 }

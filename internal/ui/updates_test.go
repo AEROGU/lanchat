@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/update"
 	"github.com/AEROGU/lanchat/internal/version"
 )
@@ -210,7 +211,7 @@ func TestUpdateUnsupported(t *testing.T) {
 	var latest atomic.Int32
 	s, _, _ := startUpdateServer(t, &fakeUpdatePlatform{}, &latest)
 	c := loggedClient(t, s)
-	if u := getUpdate(t, c, s); u.Supported || !strings.Contains(u.Reason, "desarrollo") {
+	if u := getUpdate(t, c, s); u.Supported || u.Reason != i18n.T("update.devBuild", "version", "0.19.0-dirty") {
 		t.Fatalf("una compilación de desarrollo no se actualiza: %+v", u)
 	}
 	resp, _ := postJSON(c, base(s)+"/api/update/check", "{}")

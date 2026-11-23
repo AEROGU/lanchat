@@ -7,13 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
 	"time"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/version"
 )
@@ -103,7 +103,7 @@ func New(cfg Config, log *slog.Logger) (*Service, error) {
 	}
 	conn, err := net.ListenUDP("udp4", laddr)
 	if err != nil {
-		return nil, fmt.Errorf("no se pudo abrir el puerto UDP %d (¿LanChat ya está abierto?): %w", cfg.UDPPort, err)
+		return nil, i18n.E("discovery.udpBusy", "port", cfg.UDPPort, "err", err)
 	}
 	cfg.UDPPort = conn.LocalAddr().(*net.UDPAddr).Port
 	return &Service{

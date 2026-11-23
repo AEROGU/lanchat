@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	_ "modernc.org/sqlite"
 )
 
@@ -317,7 +318,7 @@ func (s *Store) SetGroup(ctx context.Context, id, group string) error {
 
 func peerNotFound(id string, err error) error {
 	if errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("contacto %s desconocido", id)
+		return i18n.E("app.unknownContact", "id", id)
 	}
 	return err
 }
@@ -635,7 +636,7 @@ func (s *Store) queryMessages(ctx context.Context, q string, args ...any) ([]Mes
 }
 
 // ErrUnknownIdentity: no hay huella fijada para el equipo (aún no se lo vio).
-var ErrUnknownIdentity = errors.New("todavía no se conoce la identidad del equipo")
+var ErrUnknownIdentity = i18n.E("store.unknownIdentity")
 
 // PinnedFingerprint devuelve la huella fijada de peerID.
 func (s *Store) PinnedFingerprint(ctx context.Context, peerID string) (string, error) {

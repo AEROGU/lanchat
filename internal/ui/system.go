@@ -2,11 +2,11 @@ package ui
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"os/exec"
 	"runtime"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/platform"
 )
 
@@ -87,9 +87,9 @@ func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 	code, err := platform.RunElevated(exe, "-firewall add -elevated")
 	switch {
 	case errors.Is(err, platform.ErrCanceled):
-		err = errors.New("no se aceptó el permiso de administrador; la regla no se creó")
+		err = i18n.E("system.firewallDenied")
 	case err == nil && code != 0:
-		err = fmt.Errorf("no se pudo crear la regla (código %d); revisa lanchat.log", code)
+		err = i18n.E("system.firewallFailed", "code", code)
 	}
 	if err != nil {
 		s.fail(w, http.StatusBadRequest, err)

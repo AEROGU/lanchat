@@ -33,6 +33,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -84,6 +85,7 @@ type Backend interface {
 	SetPreviews(enabled bool) error
 	SetHideOffline(hide bool) error
 	SetAutoUpdate(enabled bool) error
+	SetLanguage(code string) (string, error)
 	SetCollapsedGroups(groups []string) error
 	SetRecentEmoji(list []string) error
 	ThumbsUsage(ctx context.Context) (count int, bytes int64, err error)
@@ -149,6 +151,9 @@ type Server struct {
 	OnQuit func()
 	// OnUnreadChanged recibe el total de mensajes sin leer cada vez que cambia.
 	OnUnreadChanged func(total int)
+	// OnLanguageChanged recibe el idioma nuevo cuando el usuario lo cambia en
+	// Ajustes (para la bandeja o las notificaciones de Android).
+	OnLanguageChanged func(lang string)
 	// AutostartArgs se agregan al inicio con Windows (p. ej. -dir).
 	AutostartArgs []string
 	// AutostartPrompt: la página puede preguntar si LanChat debe iniciar con
@@ -311,6 +316,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/update/install", s.handleUpdateInstall)
 	mux.HandleFunc("POST /api/update/later", s.handleUpdateLater)
 	mux.HandleFunc("POST /api/update/auto", s.handleAutoUpdate)
+	mux.HandleFunc("GET /api/locale", s.handleLocale)
+	mux.HandleFunc("POST /api/language", s.handleLanguage)
 	mux.HandleFunc("POST /api/collapsed-groups", s.handleList(s.b.SetCollapsedGroups))
 	mux.HandleFunc("POST /api/recent-emoji", s.handleList(s.b.SetRecentEmoji))
 	mux.HandleFunc("GET /api/previews/stored", s.handleThumbsUsage)
@@ -355,7 +362,7 @@ func (s *Server) routes() http.Handler {
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != s.host {
-			http.Error(w, "host no permitido", http.StatusMisdirectedRequest)
+			http.Error(w, i18n.T("server.badHost"), http.StatusMisdirectedRequest)
 			return
 		}
 		h := w.Header()
@@ -367,7 +374,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		// Primera visita: el token llega en la URL y se cambia por una cookie.
 		if r.Method == http.MethodGet && r.URL.Path == "/" && r.URL.Query().Has("t") {
 			if !s.validToken(r.URL.Query().Get("t")) {
-				http.Error(w, "enlace caducado: abre LanChat desde el icono de la bandeja", http.StatusForbidden)
+				http.Error(w, i18n.T("server.linkExpired"), http.StatusForbidden)
 				return
 			}
 			http.SetCookie(w, &http.Cookie{
@@ -378,12 +385,12 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			return
 		}
 		if !s.authorized(r) {
-			http.Error(w, "no autorizado: abre LanChat desde el icono de la bandeja", http.StatusUnauthorized)
+			http.Error(w, i18n.T("server.unauthorized"), http.StatusUnauthorized)
 			return
 		}
 		if r.Method == http.MethodPost {
 			if o := r.Header.Get("Origin"); o != "" && o != "http://"+s.host {
-				http.Error(w, "origen no permitido", http.StatusForbidden)
+				http.Error(w, i18n.T("server.badOrigin"), http.StatusForbidden)
 				return
 			}
 			// Solo la subida de archivos arrastrados (sin límite de tamaño) y la
@@ -395,7 +402,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			case mt == "application/json":
 				r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
 			default:
-				http.Error(w, "se esperaba JSON", http.StatusUnsupportedMediaType)
+				http.Error(w, i18n.T("server.jsonExpected"), http.StatusUnsupportedMediaType)
 				return
 			}
 		}
@@ -417,7 +424,7 @@ func (s *Server) recoverPanic(w http.ResponseWriter, r *http.Request) {
 		panic(v)
 	}
 	s.log.Error("error interno en la interfaz", "ruta", r.URL.Path, "err", v, "pila", string(debug.Stack()))
-	s.fail(w, http.StatusInternalServerError, errors.New("error interno de LanChat (detalles en lanchat.log)"))
+	s.fail(w, http.StatusInternalServerError, i18n.E("server.internal"))
 }
 
 func (s *Server) validToken(t string) bool {
@@ -445,6 +452,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		DownloadDir: s.b.DownloadDir(),
 		Mobile:      s.Shell != nil,
 		Update:      s.updateState(),
+		Languages:   i18n.Languages(),
 		Limits: limitsJSON{MaxName: protocol.MaxNameLen, MaxMessageBytes: protocol.MaxMessageBytes,
 			MaxStatusText: protocol.MaxStatusTextLen, DeleteWindowMs: protocol.DeleteWindow.Milliseconds()},
 	}
@@ -462,12 +470,12 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming no soportado", http.StatusInternalServerError)
+		http.Error(w, i18n.T("server.noStreaming"), http.StatusInternalServerError)
 		return
 	}
 	ch, ok := s.hub.subscribe()
 	if !ok {
-		http.Error(w, "cerrando", http.StatusServiceUnavailable)
+		http.Error(w, i18n.T("server.closing"), http.StatusServiceUnavailable)
 		return
 	}
 	defer func() {
@@ -621,7 +629,7 @@ func (s *Server) setPresence(focused bool, viewing string) {
 // cierran solas (evento "quit") para soltar el perfil de Edge.
 func (s *Server) handleQuit(w http.ResponseWriter, r *http.Request) {
 	if s.OnQuit == nil {
-		s.fail(w, http.StatusNotImplemented, errors.New("esta instancia no se puede cerrar desde fuera"))
+		s.fail(w, http.StatusNotImplemented, i18n.E("server.cantQuit"))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -647,7 +655,7 @@ func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		s.fail(w, http.StatusBadRequest, fmt.Errorf("petición inválida: %w", err))
+		s.fail(w, http.StatusBadRequest, i18n.E("server.badRequest", "err", err))
 		return false
 	}
 	return true
@@ -840,4 +848,32 @@ func (s *Server) handleTrust(w http.ResponseWriter, r *http.Request) {
 	}
 	s.publishContact(r.Context(), req.Peer)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleLocale da los textos del idioma en uso (i18n.Messages) para la página.
+func (s *Server) handleLocale(w http.ResponseWriter, r *http.Request) {
+	lang := i18n.Current()
+	writeJSON(w, http.StatusOK, map[string]any{"lang": lang, "messages": i18n.Messages(lang)})
+}
+
+// handleLanguage cambia el idioma ("" = el del sistema); la página vuelve a
+// pedir los textos y se redibuja.
+func (s *Server) handleLanguage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Language string `json:"language"`
+	}
+	if !s.decode(w, r, &req) {
+		return
+	}
+	lang, err := s.b.SetLanguage(req.Language)
+	if err != nil {
+		s.fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if s.OnLanguageChanged != nil {
+		s.OnLanguageChanged(lang)
+	}
+	self := toSelfJSON(s.b.Self())
+	s.hub.broadcast("self", self)
+	writeJSON(w, http.StatusOK, self)
 }

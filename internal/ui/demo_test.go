@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/app"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -185,7 +186,9 @@ func newDemoBackend() *demoBackend {
 func (d *demoBackend) Self() app.Self {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.self
+	s := d.self
+	s.Lang = i18n.Current()
+	return s
 }
 func (d *demoBackend) Contacts(context.Context) ([]app.Contact, error) {
 	d.mu.Lock()
@@ -249,15 +252,23 @@ func (d *demoBackend) History(_ context.Context, key, before string, _ int) ([]s
 	defer d.mu.Unlock()
 	return append([]store.Message(nil), d.history[key]...), nil
 }
-func (d *demoBackend) SetName(string) error              { return errDemo }
-func (d *demoBackend) SetStatus(string, string) error    { return errDemo }
-func (d *demoBackend) SetAutoAway(bool) error            { return errDemo }
-func (d *demoBackend) SetupDone() bool                   { return true }
-func (d *demoBackend) MarkSetupDone() error              { return nil }
-func (d *demoBackend) SetReadReceipts(bool) error        { return errDemo }
-func (d *demoBackend) SetPreviews(bool) error            { return errDemo }
-func (d *demoBackend) SetHideOffline(bool) error         { return nil }
-func (d *demoBackend) SetAutoUpdate(bool) error          { return nil }
+func (d *demoBackend) SetName(string) error           { return errDemo }
+func (d *demoBackend) SetStatus(string, string) error { return errDemo }
+func (d *demoBackend) SetAutoAway(bool) error         { return errDemo }
+func (d *demoBackend) SetupDone() bool                { return true }
+func (d *demoBackend) MarkSetupDone() error           { return nil }
+func (d *demoBackend) SetReadReceipts(bool) error     { return errDemo }
+func (d *demoBackend) SetPreviews(bool) error         { return errDemo }
+func (d *demoBackend) SetHideOffline(bool) error      { return nil }
+func (d *demoBackend) SetAutoUpdate(bool) error       { return nil }
+func (d *demoBackend) SetLanguage(code string) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.self.Language = code
+	lang := i18n.Resolve(code, i18n.System())
+	i18n.SetCurrent(lang)
+	return lang, nil
+}
 func (d *demoBackend) SetCollapsedGroups([]string) error { return nil }
 func (d *demoBackend) SetRecentEmoji([]string) error     { return nil }
 func (d *demoBackend) ThumbsUsage(context.Context) (int, int64, error) {

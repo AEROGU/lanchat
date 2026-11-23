@@ -14,11 +14,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/identity"
 )
 
@@ -33,10 +33,10 @@ const (
 )
 
 // ErrIdentityMismatch: el otro equipo no presentó la identidad fijada para él.
-var ErrIdentityMismatch = errors.New("la identidad del equipo no coincide con la conocida")
+var ErrIdentityMismatch = i18n.E("peer.identityMismatch")
 
 // errNoFingerprint: se intentó conectar sin saber qué identidad esperar.
-var errNoFingerprint = errors.New("no se conoce la identidad del equipo")
+var errNoFingerprint = i18n.E("peer.noFingerprint")
 
 type Server struct {
 	ln  net.Listener
@@ -49,7 +49,7 @@ type Server struct {
 func Listen(addr string, id *identity.Identity) (*Server, error) {
 	ln, err := net.Listen("tcp4", addr)
 	if err != nil {
-		return nil, fmt.Errorf("no se pudo abrir el puerto TCP %s (¿LanChat ya está abierto?): %w", addr, err)
+		return nil, i18n.E("peer.tcpBusy", "addr", addr, "err", err)
 	}
 	cfg := &tls.Config{
 		Certificates: []tls.Certificate{id.Cert},

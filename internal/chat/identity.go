@@ -3,6 +3,7 @@ package chat
 import (
 	"net/http"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/peer"
 )
 
@@ -12,17 +13,17 @@ import (
 func (s *Service) checkSender(w http.ResponseWriter, r *http.Request, from string) (fp string, ok bool) {
 	fp = peer.ClientFingerprint(r)
 	if fp == "" {
-		http.Error(w, "se requiere TLS", http.StatusForbidden)
+		http.Error(w, i18n.T("chat.tlsRequired"), http.StatusForbidden)
 		return "", false
 	}
 	known, found, err := s.store.Peer(r.Context(), from)
 	if err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return "", false
 	}
 	if found && known.Fingerprint != "" && known.Fingerprint != fp {
 		s.log.Warn("mensaje rechazado: la identidad no coincide con la del remitente", "from", from)
-		http.Error(w, "la identidad no coincide con la del remitente", http.StatusForbidden)
+		http.Error(w, i18n.T("chat.identityMismatch"), http.StatusForbidden)
 		return "", false
 	}
 	return fp, true

@@ -1,12 +1,12 @@
 package ui
 
 import (
-	"errors"
 	"io"
 	"net/http"
 	"os"
 	"strconv"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/thumb"
 )
 
@@ -14,7 +14,7 @@ import (
 // (llega con la oferta) y la imagen completa se lee directo del archivo, sin
 // copias ni temporales.
 
-var errNoPreview = errors.New("no hay vista previa de este archivo")
+var errNoPreview = i18n.E("preview.none")
 
 // handleThumb entrega la miniatura JPEG de un archivo de una transferencia.
 func (s *Server) handleThumb(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +53,7 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 	}
 	file, err := os.Open(f.Path)
 	if err != nil {
-		http.Error(w, "el archivo ya no está ahí: se movió o se borró", http.StatusNotFound)
+		http.Error(w, i18n.T("files.moved"), http.StatusNotFound)
 		return
 	}
 	defer file.Close()
@@ -79,7 +79,7 @@ func previewTarget(w http.ResponseWriter, r *http.Request) (string, int, bool) {
 	q := r.URL.Query()
 	idx, err := strconv.Atoi(q.Get("index"))
 	if q.Get("id") == "" || err != nil {
-		http.Error(w, "faltan id e index", http.StatusBadRequest)
+		http.Error(w, i18n.T("preview.missingParams"), http.StatusBadRequest)
 		return "", 0, false
 	}
 	return q.Get("id"), idx, true

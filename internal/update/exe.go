@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 const (
@@ -53,8 +55,7 @@ func Install(zipPath, exe, goarch string) error {
 	if err := extractExe(zipPath, ExeName(goarch), tmp, goarch); err != nil {
 		os.Remove(tmp)
 		if errors.Is(err, fs.ErrPermission) {
-			return fmt.Errorf("LanChat no tiene permiso para escribir en su carpeta (%s); actualízalo a mano desde %s",
-				filepath.Dir(exe), ReleasesURL)
+			return i18n.E("update.noWritePermission", "dir", filepath.Dir(exe), "url", ReleasesURL)
 		}
 		return err
 	}
@@ -62,12 +63,12 @@ func Install(zipPath, exe, goarch string) error {
 	os.Remove(old) // de una actualización anterior que no llegó a borrarlo
 	if err := rename(exe, old); err != nil {
 		os.Remove(tmp)
-		return fmt.Errorf("no se pudo apartar el ejecutable actual: %w", err)
+		return i18n.E("update.moveOldFailed", "err", err)
 	}
 	if err := rename(tmp, exe); err != nil {
 		rename(old, exe)
 		os.Remove(tmp)
-		return fmt.Errorf("no se pudo poner el ejecutable nuevo: %w", err)
+		return i18n.E("update.placeNewFailed", "err", err)
 	}
 	return nil
 }
@@ -113,7 +114,7 @@ func RemoveOld(exe string) {
 func extractExe(zipPath, name, dst, goarch string) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return fmt.Errorf("el zip descargado no se puede abrir: %w", err)
+		return i18n.E("update.badZip", "err", err)
 	}
 	defer zr.Close()
 	var entry *zip.File
@@ -124,10 +125,10 @@ func extractExe(zipPath, name, dst, goarch string) error {
 		}
 	}
 	if entry == nil {
-		return fmt.Errorf("el zip de la versión nueva no trae %s", name)
+		return i18n.E("update.zipMissing", "name", name)
 	}
 	if entry.UncompressedSize64 > maxExe {
-		return fmt.Errorf("%s del zip es demasiado grande", name)
+		return i18n.E("update.zipEntryTooBig", "name", name)
 	}
 	src, err := entry.Open()
 	if err != nil {
@@ -153,11 +154,11 @@ func extractExe(zipPath, name, dst, goarch string) error {
 func checkExe(path, goarch string) error {
 	f, err := pe.Open(path)
 	if err != nil {
-		return fmt.Errorf("el ejecutable nuevo no es válido: %w", err)
+		return i18n.E("update.badExe", "err", err)
 	}
 	defer f.Close()
 	if want, ok := peMachine[goarch]; ok && f.Machine != want {
-		return fmt.Errorf("el ejecutable nuevo es para otra arquitectura (0x%x, se esperaba 0x%x)", f.Machine, want)
+		return i18n.E("update.wrongArch", "got", fmt.Sprintf("0x%x", f.Machine), "want", fmt.Sprintf("0x%x", want))
 	}
 	return nil
 }

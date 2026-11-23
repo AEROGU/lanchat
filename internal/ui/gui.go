@@ -8,7 +8,6 @@ package ui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/config"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/icon"
 	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/update"
@@ -62,6 +62,8 @@ type gui struct {
 	lastOpen time.Time
 	ready    bool // la bandeja ya existe
 	unread   int
+	// retitleTray vuelve a poner los textos del menú (al cambiar el idioma).
+	retitleTray func()
 }
 
 // RunGUI arranca LanChat con ventana, bandeja y notificaciones, y bloquea
@@ -110,6 +112,7 @@ func RunGUI(o Options) error {
 	srv.OnOpen = g.show
 	srv.OnQuit = systray.Quit
 	srv.OnUnreadChanged = g.setUnread
+	srv.OnLanguageChanged = g.languageChanged
 	g.notifier = newNotifier(iconPath, g.show, o.Log)
 	if runtime.GOOS == "windows" {
 		srv.Updates = &UpdatePlatform{
@@ -166,9 +169,15 @@ func RunGUI(o Options) error {
 func (g *gui) onTrayReady(hidden bool) {
 	systray.SetTitle("LanChat")
 	systray.SetOnTapped(g.show)
-	open := systray.AddMenuItem("Abrir LanChat", "Mostrar la ventana")
+	open := systray.AddMenuItem(i18n.T("tray.open"), i18n.T("tray.openTip"))
 	systray.AddSeparator()
-	quit := systray.AddMenuItem("Salir", "Cerrar LanChat en este equipo")
+	quit := systray.AddMenuItem(i18n.T("tray.quit"), i18n.T("tray.quitTip"))
+	retitle := func() {
+		open.SetTitle(i18n.T("tray.open"))
+		open.SetTooltip(i18n.T("tray.openTip"))
+		quit.SetTitle(i18n.T("tray.quit"))
+		quit.SetTooltip(i18n.T("tray.quitTip"))
+	}
 	go func() {
 		for {
 			select {
@@ -183,6 +192,7 @@ func (g *gui) onTrayReady(hidden bool) {
 
 	g.mu.Lock()
 	g.ready = true
+	g.retitleTray = retitle
 	unread := g.unread
 	g.mu.Unlock()
 	g.applyTray(unread)
@@ -230,7 +240,7 @@ func (g *gui) installUpdate(zipPath, version string) error {
 	}
 	if err := exec.Command(exe, args...).Start(); err != nil {
 		update.Rollback(exe)
-		return fmt.Errorf("la versión nueva no arrancó: %w", err)
+		return i18n.E("update.newDidntStart", "err", err)
 	}
 	g.log.Info("versión nueva instalada; reiniciando", "version", version)
 	g.srv.quit()
@@ -250,7 +260,7 @@ func (g *gui) setUnread(total int) {
 func (g *gui) applyTray(unread int) {
 	systray.SetIcon(icon.ICO(unread > 0))
 	if unread > 0 {
-		systray.SetTooltip(fmt.Sprintf("LanChat — %d sin leer", unread))
+		systray.SetTooltip(i18n.T("tray.unread", "n", unread))
 	} else {
 		systray.SetTooltip("LanChat")
 	}
@@ -259,5 +269,16 @@ func (g *gui) applyTray(unread int) {
 func (g *gui) maybeNotify(ctx context.Context, ev any) {
 	if n, ok := g.srv.Notification(ctx, ev); ok {
 		go g.notifier.notify(n.Title, n.Body)
+	}
+}
+
+// languageChanged traduce la bandeja al idioma nuevo.
+func (g *gui) languageChanged(string) {
+	g.mu.Lock()
+	ready, unread, retitle := g.ready, g.unread, g.retitleTray
+	g.mu.Unlock()
+	if ready && retitle != nil {
+		retitle()
+		g.applyTray(unread)
 	}
 }

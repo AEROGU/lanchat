@@ -1,12 +1,12 @@
 package protocol
 
 import (
-	"errors"
-	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // Rutas HTTP entre equipos. Los patrones (Route*) son para http.ServeMux y las
@@ -73,20 +73,20 @@ const (
 func ValidateFileName(s string) error {
 	switch {
 	case s == "" || s == "." || s == "..":
-		return errors.New("nombre de archivo vacío")
+		return i18n.E("protocol.emptyFileName")
 	case len(s) > MaxFileNameLen:
-		return fmt.Errorf("nombre de archivo de más de %d bytes", MaxFileNameLen)
+		return i18n.E("protocol.fileNameTooLong", "max", MaxFileNameLen)
 	case !utf8.ValidString(s) || hasControl(s, false):
-		return errors.New("nombre de archivo con caracteres no permitidos")
+		return i18n.E("protocol.fileNameChars")
 	case strings.ContainsAny(s, `/\`):
-		return errors.New("el nombre de archivo no puede incluir carpetas")
+		return i18n.E("protocol.fileNameDirs")
 	}
 	return nil
 }
 
 func ValidateToken(s string) error {
 	if s == "" || len(s) > MaxTokenLen || hasControl(s, false) {
-		return errors.New("token inválido")
+		return i18n.E("err.badToken")
 	}
 	return nil
 }
@@ -105,15 +105,15 @@ func ValidateRelDir(s string) error {
 		return nil
 	}
 	if len(s) > MaxRelDirLen {
-		return fmt.Errorf("ruta de carpeta de más de %d bytes", MaxRelDirLen)
+		return i18n.E("protocol.dirTooLong", "max", MaxRelDirLen)
 	}
 	parts := strings.Split(s, "/")
 	if len(parts) > MaxDirDepth {
-		return fmt.Errorf("más de %d niveles de carpetas", MaxDirDepth)
+		return i18n.E("protocol.dirTooDeep", "max", MaxDirDepth)
 	}
 	for _, p := range parts {
 		if err := ValidateFileName(p); err != nil {
-			return fmt.Errorf("carpeta %q: %w", s, err)
+			return i18n.E("protocol.dirError", "dir", s, "err", err)
 		}
 	}
 	return nil

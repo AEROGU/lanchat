@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
@@ -21,7 +21,7 @@ const uploadPath = "/api/files/upload"
 const uploadDirPrefix = "dir:"
 
 // errPickerBusy: ya hay un selector de archivos abierto.
-var errPickerBusy = errors.New("ya hay una ventana para elegir archivos abierta")
+var errPickerBusy = i18n.E("files.pickerBusy")
 
 // handlePickFiles abre el selector de archivos de Windows y ofrece lo elegido.
 func (s *Server) handlePickFiles(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +110,7 @@ func (s *Server) handleSaveAs(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &req) {
 		return
 	}
-	dir, err := s.pickFolder("Elegir dónde guardar lo recibido", true)
+	dir, err := s.pickFolder(i18n.T("files.saveAsTitle"), true)
 	if err == nil && dir != "" {
 		err = s.b.AcceptTransferTo(r.Context(), req.ID, dir)
 	}
@@ -132,7 +132,7 @@ func (s *Server) handleDeleteTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 	t, ok, err := s.b.Transfer(r.Context(), req.ID)
 	if err == nil && !ok {
-		err = errors.New("transferencia inexistente")
+		err = i18n.E("transfer.noSuchTransfer")
 	}
 	if err == nil {
 		err = s.b.DeleteTransfer(r.Context(), req.ID)
@@ -160,12 +160,12 @@ func (s *Server) handleOpenFile(w http.ResponseWriter, r *http.Request) {
 	}
 	t, ok, err := s.b.Transfer(r.Context(), req.ID)
 	if err != nil || !ok || t.Outgoing || req.Index < 0 || req.Index >= len(t.Files) || !t.Files[req.Index].Done {
-		s.fail(w, http.StatusBadRequest, errors.New("el archivo no está disponible"))
+		s.fail(w, http.StatusBadRequest, i18n.E("files.unavailable"))
 		return
 	}
 	path := t.Files[req.Index].Path
 	if _, err := os.Stat(path); err != nil {
-		s.fail(w, http.StatusBadRequest, errors.New("el archivo ya no está ahí: se movió o se borró"))
+		s.fail(w, http.StatusBadRequest, i18n.E("files.moved"))
 		return
 	}
 	open := s.openFile
@@ -276,7 +276,7 @@ func (s *Server) handlePickFolder(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &req) {
 		return
 	}
-	dir, err := s.pickFolder("Elegir la carpeta para enviar", false)
+	dir, err := s.pickFolder(i18n.T("files.sendFolderTitle"), false)
 	if err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
@@ -310,7 +310,7 @@ func (s *Server) handleOpenDir(w http.ResponseWriter, r *http.Request) {
 			return root == req.Dir
 		})
 	if !valid {
-		s.fail(w, http.StatusBadRequest, errors.New("la carpeta no está disponible"))
+		s.fail(w, http.StatusBadRequest, i18n.E("files.folderUnavailable"))
 		return
 	}
 	if err := s.openFolder(filepath.Join(t.Dir, req.Dir)); err != nil {

@@ -1,6 +1,6 @@
 package ui
 
-import "errors"
+import "github.com/AEROGU/lanchat/internal/i18n"
 
 // Shell reemplaza las funciones del escritorio donde no lo hay (Android): la
 // app abre los archivos recibidos y los enlaces, y no hay selectores de
@@ -11,9 +11,9 @@ type Shell struct {
 }
 
 var (
-	errNoFolders = errors.New("en este equipo no se pueden abrir carpetas; abre cada archivo con «Abrir»")
-	errNoPicker  = errors.New("el selector de Windows no existe en este equipo; usa 📎")
-	errFixedDir  = errors.New("en este equipo la carpeta de archivos recibidos no se puede cambiar")
+	errNoFolders = i18n.E("shell.noFolders")
+	errNoPicker  = i18n.E("shell.noPicker")
+	errFixedDir  = i18n.E("shell.fixedDir")
 )
 
 func (s *Server) openFile(path string) error {

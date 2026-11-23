@@ -7,6 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
@@ -71,10 +72,16 @@ func TestOfferSummaryAndSize(t *testing.T) {
 		{files("Proyecto|a", "Proyecto/planos|b"), "📁 Proyecto (2 archivos, 1.5 KB)"},
 		{files("Proyecto|a", "|nota.txt"), "📎 2 elementos (1.5 KB): Proyecto/, nota.txt"},
 	}
+	i18n.SetCurrent("es")
+	t.Cleanup(func() { i18n.SetCurrent(i18n.Fallback) })
 	for _, c := range cases {
-		if got := offerSummary(c.files, 1500); got != c.want {
-			t.Errorf("offerSummary = %q, quería %q", got, c.want)
+		if got := OfferSummary(c.files, 1500); got != c.want {
+			t.Errorf("OfferSummary = %q, quería %q", got, c.want)
 		}
+	}
+	i18n.SetCurrent("en")
+	if got := OfferSummary(files("Proyecto|a"), 1500); got != "📁 Proyecto (1 file, 1.5 KB)" {
+		t.Errorf("OfferSummary en inglés = %q", got)
 	}
 }
 

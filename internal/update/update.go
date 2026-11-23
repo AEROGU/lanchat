@@ -14,7 +14,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -24,6 +23,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // ReleasesURL es la página de versiones del proyecto. Es una variable para
@@ -44,7 +45,7 @@ const (
 )
 
 // ErrNoRelease: el proyecto todavía no publicó ninguna versión.
-var ErrNoRelease = errors.New("todavía no hay versiones publicadas")
+var ErrNoRelease = i18n.E("update.noRelease")
 
 // Client consulta y descarga las Releases. El valor cero sirve.
 type Client struct {
@@ -92,11 +93,11 @@ func (c *Client) Latest(ctx context.Context) (string, error) {
 	}
 	resp.Body.Close()
 	if resp.StatusCode < 300 || resp.StatusCode > 399 {
-		return "", fmt.Errorf("la página de versiones respondió %s", resp.Status)
+		return "", i18n.E("update.releasesStatus", "status", resp.Status)
 	}
 	loc, err := resp.Location()
 	if err != nil {
-		return "", fmt.Errorf("la página de versiones no indicó la última: %w", err)
+		return "", i18n.E("update.noLatest", "err", err)
 	}
 	// …/releases/tag/v0.20.0; sin versiones, GitHub manda a …/releases.
 	dir, tag := path.Split(loc.Path)
@@ -106,7 +107,7 @@ func (c *Client) Latest(ctx context.Context) (string, error) {
 	tag, _ = url.PathUnescape(tag)
 	v, ok := Parse(tag)
 	if !ok || !v.Release() {
-		return "", fmt.Errorf("la última versión publicada tiene un nombre inesperado (%q)", tag)
+		return "", i18n.E("update.badTag", "tag", tag)
 	}
 	return strings.TrimPrefix(tag, "v"), nil
 }
@@ -126,7 +127,7 @@ func (c *Client) Fetch(ctx context.Context, version, name, dir string, progress 
 	}
 	want, ok := sums[name]
 	if !ok {
-		return "", fmt.Errorf("la versión %s no publica el SHA-256 de %s", version, name)
+		return "", i18n.E("update.noChecksum", "version", version, "name", name)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
@@ -137,7 +138,7 @@ func (c *Client) Fetch(ctx context.Context, version, name, dir string, progress 
 	}
 	defer resp.Body.Close()
 	if resp.ContentLength > maxDownload {
-		return "", fmt.Errorf("%s es demasiado grande (%d bytes)", name, resp.ContentLength)
+		return "", i18n.E("update.tooBigBytes", "name", name, "bytes", resp.ContentLength)
 	}
 
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -156,11 +157,11 @@ func (c *Client) Fetch(ctx context.Context, version, name, dir string, progress 
 	}
 	switch {
 	case err != nil:
-		err = fmt.Errorf("la descarga de %s se interrumpió: %w", name, err)
+		err = i18n.E("update.interrupted", "name", name, "err", err)
 	case pw.done > maxDownload:
-		err = fmt.Errorf("%s es demasiado grande", name)
+		err = i18n.E("update.tooBig", "name", name)
 	case hex.EncodeToString(h.Sum(nil)) != want:
-		err = fmt.Errorf("%s llegó dañado: su SHA-256 no coincide con el publicado; vuelve a intentarlo", name)
+		err = i18n.E("update.corrupt", "name", name)
 	}
 	if err != nil {
 		os.Remove(dst)
@@ -205,7 +206,7 @@ func (c *Client) get(ctx context.Context, u string) (*http.Response, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("no se pudo descargar %s (%s)", path.Base(req.URL.Path), resp.Status)
+		return nil, i18n.E("update.downloadFailed", "name", path.Base(req.URL.Path), "status", resp.Status)
 	}
 	return resp, nil
 }
@@ -215,7 +216,7 @@ func connError(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return err
 	}
-	return fmt.Errorf("no se pudo conectar con GitHub (¿hay internet en este equipo?): %w", err)
+	return i18n.E("update.noInternet", "err", err)
 }
 
 type progressWriter struct {

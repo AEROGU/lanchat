@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/ids"
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
@@ -162,13 +162,13 @@ func (m wireMessage) validate() error {
 	}
 	o := m.Offer
 	if len(o.Files) == 0 || len(o.Files) > protocol.MaxOfferFiles {
-		return fmt.Errorf("una oferta lleva de 1 a %d archivos", protocol.MaxOfferFiles)
+		return i18n.E("chat.offerFiles", "max", protocol.MaxOfferFiles)
 	}
 	errs := []error{protocol.ValidateToken(o.Token)}
 	for _, f := range o.Files {
 		errs = append(errs, protocol.ValidateFileName(f.Name), protocol.ValidateRelDir(f.Dir))
 		if f.Size < 0 {
-			errs = append(errs, errors.New("tamaño de archivo negativo"))
+			errs = append(errs, i18n.E("chat.negativeSize"))
 		}
 	}
 	return errors.Join(errs...)
@@ -416,7 +416,7 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 			return err
 		}
 		if !ok {
-			return fmt.Errorf("oferta %s sin transferencia", m.ID)
+			return i18n.E("chat.offerWithoutTransfer", "id", m.ID)
 		}
 		thumbs, err := s.store.Thumbs(s.ctx, m.ID)
 		if err != nil {
@@ -426,7 +426,7 @@ func (s *Service) deliver(p discovery.Peer, m store.Message) error {
 	}
 	status, err := s.post(p, protocol.RouteMessage, wm)
 	if err == nil && status != http.StatusNoContent {
-		err = fmt.Errorf("respuesta %d", status)
+		err = i18n.E("err.status", "code", status)
 	}
 	return err
 }
@@ -460,7 +460,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
 	var wm wireMessage
 	if err := json.NewDecoder(r.Body).Decode(&wm); err != nil {
-		http.Error(w, "json inválido", http.StatusBadRequest)
+		http.Error(w, i18n.T("err.badJSON"), http.StatusBadRequest)
 		return
 	}
 	if err := wm.validate(); err != nil {
@@ -468,7 +468,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if wm.From == s.self.ID {
-		http.Error(w, "remitente inválido", http.StatusBadRequest)
+		http.Error(w, i18n.T("chat.badSender"), http.StatusBadRequest)
 		return
 	}
 	fp, ok := s.checkSender(w, r, wm.From)
@@ -486,7 +486,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 		ID: wm.From, Name: wm.FromName, Hostname: wm.FromHost, IP: ip, LastSeen: now, Fingerprint: fp,
 	}); err != nil {
 		s.log.Error("guardando remitente", "err", err)
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	if wm.Room != nil {
@@ -515,7 +515,7 @@ func (s *Service) handleMsg(w http.ResponseWriter, r *http.Request) {
 	inserted, err := s.store.InsertMessageWithTransfer(r.Context(), m, t)
 	if err != nil {
 		s.log.Error("guardando mensaje", "err", err)
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	// Si no se insertó es un reenvío (el remitente no recibió nuestro 204):

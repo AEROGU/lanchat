@@ -2,11 +2,11 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/ids"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -177,11 +177,11 @@ func (a *App) adminRoom(ctx context.Context, roomID, memberID string) (store.Roo
 	self := a.Self().ID
 	switch {
 	case !r.IsAdmin(self):
-		return r, errors.New("solo un administrador de la sala puede hacer eso")
+		return r, i18n.E("room.adminOnly")
 	case memberID == self:
-		return r, errors.New("eso solo se puede hacer con otro miembro")
+		return r, i18n.E("room.otherMemberOnly")
 	case !slices.Contains(r.Members, memberID):
-		return r, errors.New("ya no es miembro de la sala")
+		return r, i18n.E("room.notMemberAnymore")
 	}
 	return r, nil
 }
@@ -236,9 +236,9 @@ func (a *App) activeRoom(ctx context.Context, id string) (store.Room, error) {
 	case err != nil:
 		return r, err
 	case !ok:
-		return r, errors.New("sala inexistente")
+		return r, i18n.E("room.noSuchRoom")
 	case r.Left:
-		return r, errors.New("ya no estás en esta sala")
+		return r, i18n.E("chat.notInRoom")
 	}
 	return r, nil
 }
@@ -266,10 +266,10 @@ func (a *App) newMembers(ctx context.Context, current, ids []string) ([]string, 
 		out = append(out, id)
 	}
 	if len(out) == 0 {
-		return nil, errors.New("elige al menos un contacto nuevo")
+		return nil, i18n.E("room.pickNewContact")
 	}
 	if total := max(len(current), 1) + len(out); total > protocol.MaxRoomMembers {
-		return nil, fmt.Errorf("una sala admite hasta %d miembros", protocol.MaxRoomMembers)
+		return nil, i18n.E("room.maxMembers", "max", protocol.MaxRoomMembers)
 	}
 	return out, nil
 }
@@ -277,7 +277,7 @@ func (a *App) newMembers(ctx context.Context, current, ids []string) ([]string, 
 func roomName(name string) (string, error) {
 	name, err := cleanName(name)
 	if err == nil && name == "" {
-		err = errors.New("ponle un nombre a la sala")
+		err = i18n.E("room.nameIt")
 	}
 	return name, err
 }

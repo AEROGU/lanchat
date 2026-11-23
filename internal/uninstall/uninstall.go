@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 const (
@@ -47,7 +49,7 @@ func IsDataDir(dir string) bool {
 // carpeta se eliminó; false sin error significa que tenía otros archivos.
 func RemoveData(dir string, wait time.Duration) (removed bool, err error) {
 	if !IsDataDir(dir) {
-		return false, errors.New("no parece una carpeta de datos de LanChat: " + dir)
+		return false, i18n.E("uninstall.notDataDir", "dir", dir)
 	}
 	var errs []error
 	for _, name := range dataEntries {

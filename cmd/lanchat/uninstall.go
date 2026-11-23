@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/config"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/transfer"
@@ -34,14 +35,14 @@ const (
 func runUninstall(dir string, customDir bool) int {
 	exe, err := platform.Executable()
 	if err != nil {
-		ui.ShowError("No se pudo desinstalar LanChat:\n\n" + err.Error())
+		ui.ShowError(i18n.T("uninstall.failed", "err", err))
 		return 1
 	}
 	if !ui.Confirm(uninstallQuestion(dir, customDir, exe)) {
 		return 0
 	}
 	if _, err := ui.QuitRunning(dir, quitTimeout); err != nil {
-		ui.ShowError("No se desinstaló nada.\n\n" + err.Error())
+		ui.ShowError(i18n.T("uninstall.nothing", "err", err))
 		return 1
 	}
 
@@ -57,16 +58,15 @@ func runUninstall(dir string, customDir bool) int {
 	}
 	if !customDir {
 		if err := platform.SetAutostart(false, exe); err != nil && !errors.Is(err, platform.ErrUnsupported) {
-			fail("No se pudo quitar el inicio con Windows: " + err.Error())
+			fail(i18n.T("uninstall.autostartFailed", "err", err))
 		}
 		if err := ui.UnregisterNotifications(); err != nil {
-			fail("No se pudo quitar el registro de notificaciones: " + err.Error())
+			fail(i18n.T("uninstall.notificationsFailed", "err", err))
 		}
 		if platform.FirewallRuleExists(exe) {
 			code, err := platform.RunElevated(exe, "-firewall remove -"+elevatedFlag)
 			if err != nil || code != 0 {
-				fail("La regla del Firewall de Windows sigue ahí (no se dio el permiso de " +
-					"administrador). Para quitarla: Firewall de Windows > Configuración avanzada > Reglas de entrada > LanChat.")
+				fail(i18n.T("uninstall.firewallLeft"))
 			}
 		}
 	}
@@ -74,27 +74,27 @@ func runUninstall(dir string, customDir bool) int {
 	if uninstall.IsDataDir(dir) {
 		switch removed, err := uninstall.RemoveData(dir, removeWait); {
 		case err != nil:
-			fail("No se pudo borrar todo en " + dir + ":\n" + err.Error())
+			fail(i18n.T("uninstall.dataFailed", "dir", dir, "err", err))
 		case !removed:
-			notes = append(notes, "La carpeta "+dir+" tenía otros archivos y se conservó; lo de LanChat ya se borró.")
+			notes = append(notes, i18n.T("uninstall.dataKept", "dir", dir))
 		}
 	}
 
 	if anyExists(append([]string{downloads}, received...)) {
 		if ui.Confirm(downloadsQuestion(downloads)) {
 			if _, err := uninstall.RemoveDownloads(downloads, own, received); err != nil {
-				fail("No se pudieron borrar todos los archivos recibidos:\n" + err.Error())
+				fail(i18n.T("uninstall.downloadsFailed", "err", err))
 			}
 		} else if downloads != "" {
-			notes = append(notes, "Los archivos recibidos siguen en "+downloads+".")
+			notes = append(notes, i18n.T("uninstall.downloadsKept", "dir", downloads))
 		}
 	}
 
-	msg := "LanChat se desinstaló de esta PC."
+	msg := i18n.T("uninstall.done")
 	if len(notes) > 0 {
 		msg += "\n\n" + strings.Join(notes, "\n\n")
 	}
-	msg += "\n\nPara terminar, borra la carpeta del programa (se abrirá al aceptar):\n" + filepath.Dir(exe)
+	msg += "\n\n" + i18n.T("uninstall.deleteProgram", "dir", filepath.Dir(exe))
 	ui.ShowInfo(msg)
 	ui.RevealFile(exe)
 	if failed {
@@ -105,25 +105,24 @@ func runUninstall(dir string, customDir bool) int {
 
 func uninstallQuestion(dir string, customDir bool, exe string) string {
 	var b strings.Builder
-	b.WriteString("¿Desinstalar LanChat de esta PC?\n\nSe cerrará LanChat y se quitará:\n")
+	b.WriteString(i18n.T("uninstall.ask") + "\n")
 	if !customDir {
-		b.WriteString("• el inicio con Windows y el registro de notificaciones\n")
+		b.WriteString("• " + i18n.T("uninstall.askAutostart") + "\n")
 		if platform.FirewallRuleExists(exe) {
-			b.WriteString("• la regla del Firewall de Windows (pedirá permiso de administrador)\n")
+			b.WriteString("• " + i18n.T("uninstall.askFirewall") + "\n")
 		}
 	}
-	b.WriteString("• tus conversaciones, contactos, salas, ajustes y la identidad de esta PC:\n   " + dir + "\n\n")
-	b.WriteString("No se puede deshacer. Los demás conservan su copia de las conversaciones.\n" +
-		"Después se te preguntará si también quieres borrar los archivos recibidos.")
+	b.WriteString("• " + i18n.T("uninstall.askData") + "\n   " + dir + "\n\n")
+	b.WriteString(i18n.T("uninstall.askWarning"))
 	return b.String()
 }
 
 func downloadsQuestion(downloads string) string {
-	msg := "¿Borrar también los archivos recibidos con LanChat?\n\n"
+	msg := i18n.T("uninstall.askDownloads") + "\n\n"
 	if downloads != "" {
-		msg += "Carpeta: " + downloads + "\n\n"
+		msg += i18n.T("uninstall.folder", "dir", downloads) + "\n\n"
 	}
-	return msg + "Sí: se borran.\nNo: se conservan donde están."
+	return msg + i18n.T("uninstall.yesNo")
 }
 
 // receivedFiles devuelve la carpeta de descargas, si es la propia de LanChat

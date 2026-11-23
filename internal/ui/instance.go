@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // Una sola instancia por usuario: la que está abierta guarda en ui.json su
@@ -96,7 +98,7 @@ func QuitRunning(dir string, timeout time.Duration) (wasRunning bool, err error)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
-		return true, fmt.Errorf("LanChat no aceptó cerrarse (respondió %d)", resp.StatusCode)
+		return true, i18n.E("instance.refusedQuit", "code", resp.StatusCode)
 	}
 	// Al terminar, la instancia borra su archivo.
 	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
@@ -104,5 +106,5 @@ func QuitRunning(dir string, timeout time.Duration) (wasRunning bool, err error)
 			return true, nil
 		}
 	}
-	return true, errors.New("LanChat sigue abierto: ciérralo desde el icono de la bandeja (clic derecho > Salir)")
+	return true, i18n.E("instance.stillOpen")
 }

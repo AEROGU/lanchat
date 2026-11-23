@@ -7,6 +7,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
+	"github.com/AEROGU/lanchat/internal/transfer"
 )
 
 // notifyPreview es cuántos caracteres del mensaje muestra la notificación.
@@ -42,7 +43,14 @@ func (s *Server) Notification(ctx context.Context, ev any) (Notice, bool) {
 	if err != nil {
 		return Notice{}, false
 	}
-	n := Notice{Title: c.DisplayName(), Body: preview(m.Body), Chat: view}
+	body := m.Body
+	if m.Kind == store.KindFiles {
+		// El resumen del mensaje viene en el idioma de quien envía.
+		if t, ok, err := s.b.Transfer(ctx, m.ID); err == nil && ok {
+			body = transfer.OfferSummary(t.Files, t.TotalSize())
+		}
+	}
+	n := Notice{Title: c.DisplayName(), Body: preview(body), Chat: view}
 	if m.RoomID != "" {
 		r, found, err := s.b.Room(ctx, m.RoomID)
 		if err != nil || !found {

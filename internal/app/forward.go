@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 	"github.com/AEROGU/lanchat/internal/transfer"
@@ -39,9 +40,9 @@ func (a *App) Reply(ctx context.Context, msgID, body string) (store.Message, err
 	case err != nil:
 		return store.Message{}, err
 	case !ok || orig.Deleted:
-		return store.Message{}, errors.New("el mensaje al que respondes ya no existe")
+		return store.Message{}, i18n.E("app.replyGone")
 	case orig.Kind == store.KindRoomEvent:
-		return store.Message{}, errors.New("no se puede responder a un aviso de la sala")
+		return store.Message{}, i18n.E("app.replyEvent")
 	}
 	author := orig.PeerID
 	if orig.Outgoing {
@@ -73,20 +74,20 @@ func (a *App) Forward(ctx context.Context, msgIDs, peers, rooms []string) ([]sto
 	msgIDs, peers, rooms = unique(msgIDs), unique(peers), unique(rooms)
 	switch {
 	case len(msgIDs) == 0:
-		return nil, errors.New("elige al menos un mensaje")
+		return nil, i18n.E("app.pickMessage")
 	case len(msgIDs) > maxForwardMessages:
-		return nil, fmt.Errorf("se pueden reenviar hasta %d mensajes a la vez", maxForwardMessages)
+		return nil, i18n.E("app.maxForwardMessages", "max", maxForwardMessages)
 	case len(peers)+len(rooms) == 0:
-		return nil, errors.New("elige a quién reenviarlos")
+		return nil, i18n.E("app.pickTargets")
 	case len(peers)+len(rooms) > maxForwardTargets:
-		return nil, fmt.Errorf("se puede reenviar a %d contactos y salas a la vez como máximo", maxForwardTargets)
+		return nil, i18n.E("app.maxForwardTargets", "max", maxForwardTargets)
 	}
 	items, err := a.forwardItems(ctx, msgIDs)
 	if err != nil {
 		return nil, err
 	}
 	if len(rooms) > 0 && slices.ContainsFunc(items, func(it forwardItem) bool { return it.files != nil }) {
-		return nil, errors.New("a las salas no se pueden enviar archivos: quita las salas o los archivos")
+		return nil, i18n.E("app.noFilesToRooms")
 	}
 	for _, p := range peers {
 		if err := a.requireContact(ctx, p); err != nil {
@@ -121,7 +122,7 @@ func (a *App) Forward(ctx context.Context, msgIDs, peers, rooms []string) ([]sto
 		for _, it := range items {
 			m, err := a.chat.ForwardRoom(ctx, r, it.body)
 			if err != nil {
-				errs = append(errs, fmt.Errorf("sala %s: %w", a.roomName(ctx, r), err))
+				errs = append(errs, i18n.E("app.roomError", "room", a.roomName(ctx, r), "err", err))
 				break
 			}
 			out = append(out, m)
@@ -139,11 +140,11 @@ func (a *App) forwardItems(ctx context.Context, ids []string) ([]forwardItem, er
 		case err != nil:
 			return nil, err
 		case !ok:
-			return nil, errors.New("uno de los mensajes ya no existe")
+			return nil, i18n.E("app.forwardGone")
 		case m.Deleted:
-			return nil, errors.New("un mensaje eliminado no se puede reenviar")
+			return nil, i18n.E("app.forwardDeleted")
 		case m.Kind == store.KindRoomEvent:
-			return nil, errors.New("los avisos de la sala no se reenvían")
+			return nil, i18n.E("app.forwardEvent")
 		}
 		msgs = append(msgs, m)
 	}
@@ -172,17 +173,17 @@ func (a *App) forwardFiles(ctx context.Context, id string) ([]transfer.Item, err
 		return nil, err
 	}
 	if !ok {
-		return nil, errors.New("ese envío de archivos ya no está en este equipo")
+		return nil, i18n.E("app.forwardNoTransfer")
 	}
 	items := make([]transfer.Item, len(t.Files))
 	for i, f := range t.Files {
 		switch {
 		case !t.Outgoing && !f.Done:
-			return nil, fmt.Errorf("no se puede reenviar «%s» porque no se descargó", f.Name)
+			return nil, i18n.E("app.forwardNotDownloaded", "name", f.Name)
 		case !isFile(f.Path) && t.Outgoing:
-			return nil, fmt.Errorf("no se puede reenviar «%s» porque el archivo ya no está donde estaba cuando lo enviaste", f.Name)
+			return nil, i18n.E("app.forwardMoved", "name", f.Name)
 		case !isFile(f.Path):
-			return nil, fmt.Errorf("no se puede reenviar «%s» porque el archivo ya no se encuentra en la carpeta de descargas de LanChat", f.Name)
+			return nil, i18n.E("app.forwardMissing", "name", f.Name)
 		}
 		items[i] = transfer.Item{Path: f.Path, Dir: f.Dir, Name: f.Name}
 	}
@@ -209,7 +210,7 @@ func unique(ids []string) []string {
 // roomName es el nombre de la sala, o su ID si no se encuentra.
 func (a *App) roomName(ctx context.Context, id string) string {
 	if r, ok, err := a.store.Room(ctx, id); err == nil && ok {
-		return "«" + r.Name + "»"
+		return i18n.T("fmt.quoted", "text", r.Name)
 	}
 	return id
 }

@@ -3,13 +3,12 @@ package chat
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 )
@@ -55,16 +54,15 @@ func (s *Service) DeleteForEveryone(ctx context.Context, msgID string) (store.Me
 	case err != nil:
 		return store.Message{}, err
 	case !ok:
-		return store.Message{}, errors.New("mensaje inexistente")
+		return store.Message{}, i18n.E("chat.noSuchMessage")
 	case !m.Outgoing:
-		return store.Message{}, errors.New("solo puedes eliminar para todos tus propios mensajes")
+		return store.Message{}, i18n.E("chat.deleteOwnOnly")
 	case m.Deleted:
 		return m, nil
 	case m.Kind != store.KindText && m.Kind != store.KindFiles:
-		return store.Message{}, errors.New("este mensaje no se puede eliminar")
+		return store.Message{}, i18n.E("chat.cantDelete")
 	case time.Since(m.SentAt) > protocol.DeleteWindow:
-		return store.Message{}, fmt.Errorf("ya pasaron más de %d minutos desde que lo enviaste",
-			int(protocol.DeleteWindow.Minutes()))
+		return store.Message{}, i18n.E("chat.tooLate", "min", int(protocol.DeleteWindow.Minutes()))
 	}
 	if err := s.checkFilesDeletable(ctx, m); err != nil {
 		return store.Message{}, err
@@ -95,7 +93,7 @@ func (s *Service) checkFilesDeletable(ctx context.Context, m store.Message) erro
 	if err != nil || !ok || t.State.Final() {
 		return err
 	}
-	return errors.New("cancela el envío antes de eliminarlo para todos")
+	return i18n.E("chat.cancelFirst")
 }
 
 // deleteMessage deja el mensaje como eliminado y avisa a las ventanas. De una
@@ -126,16 +124,15 @@ func (s *Service) Edit(ctx context.Context, msgID, body string) (store.Message, 
 	case err != nil:
 		return store.Message{}, err
 	case !ok:
-		return store.Message{}, errors.New("mensaje inexistente")
+		return store.Message{}, i18n.E("chat.noSuchMessage")
 	case !m.Outgoing:
-		return store.Message{}, errors.New("solo puedes editar tus propios mensajes")
+		return store.Message{}, i18n.E("chat.editOwnOnly")
 	case m.Deleted:
-		return store.Message{}, errors.New("el mensaje se eliminó")
+		return store.Message{}, i18n.E("chat.wasDeleted")
 	case m.Kind != store.KindText:
-		return store.Message{}, errors.New("solo se pueden editar los mensajes de texto")
+		return store.Message{}, i18n.E("chat.editTextOnly")
 	case time.Since(m.SentAt) > protocol.DeleteWindow:
-		return store.Message{}, fmt.Errorf("ya pasaron más de %d minutos desde que lo enviaste",
-			int(protocol.DeleteWindow.Minutes()))
+		return store.Message{}, i18n.E("chat.tooLate", "min", int(protocol.DeleteWindow.Minutes()))
 	case m.Body == body:
 		return m, nil
 	}
@@ -146,7 +143,7 @@ func (s *Service) Edit(ctx context.Context, msgID, body string) (store.Message, 
 		case err != nil:
 			return store.Message{}, err
 		case !ok || room.Left:
-			return store.Message{}, errors.New("ya no estás en esta sala")
+			return store.Message{}, i18n.E("chat.notInRoom")
 		}
 		if recipients, err = s.store.RoomRecipients(ctx, msgID); err != nil {
 			return store.Message{}, err
@@ -176,9 +173,9 @@ func (s *Service) React(ctx context.Context, msgID, emoji string) (store.Message
 	case err != nil:
 		return store.Message{}, err
 	case !ok:
-		return store.Message{}, errors.New("mensaje inexistente")
+		return store.Message{}, i18n.E("chat.noSuchMessage")
 	case m.Deleted || m.Kind == store.KindRoomEvent:
-		return store.Message{}, errors.New("a este mensaje no se puede reaccionar")
+		return store.Message{}, i18n.E("chat.cantReact")
 	}
 	recipients := []string{m.PeerID}
 	if m.RoomID != "" {
@@ -187,7 +184,7 @@ func (s *Service) React(ctx context.Context, msgID, emoji string) (store.Message
 		case err != nil:
 			return store.Message{}, err
 		case !ok || room.Left:
-			return store.Message{}, errors.New("ya no estás en esta sala")
+			return store.Message{}, i18n.E("chat.notInRoom")
 		}
 		recipients = slices.DeleteFunc(slices.Clone(room.Members), func(id string) bool { return id == s.self.ID })
 	}
@@ -273,11 +270,11 @@ func (s *Service) handleOps(w http.ResponseWriter, r *http.Request) {
 		Ops  []wireOp `json:"ops"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "json inválido", http.StatusBadRequest)
+		http.Error(w, i18n.T("err.badJSON"), http.StatusBadRequest)
 		return
 	}
 	if err := protocol.ValidateID(req.From); err != nil || len(req.Ops) == 0 || len(req.Ops) > protocol.MaxOpsPerRequest {
-		http.Error(w, "avisos inválidos", http.StatusBadRequest)
+		http.Error(w, i18n.T("chat.badOps"), http.StatusBadRequest)
 		return
 	}
 	if _, ok := s.checkSender(w, r, req.From); !ok {
@@ -307,7 +304,7 @@ func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
 	case err != nil:
 		return err
 	case !ok:
-		return errors.New("mensaje desconocido")
+		return i18n.E("chat.unknownMessage")
 	case m.Deleted:
 		return nil
 	}
@@ -315,11 +312,11 @@ func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
 	if op.Type == protocol.OpDelete {
 		switch {
 		case m.Outgoing || m.PeerID != from:
-			return errors.New("solo el autor puede eliminar su mensaje")
+			return i18n.E("chat.authorDeletes")
 		case m.Kind != store.KindText && m.Kind != store.KindFiles:
-			return errors.New("solo se eliminan mensajes de texto y ofertas de archivos")
+			return i18n.E("chat.deleteKinds")
 		case op.At-m.SentAt.UnixMilli() > protocol.DeleteWindow.Milliseconds():
-			return errors.New("fuera de plazo")
+			return i18n.E("chat.expiredOp")
 		}
 		if err := s.checkFilesDeletable(ctx, m); err != nil {
 			return err
@@ -337,12 +334,12 @@ func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
 		}
 	}
 	if m.Kind == store.KindRoomEvent {
-		return errors.New("a un aviso de sala no se reacciona")
+		return i18n.E("chat.noReactEvent")
 	}
 	// Solo reacciona quien participa en la conversación.
 	if m.RoomID == "" {
 		if m.PeerID != from {
-			return errors.New("el mensaje no es de una conversación con el remitente")
+			return i18n.E("chat.notSendersChat")
 		}
 	} else {
 		room, ok, err := s.store.Room(ctx, m.RoomID)
@@ -350,7 +347,7 @@ func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
 			return err
 		}
 		if !ok || !slices.Contains(room.Members, from) {
-			return errors.New("el remitente no es miembro de la sala")
+			return i18n.E("chat.senderNotMember")
 		}
 	}
 	changed, err := s.store.SetReaction(ctx, m.ID, from, op.Emoji, time.UnixMilli(op.At))
@@ -368,11 +365,11 @@ func (s *Service) applyOp(ctx context.Context, from string, op wireOp) error {
 func (s *Service) applyEdit(ctx context.Context, from string, m store.Message, op wireOp) error {
 	switch {
 	case m.Outgoing || m.PeerID != from:
-		return errors.New("solo el autor puede editar su mensaje")
+		return i18n.E("chat.authorEdits")
 	case m.Kind != store.KindText:
-		return errors.New("solo se editan mensajes de texto")
+		return i18n.E("chat.editKinds")
 	case op.At-m.SentAt.UnixMilli() > protocol.DeleteWindow.Milliseconds():
-		return errors.New("fuera de plazo")
+		return i18n.E("chat.expiredOp")
 	}
 	if err := protocol.ValidateMessage(op.Body); err != nil {
 		return err

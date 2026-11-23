@@ -4,9 +4,10 @@
 package platform
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 const (
@@ -40,10 +41,10 @@ const (
 )
 
 // ErrCanceled: el usuario no aceptó el aviso de Control de cuentas (UAC).
-var ErrCanceled = errors.New("se canceló el permiso de administrador")
+var ErrCanceled = i18n.E("platform.canceled")
 
 // ErrUnsupported: la función no existe en este sistema operativo.
-var ErrUnsupported = errors.New("solo disponible en Windows")
+var ErrUnsupported = i18n.E("platform.windowsOnly")
 
 // Executable es la ruta real del programa en ejecución.
 func Executable() (string, error) {

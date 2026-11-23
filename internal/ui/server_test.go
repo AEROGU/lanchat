@@ -25,6 +25,7 @@ import (
 
 	"github.com/AEROGU/lanchat/internal/app"
 	"github.com/AEROGU/lanchat/internal/chat"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -44,6 +45,7 @@ type fakeBackend struct {
 	// downloadDir vacío = una ruta de Windows que no se usa.
 	downloadDir string
 	autoUpdate  bool
+	language    string
 	photo       []byte // foto de perfil propia (nil = sin foto)
 }
 
@@ -52,7 +54,7 @@ var testContact = app.Contact{ID: "c1", Hostname: "PC-ANA", IP: "192.168.1.30", 
 func (f *fakeBackend) Self() app.Self {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	s := app.Self{ID: "yo", Name: f.name, Hostname: "PC-YO", Status: f.status, AutoUpdate: f.autoUpdate}
+	s := app.Self{ID: "yo", Name: f.name, Hostname: "PC-YO", Status: f.status, AutoUpdate: f.autoUpdate, Language: f.language}
 	if f.photo != nil {
 		s.Photo = protocol.PhotoID(f.photo)
 	}
@@ -682,6 +684,15 @@ func (f *fakeBackend) SetAutoUpdate(on bool) error {
 	f.autoUpdate = on
 	return nil
 }
+func (f *fakeBackend) SetLanguage(code string) (string, error) {
+	if code != "" && !i18n.Supported(code) {
+		return "", errors.New("idioma desconocido")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.language = code
+	return i18n.Resolve(code, nil), nil
+}
 func (f *fakeBackend) SetCollapsedGroups([]string) error { return nil }
 func (f *fakeBackend) SetRecentEmoji([]string) error     { return nil }
 func (f *fakeBackend) ThumbsUsage(context.Context) (int, int64, error) {
@@ -1029,7 +1040,7 @@ func TestRecoverPanic(t *testing.T) {
 		var empty []uint16
 		_ = empty[0]
 	}()
-	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "error interno") {
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), i18n.T("server.internal")) {
 		t.Errorf("respuesta: %d %s", rec.Code, rec.Body.String())
 	}
 }

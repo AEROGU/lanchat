@@ -3,13 +3,14 @@
 package ui
 
 import (
-	"errors"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 func pickFiles() ([]string, error) {
-	return nil, errors.New("el selector de archivos solo existe en Windows; arrastra los archivos a la ventana")
+	return nil, i18n.E("shell.filePickerWindows")
 }
 
 func openPath(path string) error { return exec.Command("xdg-open", path).Start() }
@@ -17,7 +18,7 @@ func openPath(path string) error { return exec.Command("xdg-open", path).Start()
 func revealPath(path string) error { return openPath(filepath.Dir(path)) }
 
 func pickFolder(string, bool) (string, error) {
-	return "", errors.New("el selector de carpetas solo existe en Windows; arrastra la carpeta a la ventana")
+	return "", i18n.E("shell.folderPickerWindows")
 }
 
 // RevealFile abre la carpeta del archivo.

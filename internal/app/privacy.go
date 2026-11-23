@@ -3,9 +3,8 @@ package app
 import (
 	"cmp"
 	"context"
-	"errors"
-	"fmt"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
@@ -23,7 +22,7 @@ func (a *App) ExportData(ctx context.Context, path string) error {
 // de archivos sin terminar con ese contacto. El contacto se conserva.
 func (a *App) DeleteConversation(ctx context.Context, peerID string) error {
 	if err := a.transfer.CancelAll(ctx, peerID); err != nil {
-		return fmt.Errorf("cancelando los archivos pendientes: %w", err)
+		return i18n.E("app.cancelPending", "err", err)
 	}
 	return a.store.DeleteConversation(ctx, peerID)
 }
@@ -37,13 +36,13 @@ func (a *App) DeleteTransfer(ctx context.Context, id string) error {
 		return err
 	}
 	if !ok {
-		return errors.New("transferencia inexistente")
+		return i18n.E("transfer.noSuchTransfer")
 	}
 	switch t.State {
 	case store.TransferCanceled, store.TransferRejected, store.TransferExpired:
 		return a.store.DeleteTransfer(ctx, id)
 	}
-	return errors.New("solo se pueden borrar los envíos cancelados, rechazados o caducados")
+	return i18n.E("app.deleteTransferState")
 }
 
 // RemoveContact quita de la lista a un contacto desconectado: típicamente una
@@ -52,10 +51,10 @@ func (a *App) DeleteTransfer(ctx context.Context, id string) error {
 // equipo vuelve a conectarse, aparece de nuevo.
 func (a *App) RemoveContact(ctx context.Context, peerID, into string) error {
 	if p, ok := a.disc.Peer(peerID); ok && p.Online {
-		return errors.New("el contacto está conectado: solo se pueden quitar los desconectados")
+		return i18n.E("app.removeOnline")
 	}
 	if _, ok, err := a.store.Peer(ctx, peerID); err != nil || !ok {
-		return cmp.Or(err, fmt.Errorf("contacto %s desconocido", peerID))
+		return cmp.Or(err, i18n.E("app.unknownContact", "id", peerID))
 	}
 	if into != "" {
 		target, ok, err := a.store.Peer(ctx, into)
@@ -63,13 +62,13 @@ func (a *App) RemoveContact(ctx context.Context, peerID, into string) error {
 		case err != nil:
 			return err
 		case into == peerID:
-			return errors.New("no se puede combinar la conversación consigo misma")
+			return i18n.E("app.mergeSelf")
 		case !ok || target.Removed:
-			return fmt.Errorf("contacto %s desconocido", into)
+			return i18n.E("app.unknownContact", "id", into)
 		}
 	}
 	if err := a.transfer.CancelAll(ctx, peerID); err != nil {
-		return fmt.Errorf("cancelando los archivos pendientes: %w", err)
+		return i18n.E("app.cancelPending", "err", err)
 	}
 	if err := a.store.RemovePeer(ctx, peerID, into); err != nil {
 		return err
@@ -91,7 +90,7 @@ func (a *App) DeleteRoomConversation(ctx context.Context, roomID string) error {
 		return err
 	}
 	if !ok {
-		return errors.New("sala inexistente")
+		return i18n.E("room.noSuchRoom")
 	}
 	return a.store.DeleteRoomConversation(ctx, roomID, r.Left)
 }
@@ -102,7 +101,7 @@ func (a *App) DeleteRoomConversation(ctx context.Context, roomID string) error {
 // archivos ya recibidos quedan en su carpeta.
 func (a *App) WipeData(ctx context.Context) error {
 	if err := a.transfer.CancelAll(ctx, ""); err != nil {
-		return fmt.Errorf("cancelando los archivos pendientes: %w", err)
+		return i18n.E("app.cancelPending", "err", err)
 	}
 	// Salir de las salas avisa a los demás, que dejan de enviar mensajes aquí.
 	rooms, err := a.store.Rooms(ctx)
@@ -112,7 +111,7 @@ func (a *App) WipeData(ctx context.Context) error {
 	for _, r := range rooms {
 		if !r.Left {
 			if err := a.LeaveRoom(ctx, r.ID); err != nil {
-				return fmt.Errorf("saliendo de la sala «%s»: %w", r.Name, err)
+				return i18n.E("app.leaveFailed", "room", r.Name, "err", err)
 			}
 		}
 	}

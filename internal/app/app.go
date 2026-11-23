@@ -24,6 +24,7 @@ import (
 	"github.com/AEROGU/lanchat/internal/chat"
 	"github.com/AEROGU/lanchat/internal/config"
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/identity"
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
@@ -64,6 +65,9 @@ type Options struct {
 	// LocalNets: las redes de este equipo cuando el sistema no deja leer las
 	// interfaces (Android); ver discovery.Config.LocalNets.
 	LocalNets func() []netip.Prefix
+	// SystemLanguages son los idiomas del sistema en orden de preferencia
+	// (nil = i18n.System(); Android los informa la app).
+	SystemLanguages []string
 }
 
 type App struct {
@@ -85,6 +89,8 @@ type App struct {
 	http        *http.Client
 	identity    *identity.Identity
 	photos      *photos
+	// sysLangs son los idiomas del sistema (Options.SystemLanguages).
+	sysLangs []string
 
 	mu  sync.Mutex
 	cfg *config.Config
@@ -105,6 +111,10 @@ func New(o Options) (a *App, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if o.SystemLanguages == nil {
+		o.SystemLanguages = i18n.System()
+	}
+	i18n.SetCurrent(i18n.Resolve(cfg.Language, o.SystemLanguages))
 	if o.Hostname == "" {
 		if o.Hostname, err = os.Hostname(); err != nil {
 			o.Log.Warn("no se pudo leer el hostname; se mostrará la IP", "err", err)
@@ -180,6 +190,7 @@ func New(o Options) (a *App, err error) {
 		chat:        ch,
 		events:      make(chan any, eventBuffer),
 		cfg:         cfg,
+		sysLangs:    o.SystemLanguages,
 		idleTime:    o.IdleTime,
 		idleCheck:   cmp.Or(o.IdleCheckInterval, idleCheckInterval),
 		gossipEvery: cmp.Or(o.GossipInterval, gossipInterval),
@@ -311,6 +322,10 @@ type Self struct {
 	Fingerprint string
 	// Photo identifica la foto de perfil (protocol.PhotoID; vacío = sin foto).
 	Photo string
+	// Language es el idioma elegido en Ajustes ("" = el del sistema) y Lang
+	// el que se usa (i18n.Current).
+	Language string
+	Lang     string
 }
 
 func (a *App) Self() Self {
@@ -328,6 +343,8 @@ func (a *App) Self() Self {
 		AutoUpdate:      !a.cfg.NoAutoUpdate,
 		Fingerprint:     a.identity.Fingerprint,
 		Photo:           a.photos.get(a.cfg.ID),
+		Language:        a.cfg.Language,
+		Lang:            i18n.Current(),
 	}
 }
 
@@ -395,10 +412,9 @@ func (c Contact) Incompatible() bool { return c.Protocol != 0 && c.Protocol != p
 // incompatibleError explica por qué no se le puede enviar nada al contacto.
 func (c Contact) incompatibleError() error {
 	if c.Protocol < protocol.Version {
-		return fmt.Errorf("%s usa una versión anterior de LanChat que ya no es compatible: necesita actualizar a la última (%s)",
-			c.DisplayName(), version.Releases)
+		return i18n.E("app.peerTooOld", "name", c.DisplayName(), "url", version.Releases)
 	}
-	return fmt.Errorf("%s usa una versión más nueva de LanChat: actualiza la tuya (%s)", c.DisplayName(), version.Releases)
+	return i18n.E("app.peerTooNew", "name", c.DisplayName(), "url", version.Releases)
 }
 
 // DisplayName: alias local > nombre elegido por el otro > hostname > IP.
@@ -535,6 +551,23 @@ func (a *App) SetAutoUpdate(enabled bool) error {
 	return a.cfg.Save(a.dir)
 }
 
+// SetLanguage cambia el idioma de la interfaz ("" = el del sistema) y
+// devuelve el que queda en uso.
+func (a *App) SetLanguage(code string) (string, error) {
+	if code != "" && !i18n.Supported(code) {
+		return "", i18n.E("err.languageUnknown", "code", code)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.Language = code
+	if err := a.cfg.Save(a.dir); err != nil {
+		return "", err
+	}
+	lang := i18n.Resolve(code, a.sysLangs)
+	i18n.SetCurrent(lang)
+	return lang, nil
+}
+
 const (
 	// maxCollapsedGroups y maxRecentEmoji acotan lo que la interfaz guarda
 	// en la configuración.
@@ -548,7 +581,7 @@ const (
 // SetCollapsedGroups recuerda qué grupos están plegados en la lista de contactos.
 func (a *App) SetCollapsedGroups(groups []string) error {
 	if len(groups) > maxCollapsedGroups {
-		return fmt.Errorf("se admiten máximo %d grupos plegados", maxCollapsedGroups)
+		return i18n.E("app.maxCollapsed", "max", maxCollapsedGroups)
 	}
 	for _, g := range groups {
 		if err := protocol.ValidateName(g); err != nil {
@@ -564,12 +597,12 @@ func (a *App) SetCollapsedGroups(groups []string) error {
 // SetRecentEmoji recuerda los últimos emojis usados (el más reciente primero).
 func (a *App) SetRecentEmoji(list []string) error {
 	if len(list) > maxRecentEmoji {
-		return fmt.Errorf("se admiten máximo %d emojis recientes", maxRecentEmoji)
+		return i18n.E("app.maxRecentEmoji", "max", maxRecentEmoji)
 	}
 	for _, e := range list {
 		if e == "" || len(e) > maxEmojiBytes || !utf8.ValidString(e) ||
 			strings.ContainsFunc(e, unicode.IsControl) {
-			return errors.New("emoji no válido")
+			return i18n.E("app.badEmoji")
 		}
 	}
 	a.mu.Lock()
@@ -723,7 +756,7 @@ func (a *App) Upload(ctx context.Context, peerID string, next func() (name, dir 
 			break
 		}
 		if err == nil && len(items) >= protocol.MaxOfferFiles {
-			err = fmt.Errorf("se pueden enviar hasta %d archivos a la vez", protocol.MaxOfferFiles)
+			err = i18n.E("app.maxFiles", "max", protocol.MaxOfferFiles)
 		}
 		if err == nil {
 			var p string
@@ -801,7 +834,7 @@ func (a *App) SetDownloadDir(dir string) error {
 		}
 		dir = filepath.Clean(dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return fmt.Errorf("no se pudo usar la carpeta: %w", err)
+			return i18n.E("app.badFolder", "err", err)
 		}
 	}
 	a.mu.Lock()
@@ -818,7 +851,7 @@ func (a *App) requireContact(ctx context.Context, peerID string) error {
 	case err != nil:
 		return err
 	case !ok:
-		return fmt.Errorf("contacto %s desconocido", peerID)
+		return i18n.E("app.unknownContact", "id", peerID)
 	case c.Incompatible():
 		return c.incompatibleError()
 	}
@@ -853,7 +886,7 @@ type SelfChanged struct{}
 // SetStatus cambia el estado elegido (protocol.Status*) y su texto.
 func (a *App) SetStatus(status, text string) error {
 	if status != protocol.NormalizeStatus(status) {
-		return fmt.Errorf("estado desconocido: %q", status)
+		return i18n.E("app.unknownStatus", "status", status)
 	}
 	text = strings.TrimSpace(text)
 	if err := protocol.ValidateStatusText(text); err != nil {
@@ -945,7 +978,7 @@ func (a *App) SendMany(ctx context.Context, peerIDs []string, body string) ([]st
 		out = append(out, m)
 	}
 	if len(seen) == 0 {
-		return nil, errors.New("elige al menos un contacto")
+		return nil, i18n.E("app.pickContact")
 	}
 	return out, errors.Join(errs...)
 }
@@ -962,7 +995,7 @@ func (a *App) sendBroadcast(ctx context.Context, peerID, body string) (store.Mes
 func (a *App) TrustIdentity(ctx context.Context, peerID string) error {
 	p, ok := a.disc.Peer(peerID)
 	if !ok || !p.Online || p.Fingerprint == "" {
-		return errors.New("el contacto tiene que estar en línea para confiar en su identidad")
+		return i18n.E("app.trustOffline")
 	}
 	if err := a.store.SetFingerprint(ctx, peerID, p.Fingerprint); err != nil {
 		return err

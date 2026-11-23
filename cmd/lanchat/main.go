@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/config"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/ui"
@@ -40,10 +41,13 @@ func main() {
 	uninstallOp := flag.Bool(platform.UninstallFlag, false, "desinstalar LanChat de este equipo (pregunta antes de borrar)")
 	updatedFrom := flag.Int(platform.UpdatedFlag, 0, "uso interno: proceso de la versión anterior, tras actualizarse")
 	flag.Parse()
+	// Hasta saber la carpeta de datos (y el idioma elegido en Ajustes), el
+	// del sistema.
+	i18n.SetCurrent(i18n.Match(i18n.System()...))
 
 	if *showVersion {
 		fmt.Printf("%s %s (protocolo v%d)\n%s\n%s\n%s\n", version.Name, version.App, protocol.Version,
-			version.Copyright, version.License, version.Repository)
+			version.Copyright, i18n.T("about.license"), version.Repository)
 		return
 	}
 	if *firewallOp != "" {
@@ -53,11 +57,12 @@ func main() {
 	if *dir == "" {
 		d, err := config.DefaultDir()
 		if err != nil {
-			ui.ShowError("LanChat no encontró la carpeta de datos: " + err.Error())
+			ui.ShowError(i18n.T("main.noDataDir", "err", err))
 			os.Exit(1)
 		}
 		*dir = d
 	}
+	i18n.SetCurrent(i18n.Resolve(config.PeekLanguage(*dir), i18n.System()))
 
 	if *uninstallOp {
 		os.Exit(runUninstall(*dir, customDir))
@@ -90,7 +95,7 @@ func main() {
 	afterUpdate(*updatedFrom, log)
 	if err := ui.RunGUI(ui.Options{Dir: *dir, CustomDir: customDir, Hidden: *tray || *legacyTray, Log: log}); err != nil {
 		log.Error(err.Error())
-		ui.ShowError("LanChat no pudo iniciar:\n\n" + err.Error())
+		ui.ShowError(i18n.T("main.startFailed", "err", err))
 		os.Exit(1)
 	}
 }

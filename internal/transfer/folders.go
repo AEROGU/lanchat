@@ -2,14 +2,13 @@ package transfer
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
 )
@@ -25,7 +24,7 @@ type Item struct {
 }
 
 // errTooManyFiles: la carpeta tiene más archivos de los que admite una oferta.
-var errTooManyFiles = fmt.Errorf("son más de %d archivos; comprímelos en un .zip o envíalos en partes", protocol.MaxOfferFiles)
+var errTooManyFiles = i18n.E("transfer.tooManyFiles", "max", protocol.MaxOfferFiles)
 
 // ExpandPaths convierte archivos y carpetas elegidos en la lista de archivos a
 // ofrecer. De cada carpeta se incluyen sus archivos (en cualquier nivel) con
@@ -42,7 +41,7 @@ func ExpandPaths(paths []string) ([]Item, error) {
 			continue
 		}
 		if !fi.IsDir() {
-			return nil, fmt.Errorf("%s no es un archivo ni una carpeta", fi.Name())
+			return nil, i18n.E("transfer.notFileOrFolder", "name", fi.Name())
 		}
 		root := filepath.Base(p)
 		err = filepath.WalkDir(p, func(file string, d fs.DirEntry, err error) error {
@@ -71,7 +70,7 @@ func ExpandPaths(paths []string) ([]Item, error) {
 		}
 	}
 	if len(items) == 0 {
-		return nil, errors.New("no hay archivos para enviar (¿carpetas vacías?)")
+		return nil, i18n.E("transfer.emptyFolders")
 	}
 	return items, nil
 }

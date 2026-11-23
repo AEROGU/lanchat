@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/ids"
 	"github.com/AEROGU/lanchat/internal/protocol"
 )
@@ -50,6 +51,8 @@ type Config struct {
 	// NoAutoUpdate: no buscar versiones nuevas por cuenta propia (el botón
 	// "Buscar actualizaciones" sigue funcionando).
 	NoAutoUpdate bool `json:"no_auto_update,omitempty"`
+	// Language es el idioma elegido en Ajustes (i18n; "" = el del sistema).
+	Language string `json:"language,omitempty"`
 }
 
 // DefaultDir devuelve %APPDATA%\LanChat (o su equivalente en otros sistemas).
@@ -73,7 +76,7 @@ func Load(dir string) (*Config, error) {
 		return nil, err
 	default:
 		if err := json.Unmarshal(b, c); err != nil {
-			return nil, fmt.Errorf("%s inválido: %w", path, err)
+			return nil, i18n.E("config.invalid", "path", path, "err", err)
 		}
 	}
 
@@ -121,7 +124,7 @@ func (c *Config) validate() error {
 	}
 	for _, p := range []int{c.UDPPort, c.HTTPPort} {
 		if p < 1 || p > 65535 {
-			return fmt.Errorf("puerto %d fuera de rango", p)
+			return i18n.E("config.portRange", "port", p)
 		}
 	}
 	return nil
@@ -141,4 +144,19 @@ func (c *Config) Save(dir string) error {
 		return err
 	}
 	return os.Rename(tmp, filepath.Join(dir, fileName))
+}
+
+// PeekLanguage devuelve el idioma elegido en Ajustes sin crear config.json
+// si no existe ("" = el del sistema). Sirve antes de abrir LanChat (p. ej.
+// para el desinstalador).
+func PeekLanguage(dir string) string {
+	b, err := os.ReadFile(filepath.Join(dir, fileName))
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		Language string `json:"language"`
+	}
+	json.Unmarshal(b, &c)
+	return c.Language
 }

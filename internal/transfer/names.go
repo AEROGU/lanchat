@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/store"
 )
 
@@ -75,7 +76,7 @@ func uniquePath(dir, name string) (string, error) {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("demasiados archivos llamados %q en %s", name, dir)
+	return "", i18n.E("transfer.tooManyNamed", "name", name, "dir", dir)
 }
 
 // humanSize muestra un tamaño como "2.3 MB".
@@ -92,10 +93,11 @@ func humanSize(n int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGT"[exp])
 }
 
-// offerSummary es el texto del mensaje que lleva la oferta; lo ven también
-// las versiones que solo muestran texto (y la consola). Cada carpeta cuenta
-// como un elemento: "📁 Proyecto (12 archivos, 30.0 MB)".
-func offerSummary(files []store.TransferFile, total int64) string {
+// OfferSummary es el texto del mensaje que lleva la oferta; lo ven también
+// las versiones que solo muestran texto (y la consola), en el idioma de quien
+// envía; las notificaciones lo arman de nuevo en el idioma de quien recibe.
+// Cada carpeta cuenta como un elemento: "📁 Proyecto (12 archivos, 30.0 MB)".
+func OfferSummary(files []store.TransferFile, total int64) string {
 	const maxListed = 3
 	var entries []string
 	seen := map[string]bool{}
@@ -109,7 +111,7 @@ func offerSummary(files []store.TransferFile, total int64) string {
 	}
 	switch {
 	case len(entries) == 1 && len(seen) == 1:
-		return fmt.Sprintf("📁 %s (%d archivos, %s)", strings.TrimSuffix(entries[0], "/"), len(files), humanSize(total))
+		return "📁 " + i18n.T("transfer.summaryFolder", "name", strings.TrimSuffix(entries[0], "/"), "n", len(files), "size", humanSize(total))
 	case len(entries) == 1:
 		return fmt.Sprintf("📎 %s (%s)", entries[0], humanSize(total))
 	}
@@ -117,7 +119,7 @@ func offerSummary(files []store.TransferFile, total int64) string {
 	if len(listed) > maxListed {
 		listed = listed[:maxListed]
 	}
-	s := fmt.Sprintf("📎 %d elementos (%s): %s", len(entries), humanSize(total), strings.Join(listed, ", "))
+	s := "📎 " + i18n.T("transfer.summaryItems", "n", len(entries), "size", humanSize(total), "list", strings.Join(listed, ", "))
 	if len(entries) > maxListed {
 		s += "…"
 	}

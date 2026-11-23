@@ -3,13 +3,13 @@ package chat
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/ids"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -38,29 +38,29 @@ type wireRoom struct {
 
 func (r wireRoom) validate() error {
 	if r.Version < 1 {
-		return errors.New("versión de sala inválida")
+		return i18n.E("room.badVersion")
 	}
 	if strings.TrimSpace(r.Name) == "" {
-		return errors.New("la sala no tiene nombre")
+		return i18n.E("room.noName")
 	}
 	if len(r.Members) < 1 || len(r.Members) > protocol.MaxRoomMembers {
-		return fmt.Errorf("una sala tiene de 1 a %d miembros", protocol.MaxRoomMembers)
+		return i18n.E("room.memberCount", "max", protocol.MaxRoomMembers)
 	}
 	if len(r.Admins) > len(r.Members) {
-		return errors.New("más administradores que miembros")
+		return i18n.E("room.tooManyAdmins")
 	}
 	errs := []error{protocol.ValidateID(r.ID), protocol.ValidateName(r.Name)}
 	seen := map[string]bool{}
 	for _, m := range r.Members {
 		if seen[m] {
-			errs = append(errs, errors.New("miembro repetido"))
+			errs = append(errs, i18n.E("room.duplicateMember"))
 		}
 		seen[m] = true
 		errs = append(errs, protocol.ValidateID(m))
 	}
 	for _, a := range r.Admins {
 		if !seen[a] {
-			errs = append(errs, errors.New("un administrador no es miembro de la sala"))
+			errs = append(errs, i18n.E("room.adminNotMember"))
 		}
 	}
 	return errors.Join(errs...)
@@ -97,10 +97,10 @@ func (s *Service) sendRoom(ctx context.Context, roomID, body string, event, forw
 		return store.Message{}, err
 	}
 	if !ok {
-		return store.Message{}, errors.New("sala inexistente")
+		return store.Message{}, i18n.E("room.noSuchRoom")
 	}
 	if room.Left && !event {
-		return store.Message{}, errors.New("ya no estás en esta sala")
+		return store.Message{}, i18n.E("chat.notInRoom")
 	}
 	var recipients []string
 	for _, m := range append(slices.Clone(room.Members), extra...) {
@@ -184,13 +184,13 @@ func authorizeRoomChange(local, next store.Room, from string) error {
 	}
 	for _, m := range local.Members {
 		if m != from && !slices.Contains(next.Members, m) {
-			return errors.New("solo un administrador puede sacar a otros miembros")
+			return i18n.E("room.adminRemoves")
 		}
 	}
 	// Con los mismos administradores de antes, ¿quedan los que dice next?
 	expected := store.Room{Members: next.Members, Admins: local.EffectiveAdmins()}.EffectiveAdmins()
 	if !slices.Equal(expected, next.EffectiveAdmins()) {
-		return errors.New("solo un administrador puede cambiar los administradores")
+		return i18n.E("room.adminChangesAdmins")
 	}
 	return nil
 }
@@ -206,7 +206,7 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 	ctx := r.Context()
 	local, known, err := s.store.Room(ctx, wr.ID)
 	if err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	next := store.Room{ID: wr.ID, Name: wr.Name, Members: wr.Members, Admins: wr.Admins, Version: wr.Version}
@@ -219,7 +219,7 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 	kicked := false
 	if !slices.Contains(wr.Members, s.self.ID) {
 		if !known || local.Left || !newer || !slices.Contains(local.Members, s.self.ID) {
-			http.Error(w, "este equipo no es miembro de la sala", http.StatusForbidden)
+			http.Error(w, i18n.T("room.notMemberHere"), http.StatusForbidden)
 			return
 		}
 		kicked, next.Left = true, true
@@ -231,7 +231,7 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 		member = slices.Contains(local.Members, wm.From) || (member && newer)
 	}
 	if !member {
-		http.Error(w, "el remitente no es miembro de la sala", http.StatusForbidden)
+		http.Error(w, i18n.T("chat.senderNotMember"), http.StatusForbidden)
 		return
 	}
 	if known && newer {
@@ -244,12 +244,12 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 
 	applied, err := s.store.ApplyRoom(ctx, next)
 	if err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	cur, _, err := s.store.Room(ctx, wr.ID)
 	if err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	if applied {
@@ -274,7 +274,7 @@ func (s *Service) handleRoomMessage(w http.ResponseWriter, r *http.Request, wm w
 	}
 	inserted, err := s.store.InsertMessage(ctx, m)
 	if err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	if inserted {

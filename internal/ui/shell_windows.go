@@ -7,6 +7,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"golang.org/x/sys/windows"
 )
 
@@ -80,7 +81,7 @@ func pickFiles() ([]string, error) {
 	defer done()
 
 	buf := make([]uint16, pickerBufferChars)
-	title, _ := windows.UTF16PtrFromString("Elegir archivos para enviar")
+	title, _ := windows.UTF16PtrFromString(i18n.T("files.pickTitle"))
 	filter := fileFilter()
 	ofn := openFileName{
 		owner:   findWindow(),
@@ -98,9 +99,9 @@ func pickFiles() ([]string, error) {
 		case 0:
 			return nil, nil
 		case fnerrBufferTooSmall:
-			return nil, fmt.Errorf("son demasiados archivos a la vez; envíalos en varias tandas")
+			return nil, i18n.E("shell.tooManyPicked")
 		}
-		return nil, fmt.Errorf("selector de archivos: error %#x", code)
+		return nil, i18n.E("shell.pickerError", "code", fmt.Sprintf("%#x", code))
 	}
 	return splitMultiSelect(decodeUntilDoubleNull(buf)), nil
 }
@@ -205,7 +206,7 @@ func pickFolder(title string, newFolder bool) (string, error) {
 	defer procCoTaskMemFree.Call(pidl)
 	buf := make([]uint16, maxPathChars)
 	if ok, _, _ := procSHGetPathFromIDListEx.Call(pidl, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), 0); ok == 0 {
-		return "", fmt.Errorf("esa carpeta no está en el disco (¿es una biblioteca o un equipo de red?)")
+		return "", i18n.E("shell.notOnDisk")
 	}
 	return windows.UTF16ToString(buf), nil
 }

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/platform"
 	"github.com/AEROGU/lanchat/internal/ui"
 )
@@ -18,29 +18,29 @@ const elevatedFlag = "elevated"
 func runFirewall(op string, elevated bool) int {
 	exe, err := platform.Executable()
 	if err == nil && op != "add" && op != "remove" {
-		err = fmt.Errorf("opción -firewall desconocida: %q (usa add o remove)", op)
+		err = i18n.E("firewall.badOption", "op", op)
 	}
 	if err == nil {
 		if platform.IsAdmin() {
 			err = applyFirewall(op, exe)
 		} else if elevated {
-			err = errors.New("no se obtuvieron permisos de administrador")
+			err = i18n.E("firewall.noAdmin")
 		} else {
 			var code int
 			code, err = platform.RunElevated(exe, fmt.Sprintf("-firewall %s -%s", op, elevatedFlag))
 			if err == nil && code != 0 {
-				err = fmt.Errorf("el proceso de administrador terminó con código %d", code)
+				err = i18n.E("firewall.exitCode", "code", code)
 			}
 		}
 	}
 	if !elevated { // quien lo pidió ve el resultado
 		switch {
 		case err != nil:
-			ui.ShowError("No se pudo configurar el Firewall de Windows:\n\n" + err.Error())
+			ui.ShowError(i18n.T("firewall.failed", "err", err))
 		case op == "add":
-			ui.ShowInfo("Listo: LanChat puede recibir conexiones en redes privadas y de dominio.")
+			ui.ShowInfo(i18n.T("firewall.added"))
 		default:
-			ui.ShowInfo("Listo: se quitó la regla de LanChat del Firewall de Windows.")
+			ui.ShowInfo(i18n.T("firewall.removed"))
 		}
 	}
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/app"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/identity"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/store"
@@ -26,6 +27,8 @@ type stateJSON struct {
 	Mobile bool       `json:"mobile"`
 	Update updateJSON `json:"update"`
 	Limits limitsJSON `json:"limits"`
+	// Languages son los idiomas que se pueden elegir en Ajustes.
+	Languages []i18n.Language `json:"languages"`
 }
 
 type limitsJSON struct {
@@ -64,18 +67,22 @@ type selfJSON struct {
 	Fingerprint string   `json:"fingerprint"`
 	// Photo identifica la foto de perfil ("" = sin foto; ver handlePhoto).
 	Photo string `json:"photo"`
+	// Language es el idioma elegido en Ajustes ("" = el del sistema) y Lang
+	// el que se usa; los textos los da GET /api/locale.
+	Language string `json:"language"`
+	Lang     string `json:"lang"`
 }
 
 func toSelfJSON(s app.Self) selfJSON {
 	return selfJSON{
 		ID: s.ID, Name: s.Name, Hostname: s.Hostname, Version: version.App,
-		AppName: version.Name, Copyright: version.Copyright, License: version.License,
+		AppName: version.Name, Copyright: version.Copyright, License: i18n.T("about.license"),
 		LicenseName: version.LicenseName, Repository: version.Repository,
 		Status: s.Status, StatusText: s.StatusText, Idle: s.Idle, AutoAway: s.AutoAwayEnabled,
 		ReadReceipts: s.ReadReceipts, Previews: s.Previews, HideOffline: s.HideOffline,
 		CollapsedGroups: nonNil(s.CollapsedGroups), RecentEmoji: nonNil(s.RecentEmoji),
 		Fingerprint: identity.Format(s.Fingerprint),
-		Photo:       s.Photo,
+		Photo:       s.Photo, Language: s.Language, Lang: s.Lang,
 	}
 }
 

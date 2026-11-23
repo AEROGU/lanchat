@@ -6,7 +6,7 @@ const (
 	Name        = "LanChat"
 	Copyright   = "Copyright © 2026 Arturo Enrique Rosas Gutiérrez"
 	LicenseName = "GNU General Public License v3 (GPL v3)"
-	License     = "Software libre bajo la licencia GPL v3, sin ninguna garantía."
+	// El aviso de licencia se traduce: i18n "about.license".
 	// Repository es la página del proyecto.
 	Repository = "https://github.com/AEROGU/lanchat"
 	// Releases es donde se descarga la última versión.

@@ -3,10 +3,11 @@ package discovery
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"net"
 	"net/netip"
 	"strconv"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // localNets devuelve las redes IPv4 de las interfaces activas (sin loopback).
@@ -89,16 +90,16 @@ func parseManual(s string, defPort int) (manualPeer, error) {
 	if h, p, err := net.SplitHostPort(s); err == nil {
 		n, err := strconv.Atoi(p)
 		if err != nil || n < 1 || n > 65535 {
-			return manualPeer{}, fmt.Errorf("puerto inválido en %q", s)
+			return manualPeer{}, i18n.E("discovery.badPort", "peer", s)
 		}
 		host, port = h, n
 	}
 	if host == "" {
-		return manualPeer{}, fmt.Errorf("equipo manual vacío: %q", s)
+		return manualPeer{}, i18n.E("discovery.emptyPeer", "peer", s)
 	}
 	if a, err := netip.ParseAddr(host); err == nil {
 		if a = a.Unmap(); !a.Is4() {
-			return manualPeer{}, fmt.Errorf("solo se admite IPv4: %q", s)
+			return manualPeer{}, i18n.E("discovery.ipv4Only", "peer", s)
 		}
 		return manualPeer{addr: a, port: uint16(port)}, nil
 	}

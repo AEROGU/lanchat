@@ -15,13 +15,14 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 const (
@@ -44,12 +45,12 @@ func Load(dir, id string) (*Identity, error) {
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if errors.Is(err, fs.ErrNotExist) {
 		if err := generate(keyPath, certPath, id); err != nil {
-			return nil, fmt.Errorf("creando la identidad: %w", err)
+			return nil, i18n.E("identity.createFailed", "err", err)
 		}
 		cert, err = tls.LoadX509KeyPair(certPath, keyPath)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("leyendo la identidad (%s): %w", keyPath, err)
+		return nil, i18n.E("identity.readFailed", "path", keyPath, "err", err)
 	}
 	leaf, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {

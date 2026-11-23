@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // wipeConfirmation es lo que el usuario debe escribir para borrar todos sus datos.
@@ -53,7 +55,7 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 // así no queda ninguna copia temporal. Solo sin escritorio (Server.Shell).
 func (s *Server) handleSaveExport(w http.ResponseWriter, r *http.Request) {
 	if s.Shell == nil {
-		s.fail(w, http.StatusNotFound, errors.New("en este equipo la copia se descarga"))
+		s.fail(w, http.StatusNotFound, i18n.E("privacy.exportDownloads"))
 		return
 	}
 	dir := s.b.DownloadDir()
@@ -95,7 +97,7 @@ func freePath(dir, name string) (string, error) {
 		}
 		p = filepath.Join(dir, fmt.Sprintf("%s (%d)%s", stem, n, ext))
 	}
-	return "", fmt.Errorf("demasiadas copias en %s", dir)
+	return "", i18n.E("privacy.tooManyCopies", "dir", dir)
 }
 
 // handleDeleteConversation borra la conversación con un contacto.

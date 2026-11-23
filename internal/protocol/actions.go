@@ -1,10 +1,11 @@
 package protocol
 
 import (
-	"errors"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // Avisos sobre mensajes ya enviados: eliminarlos para todos, editarlos y
@@ -49,7 +50,7 @@ const (
 // no texto: solo símbolos, modificadores de tono, uniones y selectores.
 func ValidateReaction(s string) error {
 	if s == "" || len(s) > MaxReactionBytes || !utf8.ValidString(s) || utf8.RuneCountInString(s) > maxReactionRunes {
-		return errors.New("reacción inválida")
+		return i18n.E("protocol.badReaction")
 	}
 	symbols := 0
 	for _, r := range s {
@@ -58,11 +59,11 @@ func ValidateReaction(s string) error {
 			symbols++
 		case unicode.Is(unicode.Sk, r), r == zeroWidthJoiner, r == variationSelector16:
 		default:
-			return errors.New("la reacción debe ser un emoji")
+			return i18n.E("protocol.reactionEmoji")
 		}
 	}
 	if symbols == 0 {
-		return errors.New("la reacción debe ser un emoji")
+		return i18n.E("protocol.reactionEmoji")
 	}
 	return nil
 }

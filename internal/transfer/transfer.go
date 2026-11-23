@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/identity"
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
@@ -168,7 +169,7 @@ func (s *Service) Start() {
 		s.log.Error("buscando descargas interrumpidas", "err", err)
 	}
 	for _, t := range interrupted {
-		s.setState(ctx, t.ID, store.TransferFailed, "Se interrumpió al cerrar LanChat. Puedes reintentar.")
+		s.setState(ctx, t.ID, store.TransferFailed, i18n.T("transfer.interrupted"))
 	}
 	s.maintain()
 	s.cleanOrphanStaging()
@@ -253,7 +254,7 @@ func (s *Service) copyToStaging(dir string, it Item) (string, error) {
 
 func (s *Service) offer(ctx context.Context, peerID string, items []Item, forwarded bool) (store.Message, error) {
 	if len(items) == 0 {
-		return store.Message{}, errors.New("no hay archivos para enviar")
+		return store.Message{}, i18n.E("transfer.noFiles")
 	}
 	if len(items) > protocol.MaxOfferFiles {
 		return store.Message{}, errTooManyFiles
@@ -270,7 +271,7 @@ func (s *Service) offer(ctx context.Context, peerID string, items []Item, forwar
 		}
 		name := cmp.Or(it.Name, fi.Name())
 		if !fi.Mode().IsRegular() {
-			return store.Message{}, fmt.Errorf("%s no es un archivo", name)
+			return store.Message{}, i18n.E("transfer.notFile", "name", name)
 		}
 		if err := errors.Join(protocol.ValidateFileName(name), protocol.ValidateRelDir(it.Dir)); err != nil {
 			return store.Message{}, fmt.Errorf("%s: %w", name, err)
@@ -282,7 +283,7 @@ func (s *Service) offer(ctx context.Context, peerID string, items []Item, forwar
 	if s.previewsEnabled() {
 		addThumbs(t.Files)
 	}
-	return s.sender.SendOffer(ctx, peerID, offerSummary(t.Files, t.TotalSize()), t, forwarded)
+	return s.sender.SendOffer(ctx, peerID, OfferSummary(t.Files, t.TotalSize()), t, forwarded)
 }
 
 // NewStaging crea una carpeta temporal para los archivos arrastrados a la ventana.
@@ -342,13 +343,13 @@ func (s *Service) handleFile(w http.ResponseWriter, r *http.Request) {
 	}
 	file, err := os.Open(f.Path)
 	if err != nil {
-		http.Error(w, "el archivo ya no existe en el equipo del remitente", http.StatusConflict)
+		http.Error(w, i18n.T("transfer.fileGone"), http.StatusConflict)
 		return
 	}
 	defer file.Close()
 	fi, err := file.Stat()
 	if err != nil || fi.Size() != f.Size || !fi.ModTime().Equal(f.ModTime) {
-		http.Error(w, "el archivo cambió desde que se ofreció; pide que lo vuelvan a enviar", http.StatusConflict)
+		http.Error(w, i18n.T("transfer.fileChanged"), http.StatusConflict)
 		return
 	}
 	offset, err := parseRange(r.Header.Get("Range"), f.Size)
@@ -368,7 +369,7 @@ func (s *Service) handleFile(w http.ResponseWriter, r *http.Request) {
 	s.stopActive(t.ID)
 	op, ok := s.startActive(t.ID, cancel)
 	if !ok {
-		http.Error(w, "descarga en curso", http.StatusConflict)
+		http.Error(w, i18n.T("transfer.inProgress"), http.StatusConflict)
 		return
 	}
 	defer func() {
@@ -378,7 +379,7 @@ func (s *Service) handleFile(w http.ResponseWriter, r *http.Request) {
 
 	h := sha256.New()
 	if _, err := io.CopyN(h, file, offset); err != nil {
-		http.Error(w, "leyendo el archivo", http.StatusInternalServerError)
+		http.Error(w, i18n.T("transfer.readFailed"), http.StatusInternalServerError)
 		return
 	}
 	hd := w.Header()
@@ -410,12 +411,12 @@ func (s *Service) handleFileDone(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	if err := s.store.MarkFileDone(ctx, t.ID, f.Index, ""); err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	t, _, err := s.store.Transfer(ctx, t.ID)
 	if err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return
 	}
 	if allDone(t) {
@@ -445,12 +446,12 @@ func (s *Service) authorizeFile(w http.ResponseWriter, r *http.Request) (store.T
 	}
 	idx, err := strconv.Atoi(r.PathValue("idx"))
 	if err != nil || idx < 0 || idx >= len(t.Files) {
-		http.Error(w, "archivo inexistente", http.StatusNotFound)
+		http.Error(w, i18n.T("transfer.noSuchFile"), http.StatusNotFound)
 		return t, store.TransferFile{}, false
 	}
 	f := t.Files[idx]
 	if f.Done {
-		http.Error(w, "este archivo ya se descargó; para recibirlo otra vez pide que lo reenvíen", http.StatusGone)
+		http.Error(w, i18n.T("transfer.fileDownloaded"), http.StatusGone)
 		return t, f, false
 	}
 	return t, f, true
@@ -461,20 +462,20 @@ func (s *Service) authorizeFile(w http.ResponseWriter, r *http.Request) (store.T
 func (s *Service) authorize(w http.ResponseWriter, r *http.Request, outgoingOnly bool) (store.Transfer, bool) {
 	t, ok, err := s.store.Transfer(r.Context(), r.PathValue("id"))
 	if err != nil {
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 		return t, false
 	}
 	if !ok || (outgoingOnly && !t.Outgoing) {
-		http.Error(w, "la oferta ya no está disponible", http.StatusNotFound)
+		http.Error(w, i18n.T("transfer.offerGone"), http.StatusNotFound)
 		return t, false
 	}
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get(protocol.TokenHeader)), []byte(t.Token)) != 1 {
-		http.Error(w, "token inválido", http.StatusForbidden)
+		http.Error(w, i18n.T("err.badToken"), http.StatusForbidden)
 		return t, false
 	}
 	// Además del token, quien pide debe ser el otro equipo de la transferencia.
 	if pinned, err := s.store.PinnedFingerprint(r.Context(), t.PeerID); err != nil || pinned != peer.ClientFingerprint(r) {
-		http.Error(w, "la identidad no corresponde a esta transferencia", http.StatusForbidden)
+		http.Error(w, i18n.T("transfer.wrongIdentity"), http.StatusForbidden)
 		return t, false
 	}
 	return t, true
@@ -483,13 +484,13 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request, outgoingOnly
 func goneMessage(st store.TransferState) string {
 	switch st {
 	case store.TransferCompleted:
-		return "ya se descargó; para recibirlo otra vez pide que lo reenvíen"
+		return i18n.T("transfer.goneCompleted")
 	case store.TransferCanceled:
-		return "el remitente canceló el envío"
+		return i18n.T("transfer.goneCanceled")
 	case store.TransferRejected:
-		return "la oferta fue rechazada"
+		return i18n.T("transfer.goneRejected")
 	}
-	return "la oferta caducó; pide que la vuelvan a enviar"
+	return i18n.T("transfer.expired")
 }
 
 // handleState recibe un rechazo o cancelación del otro equipo.
@@ -502,7 +503,7 @@ func (s *Service) handleState(w http.ResponseWriter, r *http.Request) {
 		State string `json:"state"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxErrorBody)).Decode(&req); err != nil {
-		http.Error(w, "json inválido", http.StatusBadRequest)
+		http.Error(w, i18n.T("err.badJSON"), http.StatusBadRequest)
 		return
 	}
 	var st store.TransferState
@@ -512,7 +513,7 @@ func (s *Service) handleState(w http.ResponseWriter, r *http.Request) {
 	case req.State == protocol.StateCanceled:
 		st = store.TransferCanceled
 	default:
-		http.Error(w, "estado inválido", http.StatusBadRequest)
+		http.Error(w, i18n.T("transfer.badState"), http.StatusBadRequest)
 		return
 	}
 	if !t.State.Final() {
@@ -538,17 +539,17 @@ func (s *Service) AcceptTo(ctx context.Context, id, dir string) error {
 		return err
 	}
 	if t.State != store.TransferOffered && t.State != store.TransferFailed {
-		return fmt.Errorf("la oferta está %s", stateText(t.State))
+		return i18n.E("transfer.offerIs", "state", stateText(t.State))
 	}
 	if !time.Now().Before(t.ExpiresAt) {
 		s.setState(ctx, id, store.TransferExpired, "")
-		return errors.New("la oferta caducó; pide que la vuelvan a enviar")
+		return i18n.E("transfer.expired")
 	}
 	switch {
 	case dir != "" && !filepath.IsAbs(dir):
-		return fmt.Errorf("carpeta inválida: %s", dir)
+		return i18n.E("transfer.badDir", "dir", dir)
 	case dir != "" && t.Dir != "" && filepath.Clean(dir) != filepath.Clean(t.Dir):
-		return fmt.Errorf("la descarga ya empezó en %s; reintenta ahí o cancélala", t.Dir)
+		return i18n.E("transfer.startedElsewhere", "dir", t.Dir)
 	case t.Dir != "":
 		dir = t.Dir
 	case dir == "":
@@ -557,17 +558,17 @@ func (s *Service) AcceptTo(ctx context.Context, id, dir string) error {
 		}
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("no se pudo crear la carpeta %s: %w", dir, err)
+		return i18n.E("transfer.mkdirFailed", "dir", dir, "err", err)
 	}
 	if free := freeSpace(dir); free >= 0 && free < remaining(t, dir) {
-		return fmt.Errorf("no hay espacio suficiente en %s (faltan %s)", dir, humanSize(remaining(t, dir)-free))
+		return i18n.E("transfer.noSpace", "dir", dir, "missing", humanSize(remaining(t, dir)-free))
 	}
 
 	dctx, cancel := context.WithCancel(s.ctx)
 	op, ok := s.startActive(id, cancel)
 	if !ok {
 		cancel()
-		return errors.New("ya se está descargando")
+		return i18n.E("transfer.alreadyDownloading")
 	}
 	if err := s.prepareDirs(ctx, &t, dir); err != nil {
 		s.endActive(id, op)
@@ -590,7 +591,7 @@ func (s *Service) Reject(ctx context.Context, id string) error {
 		return err
 	}
 	if t.State != store.TransferOffered && t.State != store.TransferFailed {
-		return fmt.Errorf("la oferta está %s", stateText(t.State))
+		return i18n.E("transfer.offerIs", "state", stateText(t.State))
 	}
 	s.discardLocal(t)
 	s.setState(ctx, id, store.TransferRejected, "")
@@ -605,10 +606,10 @@ func (s *Service) Cancel(ctx context.Context, id string) error {
 		return err
 	}
 	if !ok {
-		return errors.New("transferencia inexistente")
+		return i18n.E("transfer.noSuchTransfer")
 	}
 	if t.State.Final() {
-		return fmt.Errorf("la transferencia ya está %s", stateText(t.State))
+		return i18n.E("transfer.transferIs", "state", stateText(t.State))
 	}
 	s.stopActive(id)
 	s.discardLocal(t)
@@ -655,7 +656,7 @@ func (s *Service) incoming(ctx context.Context, id string) (store.Transfer, erro
 		return t, err
 	}
 	if !ok || t.Outgoing {
-		return t, errors.New("oferta inexistente")
+		return t, i18n.E("transfer.noSuchOffer")
 	}
 	return t, nil
 }
@@ -664,7 +665,7 @@ func (s *Service) downloadDir() (string, error) {
 	if d := cmp.Or(s.cfg.DownloadDir(), DefaultDownloadDir()); d != "" {
 		return d, nil
 	}
-	return "", errors.New("no se encontró la carpeta Descargas; elige una carpeta en Ajustes")
+	return "", i18n.E("transfer.noDownloads")
 }
 
 // DefaultDownloadDir es la carpeta que se usa si el usuario no eligió otra
@@ -685,7 +686,7 @@ type goneError struct {
 
 func (e goneError) Error() string { return e.msg }
 
-var errStalled = errors.New("la descarga se detuvo: no llegan datos del remitente")
+var errStalled = i18n.E("transfer.stalled")
 
 func (s *Service) download(ctx context.Context, t store.Transfer) {
 	prog := s.newProgress(t, 0)
@@ -702,11 +703,11 @@ func (s *Service) download(ctx context.Context, t store.Transfer) {
 		}
 		p, ok := s.dir.Peer(t.PeerID)
 		if !ok || !p.Online {
-			s.fail(t, errors.New("el remitente no está conectado; reintenta cuando se conecte"))
+			s.fail(t, i18n.E("transfer.senderOffline"))
 			return
 		}
 		if !p.Compatible() {
-			s.fail(t, errors.New("el remitente usa una versión de LanChat incompatible; reintenta cuando actualice"))
+			s.fail(t, i18n.E("transfer.senderIncompatible"))
 			return
 		}
 		path, err := s.downloadFile(ctx, p, t, f, prog)
@@ -817,7 +818,7 @@ func (s *Service) downloadFile(ctx context.Context, p discovery.Peer, t store.Tr
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("no se pudo conectar con el remitente: %w", err)
+		return "", i18n.E("transfer.connectFailed", "err", err)
 	}
 	defer resp.Body.Close()
 
@@ -832,12 +833,12 @@ func (s *Service) downloadFile(ctx context.Context, p discovery.Peer, t store.Tr
 		}
 	case http.StatusPartialContent:
 		if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); !ok || start != offset {
-			return "", errors.New("el remitente respondió un rango inesperado")
+			return "", i18n.E("transfer.badRange")
 		}
 	case http.StatusGone, http.StatusNotFound:
 		return "", goneError{resp.StatusCode, readError(resp)}
 	default:
-		return "", fmt.Errorf("el remitente respondió: %s", readError(resp))
+		return "", i18n.E("transfer.senderSaid", "msg", readError(resp))
 	}
 	if _, err := out.Seek(offset, io.SeekStart); err != nil {
 		return "", err
@@ -852,15 +853,15 @@ func (s *Service) downloadFile(ctx context.Context, p discovery.Peer, t store.Tr
 		if errors.Is(context.Cause(fctx), errStalled) {
 			return "", errStalled
 		}
-		return "", fmt.Errorf("se cortó la descarga: %w", err)
+		return "", i18n.E("transfer.cut", "err", err)
 	}
 	if offset+n != f.Size {
-		return "", fmt.Errorf("llegaron %s de %s", humanSize(offset+n), humanSize(f.Size))
+		return "", i18n.E("transfer.short", "got", humanSize(offset+n), "size", humanSize(f.Size))
 	}
 	if want := resp.Trailer.Get(protocol.HashTrailer); !strings.EqualFold(want, hex.EncodeToString(h.Sum(nil))) {
 		out.Close()
 		os.Remove(part)
-		return "", errors.New("el archivo llegó dañado (no coincide el SHA-256); reintenta")
+		return "", i18n.E("transfer.corrupt")
 	}
 	if err := out.Close(); err != nil {
 		return "", err
@@ -1121,19 +1122,19 @@ func doneBefore(t store.Transfer, idx int) int64 {
 func stateText(st store.TransferState) string {
 	switch st {
 	case store.TransferOffered:
-		return "esperando respuesta"
+		return i18n.T("transfer.stateOffered")
 	case store.TransferDownloading:
-		return "en curso"
+		return i18n.T("transfer.stateDownloading")
 	case store.TransferCompleted:
-		return "completada"
+		return i18n.T("transfer.stateCompleted")
 	case store.TransferRejected:
-		return "rechazada"
+		return i18n.T("transfer.stateRejected")
 	case store.TransferCanceled:
-		return "cancelada"
+		return i18n.T("transfer.stateCanceled")
 	case store.TransferExpired:
-		return "caducada"
+		return i18n.T("transfer.stateExpired")
 	case store.TransferFailed:
-		return "con error"
+		return i18n.T("transfer.stateFailed")
 	}
 	return st.String()
 }
@@ -1147,7 +1148,7 @@ func parseRange(h string, size int64) (int64, error) {
 	start, rest, _ := strings.Cut(spec, "-")
 	n, err := strconv.ParseInt(start, 10, 64)
 	if !ok || rest != "" || err != nil || n < 0 || n > size {
-		return 0, fmt.Errorf("rango no soportado: %q", h)
+		return 0, i18n.E("transfer.rangeUnsupported", "range", h)
 	}
 	return n, nil
 }

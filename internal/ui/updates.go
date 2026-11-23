@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/update"
 	"github.com/AEROGU/lanchat/internal/version"
 )
@@ -95,7 +96,7 @@ func (s *Server) updatesSupported() (bool, string) {
 	case s.Updates == nil:
 		return false, ""
 	case !update.Updatable(version.App):
-		return false, "Compilación de desarrollo (" + version.App + "): no se actualiza sola."
+		return false, i18n.T("update.devBuild", "version", version.App)
 	}
 	return true, ""
 }
@@ -202,8 +203,8 @@ func (s *Server) checkUpdate(ctx context.Context, manual bool) {
 	u.mu.Unlock()
 	s.publishUpdate()
 	if notify && !s.HasWindow() && s.Updates.Notify != nil {
-		s.Updates.Notify("LanChat "+latest+" está disponible",
-			"Abre LanChat para actualizar (tienes la "+version.App+").")
+		s.Updates.Notify(i18n.T("update.available", "version", latest),
+			i18n.T("update.openToUpdate", "current", version.App))
 	}
 }
 
@@ -215,10 +216,10 @@ func (s *Server) installUpdate() error {
 	switch {
 	case latest == "" || !update.Newer(latest, version.App):
 		u.mu.Unlock()
-		return errors.New("no hay una versión nueva que instalar; busca actualizaciones primero")
+		return i18n.E("update.nothingToInstall")
 	case u.phase == phaseChecking || u.phase == phaseDownloading:
 		u.mu.Unlock()
-		return errors.New("espera a que termine la búsqueda o la descarga en curso")
+		return i18n.E("update.busy")
 	}
 	u.phase, u.percent, u.errText, u.ask = phaseDownloading, 0, "", false
 	u.mu.Unlock()

@@ -3,13 +3,13 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/peer"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/thumb"
@@ -76,7 +76,7 @@ func (p *photos) reset() {
 func (a *App) SetPhoto(ctx context.Context, r io.ReadSeeker) error {
 	data, err := thumb.Avatar(r)
 	if err != nil {
-		return fmt.Errorf("no se pudo usar la imagen como foto de perfil (usa una JPG, PNG, GIF o WebP): %w", err)
+		return i18n.E("app.badPhoto", "err", err)
 	}
 	id := protocol.PhotoID(data)
 	self := a.Self().ID
@@ -111,9 +111,9 @@ func (a *App) handlePhoto(w http.ResponseWriter, r *http.Request) {
 	_, data, ok, err := a.store.Photo(r.Context(), a.Self().ID)
 	switch {
 	case err != nil:
-		http.Error(w, "error interno", http.StatusInternalServerError)
+		http.Error(w, i18n.T("err.internal"), http.StatusInternalServerError)
 	case !ok:
-		http.Error(w, "sin foto", http.StatusNotFound)
+		http.Error(w, i18n.T("app.noPhoto"), http.StatusNotFound)
 	default:
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Write(data)
@@ -194,10 +194,10 @@ func (a *App) fetchPhoto(ctx context.Context, p discovery.Peer) error {
 	case resp.StatusCode != http.StatusOK:
 		return errors.New(resp.Status)
 	case !thumb.ValidAvatar(data):
-		return errors.New("la foto recibida no es válida")
+		return i18n.E("app.photoInvalid")
 	case protocol.PhotoID(data) != p.Photo:
 		// Pudo cambiarla justo ahora: su próximo anuncio traerá la nueva.
-		return errors.New("la foto recibida no es la anunciada")
+		return i18n.E("app.photoMismatch")
 	}
 	if err := a.store.SetPhoto(ctx, p.ID, p.Photo, data); err != nil {
 		return err

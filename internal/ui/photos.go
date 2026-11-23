@@ -3,9 +3,10 @@ package ui
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // photoPath recibe la imagen para la foto de perfil (multipart/form-data, en
@@ -22,7 +23,7 @@ const maxPhotoUpload = 30 << 20
 func (s *Server) handlePhoto(w http.ResponseWriter, r *http.Request) {
 	_, data, ok, err := s.b.Photo(r.Context(), r.URL.Query().Get("id"))
 	if err != nil || !ok {
-		http.Error(w, "sin foto", http.StatusNotFound)
+		http.Error(w, i18n.T("app.noPhoto"), http.StatusNotFound)
 		return
 	}
 	h := w.Header()
@@ -38,7 +39,7 @@ func (s *Server) handleSetPhoto(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			err = fmt.Errorf("la imagen pesa más de %d MB", maxPhotoUpload>>20)
+			err = i18n.E("photo.tooBig", "max", maxPhotoUpload>>20)
 		}
 		s.fail(w, http.StatusBadRequest, err)
 		return

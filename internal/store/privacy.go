@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"github.com/AEROGU/lanchat/internal/i18n"
 )
 
 // Privacidad: copia de los datos y borrado. La base se abre con
@@ -16,7 +18,7 @@ import (
 // Backup escribe en path una copia consistente de la base (que no debe existir).
 func (s *Store) Backup(ctx context.Context, path string) error {
 	if _, err := os.Stat(path); err == nil {
-		return errors.New("el archivo de destino ya existe")
+		return i18n.E("store.exportExists")
 	}
 	_, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, path)
 	return err
@@ -182,7 +184,7 @@ func (s *Store) truncateWAL(ctx context.Context) error {
 	var busy, logFrames, checkpointed int
 	err := s.db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed)
 	if err == nil && busy != 0 {
-		err = errors.New("no se pudo vaciar el registro de la base (está ocupada)")
+		err = i18n.E("store.checkpointBusy")
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
