@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
@@ -16,6 +18,8 @@ import java.io.File
  * una excepción le llega a Go como error y la página la muestra.
  */
 class LanChatHost(private val context: Context, private val screen: ScreenIdle) : Host {
+    private val main = Handler(Looper.getMainLooper())
+
     override fun notify(title: String, body: String, chat: String) =
         Notifications.message(context, title, body, chat)
 
@@ -28,13 +32,13 @@ class LanChatHost(private val context: Context, private val screen: ScreenIdle) 
         val uri = try {
             FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         } catch (_: IllegalArgumentException) {
-            throw Exception("«${file.name}» está fuera de la carpeta de archivos recibidos")
+            throw Exception(text(R.string.file_outside_downloads, file.name))
         }
         val type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
         val intent = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, type)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        start(intent, "No hay ninguna app para abrir «${file.name}»")
+        start(intent, text(R.string.no_app_to_open, file.name))
     }
 
     override fun notifyUpdate(title: String, body: String) = Notifications.update(context, title, body)
@@ -49,20 +53,28 @@ class LanChatHost(private val context: Context, private val screen: ScreenIdle) 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
             start(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri()),
-                "Android no tiene el ajuste para instalar apps",
+                text(R.string.no_unknown_sources_setting),
             )
-            throw Exception("Activa «Permitir de esta fuente» para LanChat, vuelve y toca «Actualizar» otra vez.")
+            throw Exception(text(R.string.allow_unknown_sources))
         }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", File(path))
         val intent = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, "application/vnd.android.package-archive")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        start(intent, "Android no encontró el instalador de apps")
+        start(intent, text(R.string.no_installer))
     }
 
     override fun openURL(url: String) {
-        start(Intent(Intent.ACTION_VIEW, url.toUri()), "No hay un navegador para abrir $url")
+        start(Intent(Intent.ACTION_VIEW, url.toUri()), text(R.string.no_browser, url))
     }
+
+    /** El núcleo cambió el idioma en Ajustes de LanChat ("" = el del sistema). */
+    override fun languageChanged(language: String) {
+        main.post { Language.set(context, language) }
+    }
+
+    /** Un texto de Android en el idioma de LanChat. */
+    private fun text(id: Int, vararg args: Any): String = Language.wrap(context).getString(id, *args)
 
     private fun start(intent: Intent, missing: String) {
         try {

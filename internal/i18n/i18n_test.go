@@ -192,3 +192,35 @@ func TestKeysUsed(t *testing.T) {
 		}
 	}
 }
+
+// TestAndroidLanguages: la app de Android ofrece los mismos idiomas
+// (locales_config.xml) y trae sus textos traducidos (values-<idioma>).
+func TestAndroidLanguages(t *testing.T) {
+	res := filepath.Join("..", "..", "android", "app", "src", "main", "res")
+	b, err := os.ReadFile(filepath.Join(res, "xml", "locales_config.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var offered []string
+	for _, m := range regexp.MustCompile(`<locale android:name="([^"]+)"`).FindAllStringSubmatch(string(b), -1) {
+		offered = append(offered, normalize(m[1]))
+	}
+	var want []string
+	for _, l := range Languages() {
+		want = append(want, l.Code)
+		if l.Code == Fallback {
+			continue // values/ (sin sufijo) está en inglés
+		}
+		dir := "values-" + l.Code
+		if lang, region, ok := strings.Cut(l.Code, "-"); ok {
+			dir = "values-" + lang + "-r" + strings.ToUpper(region)
+		}
+		if _, err := os.Stat(filepath.Join(res, dir, "strings.xml")); err != nil {
+			t.Errorf("falta android/app/src/main/res/%s/strings.xml para %q", dir, l.Code)
+		}
+	}
+	slices.Sort(offered)
+	if !slices.Equal(offered, want) {
+		t.Errorf("locales_config.xml ofrece %v; los idiomas son %v", offered, want)
+	}
+}

@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -50,6 +51,10 @@ class MainActivity : ComponentActivity() {
 
     // Al detener LanChat (aviso fijo o Ajustes) se cierra también la ventana.
     private val onStopped: () -> Unit = { finishAndRemoveTask() }
+
+    // Antes de Android 13, los textos de la ventana siguen el idioma elegido en
+    // LanChat (después lo aplica el sistema; ver Language).
+    override fun attachBaseContext(newBase: Context) = super.attachBaseContext(Language.wrap(newBase))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

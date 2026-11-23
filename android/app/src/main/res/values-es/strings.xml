@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_service">LanChat activo</string>
+    <string name="channel_service_description">Aviso fijo mientras LanChat está disponible para recibir mensajes.</string>
+    <string name="channel_messages">Mensajes</string>
+    <string name="channel_messages_description">Mensajes nuevos de los equipos de la red.</string>
+    <string name="channel_updates">Actualizaciones</string>
+    <string name="channel_updates_description">Aviso cuando hay una versión nueva de LanChat.</string>
+    <string name="service_running">Disponible en la red local</string>
+    <plurals name="unread">
+        <item quantity="one">%d mensaje sin leer</item>
+        <item quantity="many">%d mensajes sin leer</item>
+        <item quantity="other">%d mensajes sin leer</item>
+    </plurals>
+    <string name="start_failed">No se pudo iniciar LanChat</string>
+    <string name="stop">Detener</string>
+    <string name="battery_title">Recibir mensajes al momento</string>
+    <string name="battery_message">Para avisarte en cuanto llega un mensaje, LanChat debe seguir funcionando en segundo plano. Si Android lo pausa para ahorrar batería, los mensajes pueden llegar con minutos de retraso.\n\nEn la siguiente pantalla elige «Permitir». Puedes cambiarlo después en Ajustes de LanChat.</string>
+    <string name="battery_continue">Continuar</string>
+    <string name="battery_later">Ahora no</string>
+    <string name="file_outside_downloads">«%s» está fuera de la carpeta de archivos recibidos</string>
+    <string name="no_app_to_open">No hay ninguna app para abrir «%s»</string>
+    <string name="no_unknown_sources_setting">Android no tiene el ajuste para instalar apps</string>
+    <string name="allow_unknown_sources">Activa «Permitir de esta fuente» para LanChat, vuelve y toca «Actualizar» otra vez.</string>
+    <string name="no_installer">Android no encontró el instalador de apps</string>
+    <string name="no_browser">No hay un navegador para abrir %s</string>
+    <string name="shared_file_name">archivo-%d</string>
+</resources>

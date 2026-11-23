@@ -91,7 +91,7 @@ class SharedItems private constructor(
             if (name.isNullOrBlank()) {
                 val ext = context.contentResolver.getType(uri)
                     ?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
-                name = "archivo-${i + 1}" + (ext?.let { ".$it" } ?: "")
+                name = Language.wrap(context).getString(R.string.shared_file_name, i + 1) + (ext?.let { ".$it" } ?: "")
             }
             return Pair(name!!, size)
         }

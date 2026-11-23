@@ -1,21 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Textos de Android en inglés, el idioma por defecto. Las traducciones van en
+     values-<idioma>/strings.xml (las de la interfaz, en internal/i18n/locales). -->
 <resources>
-    <string name="app_name">LanChat</string>
-    <string name="channel_service">LanChat activo</string>
-    <string name="channel_service_description">Aviso fijo mientras LanChat está disponible para recibir mensajes.</string>
-    <string name="channel_messages">Mensajes</string>
-    <string name="channel_messages_description">Mensajes nuevos de los equipos de la red.</string>
-    <string name="channel_updates">Actualizaciones</string>
-    <string name="channel_updates_description">Aviso cuando hay una versión nueva de LanChat.</string>
-    <string name="service_running">Disponible en la red local</string>
+    <string name="app_name" translatable="false">LanChat</string>
+    <string name="channel_service">LanChat running</string>
+    <string name="channel_service_description">Persistent notice while LanChat is available to receive messages.</string>
+    <string name="channel_messages">Messages</string>
+    <string name="channel_messages_description">New messages from devices on the network.</string>
+    <string name="channel_updates">Updates</string>
+    <string name="channel_updates_description">Notice when there\'s a new version of LanChat.</string>
+    <string name="service_running">Available on the local network</string>
     <plurals name="unread">
-        <item quantity="one">%d mensaje sin leer</item>
-        <item quantity="other">%d mensajes sin leer</item>
+        <item quantity="one">%d unread message</item>
+        <item quantity="other">%d unread messages</item>
     </plurals>
-    <string name="start_failed">No se pudo iniciar LanChat</string>
-    <string name="stop">Detener</string>
-    <string name="battery_title">Recibir mensajes al momento</string>
-    <string name="battery_message">Para avisarte en cuanto llega un mensaje, LanChat debe seguir funcionando en segundo plano. Si Android lo pausa para ahorrar batería, los mensajes pueden llegar con minutos de retraso.\n\nEn la siguiente pantalla elige «Permitir». Puedes cambiarlo después en Ajustes de LanChat.</string>
-    <string name="battery_continue">Continuar</string>
-    <string name="battery_later">Ahora no</string>
+    <string name="start_failed">LanChat couldn\'t start</string>
+    <string name="stop">Stop</string>
+    <string name="battery_title">Get messages right away</string>
+    <string name="battery_message">To notify you as soon as a message arrives, LanChat needs to keep running in the background. If Android pauses it to save battery, messages may arrive minutes late.\n\nOn the next screen choose “Allow”. You can change it later in LanChat\'s Settings.</string>
+    <string name="battery_continue">Continue</string>
+    <string name="battery_later">Not now</string>
+    <string name="file_outside_downloads">“%s” is outside the received files folder</string>
+    <string name="no_app_to_open">There\'s no app to open “%s”</string>
+    <string name="no_unknown_sources_setting">Android doesn\'t have the setting to install apps</string>
+    <string name="allow_unknown_sources">Turn on “Allow from this source” for LanChat, come back and tap “Update” again.</string>
+    <string name="no_installer">Android couldn\'t find the app installer</string>
+    <string name="no_browser">There\'s no browser to open %s</string>
+    <string name="shared_file_name">file-%d</string>
 </resources>

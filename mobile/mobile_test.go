@@ -27,6 +27,7 @@ func (h *fakeHost) OpenURL(string) error            { return nil }
 func (h *fakeHost) IdleSeconds() int                { return 0 }
 func (h *fakeHost) InstallUpdate(string) error      { return nil }
 func (h *fakeHost) NotifyUpdate(string, string)     {}
+func (h *fakeHost) LanguageChanged(string)          {}
 func (h *fakeHost) UnreadChanged(total int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -47,11 +48,11 @@ func TestStartStop(t *testing.T) {
 	t.Cleanup(func() { networks.Store(nil) })
 
 	for round := range 2 {
-		url, err := Start(dir, "Galaxy de prueba", downloads, host)
+		url, err := Start(dir, "Galaxy de prueba", downloads, "es-MX,en-US", "", host)
 		if err != nil {
 			t.Fatalf("vuelta %d: %v", round, err)
 		}
-		if _, err := Start(dir, "otro", "", host); err == nil {
+		if _, err := Start(dir, "otro", "", "", "", host); err == nil {
 			t.Error("un segundo Start debía fallar")
 		}
 		if !Running() {

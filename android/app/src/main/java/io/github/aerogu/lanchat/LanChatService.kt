@@ -59,8 +59,10 @@ class LanChatService : Service() {
         val dataDir = filesDir.absolutePath
         val name = deviceName()
         val downloads = downloadDir()
+        val languages = Language.system()
+        val chosen = Language.chosen(this)
         core.execute {
-            val r = runCatching { Mobile.start(dataDir, name, downloads, host) }
+            val r = runCatching { Mobile.start(dataDir, name, downloads, languages, chosen, host) }
             r.onFailure { Log.e(TAG, "no se pudo iniciar", it) }
             main.post { if (!destroyed) publish(r) }
         }

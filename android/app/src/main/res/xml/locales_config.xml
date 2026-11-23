@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Idiomas que Android 13+ ofrece en Ajustes > Apps > LanChat > Idioma. Deben
+     ser los de internal/i18n/locales (lo revisa una prueba de internal/i18n). -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="es" />
+</locale-config>

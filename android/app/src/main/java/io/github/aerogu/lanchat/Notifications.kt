@@ -22,7 +22,8 @@ object Notifications {
     private const val CHANNEL_MESSAGES = "messages"
     private const val CHANNEL_UPDATES = "updates"
 
-    fun createChannels(context: Context) {
+    fun createChannels(base: Context) {
+        val context = Language.wrap(base)
         NotificationManagerCompat.from(context).createNotificationChannelsCompat(
             listOf(
                 NotificationChannelCompat.Builder(CHANNEL_SERVICE, NotificationManagerCompat.IMPORTANCE_LOW)
@@ -43,7 +44,8 @@ object Notifications {
     }
 
     /** Aviso fijo del servicio en primer plano; si hay mensajes sin leer, los cuenta. */
-    fun service(context: Context, unread: Int): Notification {
+    fun service(base: Context, unread: Int): Notification {
+        val context = Language.wrap(base)
         val text = if (unread > 0) {
             context.resources.getQuantityString(R.plurals.unread, unread, unread)
         } else {

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/AEROGU/lanchat/internal/app"
+	"github.com/AEROGU/lanchat/internal/i18n"
 	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/ui"
 	"github.com/AEROGU/lanchat/internal/update"
@@ -58,6 +59,9 @@ type Host interface {
 	InstallUpdate(path string) error
 	// NotifyUpdate avisa que hay una versión nueva; tocarlo abre la app.
 	NotifyUpdate(title, body string)
+	// LanguageChanged avisa que el usuario eligió otro idioma en Ajustes
+	// ("" = el del sistema), para los textos de Android.
+	LanguageChanged(language string)
 }
 
 var (
@@ -85,7 +89,12 @@ type instance struct {
 //     Android no tiene un hostname útil.
 //   - downloadDir: carpeta para los archivos recibidos (ruta absoluta; ""
 //     conserva la elegida antes).
-func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
+//   - languages: los idiomas del sistema en orden de preferencia, separados
+//     por comas ("es-MX,en-US").
+//   - chosen: el idioma elegido para la app en Android 13+ (Ajustes > Apps >
+//     LanChat > Idioma; "" = ninguno). Si es otro que el de Ajustes de
+//     LanChat y hay traducción, pasa a ser el de LanChat.
+func Start(dataDir, deviceName, downloadDir, languages, chosen string, host Host) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	if running != nil {
@@ -104,8 +113,12 @@ func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
 	log := slog.New(slog.NewTextHandler(logFile, nil))
 	log.Info("iniciando", "version", version.App, "plataforma", "android", "redes", currentNetworks())
 
+	var sysLangs []string
+	if languages != "" {
+		sysLangs = strings.Split(languages, ",")
+	}
 	a, err := app.New(app.Options{
-		Dir: dataDir, Hostname: deviceName, Log: log, LocalNets: currentNetworks,
+		Dir: dataDir, Hostname: deviceName, Log: log, LocalNets: currentNetworks, SystemLanguages: sysLangs,
 		IdleTime: func() (time.Duration, error) { return time.Duration(host.IdleSeconds()) * time.Second, nil },
 	})
 	if err != nil {
@@ -122,7 +135,13 @@ func Start(dataDir, deviceName, downloadDir string, host Host) (string, error) {
 		logFile.Close()
 		return "", err
 	}
+	if chosen != "" && i18n.Supported(i18n.Match(chosen)) && i18n.Match(chosen) != a.Self().Language {
+		if _, err := a.SetLanguage(i18n.Match(chosen)); err != nil {
+			log.Warn("idioma elegido en Android", "idioma", chosen, "err", err)
+		}
+	}
 	srv.OnUnreadChanged = host.UnreadChanged
+	srv.OnLanguageChanged = func(string) { host.LanguageChanged(a.Self().Language) }
 	srv.Shell = &ui.Shell{OpenFile: host.OpenFile, OpenURL: host.OpenURL}
 	srv.Updates = &ui.UpdatePlatform{
 		Asset:   update.APKName,
