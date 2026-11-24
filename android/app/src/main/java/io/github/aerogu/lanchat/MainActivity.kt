@@ -34,9 +34,13 @@ import org.json.JSONObject
 class MainActivity : ComponentActivity() {
     private lateinit var web: WebView
 
-    // Primero el permiso de notificaciones y después lo de la batería.
-    private val askNotifications =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { askBatteryOnce() }
+    // Primero los permisos (notificaciones y red local) y después lo de la
+    // batería. Sin la red local (Android 17+) no se ve a nadie: si se niega,
+    // se explica y se ofrece abrir los ajustes de la app.
+    private val askPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+            if (granted[LOCAL_NETWORK] == false) explainLocalNetwork() else askBatteryOnce()
+        }
 
     // <input type="file"> de la página (📎): selector de archivos de Android.
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -95,14 +99,11 @@ class MainActivity : ComponentActivity() {
             }
         })
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            askBatteryOnce()
-        }
+        val missing = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= ANDROID_17) add(LOCAL_NETWORK)
+        }.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) askPermissions.launch(missing.toTypedArray()) else askBatteryOnce()
         ContextCompat.startForegroundService(this, Intent(this, LanChatService::class.java))
         LanChatService.whenStarted(onStarted)
         LanChatService.whenStopped(onStopped)
@@ -158,6 +159,20 @@ class MainActivity : ComponentActivity() {
             .setTitle(R.string.battery_title)
             .setMessage(R.string.battery_message)
             .setPositiveButton(R.string.battery_continue) { _, _ -> BatteryOptimization.request(this) }
+            .setNegativeButton(R.string.battery_later, null)
+            .show()
+    }
+
+    /**
+     * Se negó el permiso de red local: sin él Android bloquea el descubrimiento
+     * y los mensajes. Se vuelve a explicar en cada arranque hasta que se dé,
+     * porque sin él LanChat no sirve.
+     */
+    private fun explainLocalNetwork() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.local_network_title)
+            .setMessage(R.string.local_network_message)
+            .setPositiveButton(R.string.local_network_settings) { _, _ -> BatteryOptimization.openAppSettings(this) }
             .setNegativeButton(R.string.battery_later, null)
             .show()
     }
@@ -259,3 +274,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val PREF_BATTERY_ASKED = "battery_asked"
+
+/** Android 17 (API 37): desde ahí la red local requiere [LOCAL_NETWORK]. */
+private const val ANDROID_17 = 37
+private const val LOCAL_NETWORK = Manifest.permission.ACCESS_LOCAL_NETWORK
