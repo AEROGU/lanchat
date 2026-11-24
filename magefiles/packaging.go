@@ -32,6 +32,11 @@ const (
 	readmeName    = "LEEME.txt"
 	// uninstallScript abre el desinstalador con doble clic.
 	uninstallScript = "packaging/Desinstalar LanChat.cmd"
+	// openPortsScript y closePortsScript abren y vuelven a cerrar los puertos
+	// de LanChat en el Firewall de Windows (reglas del grupo "LanChat
+	// (puertos)"), para la PC que no deja entrar los mensajes.
+	openPortsScript  = "packaging/Abrir puertos LanChat (solo si tienes problemas).bat"
+	closePortsScript = "packaging/Quitar puertos LanChat.bat"
 	// checksumsName lista el SHA-256 del zip (formato de sha256sum).
 	checksumsName = "SHA256SUMS.txt"
 )
@@ -121,7 +126,7 @@ func numericVersion(v string) [4]uint16 {
 
 // Dist arma dist/LanChat-<versión>.zip con los ejecutables de 64 bits
 // (LanChat.exe) y 32 bits (LanChat_x86.exe), LEEME.txt, el acceso al
-// desinstalador, la licencia y los avisos de terceros, y dist/SHA256SUMS.txt
+// desinstalador, los scripts que abren y cierran los puertos, la licencia y los avisos de terceros, y dist/SHA256SUMS.txt
 // con su hash.
 func Dist() error {
 	mg.Deps(Build, Build32, Notices)
@@ -154,6 +159,8 @@ func writeZip(out, readme string) error {
 	err = errors.Join(append(errs,
 		addFile(zw, productName+"/LICENSE.txt", "LICENSE"),
 		addFile(zw, productName+"/"+filepath.Base(uninstallScript), uninstallScript),
+		addFile(zw, productName+"/"+filepath.Base(openPortsScript), openPortsScript),
+		addFile(zw, productName+"/"+filepath.Base(closePortsScript), closePortsScript),
 		addFile(zw, productName+"/"+noticesName, filepath.Join(distDir, noticesName)),
 	)...)
 	if err == nil {
