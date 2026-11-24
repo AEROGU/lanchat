@@ -396,6 +396,25 @@ function statusLabel(status, text) {
   return t(STATUS_KEYS[status] ?? "status.available") + (text ? ` · ${text}` : "");
 }
 
+// statusParts arma la línea de estado del encabezado: la palabra del estado
+// en su color (o "Desconectado" en gris) y el mensaje en cursiva.
+function statusParts(c) {
+  const word = document.createElement("span");
+  if (!c.online) {
+    word.className = "state-word";
+    word.textContent = t("status.offline");
+    return [word];
+  }
+  const status = STATUS_KEYS[c.status] ? c.status : "available";
+  word.className = `state-word ${status}`;
+  word.textContent = t(STATUS_KEYS[status]);
+  if (!c.statusText) return [word];
+  const text = document.createElement("span");
+  text.className = "status-text";
+  text.textContent = c.statusText;
+  return [word, " · ", text];
+}
+
 function dotClass(online, status) {
   return "dot" + (online ? ` online ${status || "available"}` : "");
 }
@@ -828,7 +847,9 @@ function showFor(room) {
 function renderRoomHeader(r) {
   showFor(true);
   $("peer-name").textContent = r.name;
-  $("peer-detail").textContent = r.members.map(memberName).join(", ");
+  $("peer-status").textContent = r.members.map(memberName).join(", ");
+  $("peer-detail").hidden = true;
+  $("peer-who").title = $("peer-status").textContent;
   $("peer-avatar").replaceChildren(roomAvatar(r));
   $("identity-note").hidden = true;
   $("incompatible-note").hidden = true;
@@ -853,12 +874,16 @@ function renderHeader() {
   $("incompatible-note").hidden = !c.incompatible;
   $("incompatible-note").textContent = incompatibleText(c);
   $("peer-name").textContent = c.displayName;
+  // Tres líneas: nombre, estado (y su mensaje) y equipo; en el teléfono la
+  // del equipo se oculta (style.css). El título muestra todo si no cabe.
+  $("peer-status").replaceChildren(...statusParts(c));
   let detail = c.detail;
-  if (c.online) detail += ` · ${statusLabel(c.status, c.statusText)}`;
   if (c.appVersion && c.appVersion !== state.self.version) {
     detail += ` · ${t("contact.versionDetail", { theirs: c.appVersion, yours: state.self.version })}`;
   }
   $("peer-detail").textContent = detail;
+  $("peer-detail").hidden = false;
+  $("peer-who").title = [c.displayName, $("peer-status").textContent, detail].join("\n");
   $("remove-contact-btn").hidden = c.online;
   const note = $("offline-note");
   note.hidden = c.online;

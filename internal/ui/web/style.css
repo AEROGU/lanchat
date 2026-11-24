@@ -12,6 +12,10 @@
   --away: #f59e0b;
   --offline: #a0a7b1;
   --danger: #dc2626;
+  /* Texto de cada estado (más oscuro que el punto, para leerse sobre blanco). */
+  --online-text: #15803d;
+  --away-text: #b45309;
+  --busy-text: #dc2626;
   --warn-bg: #fff7e6;
   --warn-text: #8a5a00;
   --selected: #e8efff;
@@ -39,6 +43,9 @@
     --btn-border: #444b54;
     --warn-bg: #3a2e12;
     --warn-text: #f3c969;
+    --online-text: #4ade80;
+    --away-text: #fbbf24;
+    --busy-text: #f87171;
     color-scheme: dark;
   }
 }
@@ -103,6 +110,14 @@ button, input, textarea, select { font: inherit; color: inherit; }
   min-width: 0;
   flex: 1;
 }
+
+/* Estado en el encabezado: solo la palabra va en su color. */
+.state-word { font-weight: 600; }
+.state-word.available { color: var(--online-text); }
+.state-word.away { color: var(--away-text); }
+.state-word.busy { color: var(--busy-text); }
+#peer-status .status-text { font-style: italic; }
+#peer-detail { opacity: 0.85; }
 
 .who strong, .who small, .contact .name, .contact .detail {
   overflow: hidden;
@@ -636,6 +651,8 @@ dialog input, dialog textarea, dialog select {
   #app:not(.chatting) #chat { display: none; }
   #back-btn { display: block; }
   #more-btn { display: block; }
+  /* En el teléfono el encabezado queda en dos líneas: el equipo está en la ficha. */
+  #peer-detail { display: none; }
   .chat-actions {
     display: none;
     position: absolute;
