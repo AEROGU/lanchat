@@ -49,6 +49,19 @@ class MainActivity : ComponentActivity() {
         fileCallback = null
     }
 
+    // <input type="file" accept="image/..."> (la foto de perfil): una sola
+    // imagen, convertida a JPEG si su formato no está en accept (PhotoPick).
+    private var imageTypes: Set<String> = emptySet()
+    private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val callback = fileCallback ?: return@registerForActivityResult
+        fileCallback = null
+        if (uri == null) {
+            callback.onReceiveValue(null)
+        } else {
+            PhotoPick.prepare(this, uri, imageTypes) { callback.onReceiveValue(arrayOf(it)) }
+        }
+    }
+
     private val onStarted: (Result<String>) -> Unit = { r ->
         r.onSuccess { web.loadUrl(it) }.onFailure { showError(it) }
     }
@@ -257,8 +270,16 @@ class MainActivity : ComponentActivity() {
             // La WebView no vuelve a abrir el selector hasta recibir respuesta.
             fileCallback?.onReceiveValue(null)
             fileCallback = callback
+            // accept llega como lista (o separado por comas, según la WebView).
+            val types = params.acceptTypes.flatMap { it.split(',') }
+                .map { it.trim().lowercase() }.filter { it.isNotEmpty() }
             try {
-                pickFiles.launch("*/*")
+                if (types.isNotEmpty() && types.all { it.startsWith("image/") }) {
+                    imageTypes = types.toSet()
+                    pickImage.launch("image/*")
+                } else {
+                    pickFiles.launch("*/*")
+                }
             } catch (_: ActivityNotFoundException) {
                 fileCallback = null
                 callback.onReceiveValue(null)
