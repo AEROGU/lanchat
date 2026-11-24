@@ -14,6 +14,7 @@ const state = {
   limits: { maxName: 64, maxMessageBytes: 65536, deleteWindowMs: 900000 },
   contacts: new Map(), // id -> contacto
   rooms: new Map(), // id -> sala
+  profile: null, // id del contacto cuya ficha está abierta
   // current es la conversación abierta: el id del contacto o ROOM + id de la sala.
   current: null,
   messages: new Map(), // conversación -> { list: [], complete: bool }
@@ -689,7 +690,13 @@ function contactItem(c) {
     li.title = incompatibleText(c);
   }
 
-  li.append(contactAvatar(c), text);
+  const avatar = contactAvatar(c);
+  avatar.title = t("profile.open");
+  avatar.addEventListener("click", (e) => {
+    e.stopPropagation(); // la ficha, no la conversación
+    openProfile(c.id);
+  });
+  li.append(avatar, text);
   li.addEventListener("click", () => openChat(c.id));
   dropOnContact(li, c.id);
   return li;
@@ -2863,8 +2870,8 @@ async function sendMany(ev) {
   }
 }
 
-function openIdentity() {
-  const c = state.contacts.get(state.current);
+function openIdentity(id = state.current) {
+  const c = state.contacts.get(id);
   if (!c) return;
   $("identity-title").textContent = t("identity.title", { name: c.displayName });
   $("identity-theirs").textContent = c.fingerprint || `(${t("identity.unknownYet")})`;
@@ -2929,6 +2936,73 @@ async function saveAlias(ev) {
     $("alias-error").textContent = e.message;
     $("alias-error").hidden = false;
   }
+}
+
+// ---------- Ficha de contacto ----------
+
+// openProfile muestra la ficha de un contacto, como al tocar una foto en
+// WhatsApp: su foto en grande, su mensaje de estado y los datos de su equipo.
+function openProfile(id) {
+  if (!state.contacts.has(id)) return;
+  state.profile = id;
+  renderProfile();
+  $("profile-dialog").showModal();
+}
+
+function renderProfile() {
+  const c = state.contacts.get(state.profile);
+  if (!c) return $("profile-dialog").close();
+  const photo = avatarElement(c.id, c.displayName, photoURL(c.id, c.photo));
+  $("profile-photo").replaceChildren(photo);
+  $("profile-name").textContent = (c.identityChanged ? "⚠ " : "") + c.displayName;
+
+  const dot = document.createElement("span");
+  dot.className = dotClass(c.online, c.status);
+  let presence = c.online ? statusLabel(c.status) : t("status.offline");
+  if (!c.online && c.lastSeen > 0) {
+    // Tras los dos puntos va en minúscula ("ayer"), salvo en inglés ("Yesterday").
+    let day = dayLabel(c.lastSeen);
+    if (!i18n.lang.startsWith("en")) day = day.charAt(0).toLocaleLowerCase(i18n.lang) + day.slice(1);
+    presence += " · " + t("profile.lastSeen", { when: `${day}, ${timeFmt.format(c.lastSeen)}` });
+  }
+  $("profile-presence").replaceChildren(dot, presence);
+  $("profile-status").hidden = !(c.online && c.statusText);
+  $("profile-status").textContent = c.statusText;
+
+  const fields = [];
+  const add = (key, value, opts = {}) => {
+    if (!value) return;
+    const dt = document.createElement("dt");
+    dt.textContent = t(key);
+    const box = document.createElement("dd");
+    box.textContent = value;
+    if (opts.copy) {
+      box.classList.add("copyable");
+      box.title = t("profile.copy");
+      box.addEventListener("click", () => copyText(value, t("profile.copied", { what: value })));
+    }
+    fields.push(dt, box);
+  };
+  // El nombre que eligió el otro usuario, si lo renombraste.
+  if (c.alias) add("profile.name", c.name);
+  add("profile.group", c.group);
+  add("profile.host", c.hostname, { copy: true });
+  add("profile.ip", c.ip, { copy: true });
+  add("profile.version", c.appVersion);
+  $("profile-fields").replaceChildren(...fields);
+  copyableFingerprint($("profile-fingerprint"), c.fingerprint);
+  $("profile-new-box").hidden = !c.identityChanged;
+  copyableFingerprint($("profile-new"), c.identityChanged ? c.newFingerprint : "");
+  $("profile-chat").hidden = c.id === state.current;
+}
+
+// copyableFingerprint muestra una huella que se copia con un clic (o
+// "todavía no se conoce" si el contacto aún no la anunció).
+function copyableFingerprint(el, value) {
+  el.textContent = value || `(${t("identity.unknownYet")})`;
+  el.classList.toggle("copyable", Boolean(value));
+  el.title = value ? t("profile.copy") : "";
+  el.onclick = value ? () => copyText(value, t("profile.copied", { what: t("profile.fingerprint") })) : null;
 }
 
 // ---------- Salas ----------
@@ -3003,6 +3077,11 @@ function renderMembers() {
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = id === me ? `${state.self.name || state.self.hostname} (${t("members.you")})` : memberName(id);
+    if (state.contacts.has(id)) {
+      name.classList.add("profile-link");
+      name.title = t("profile.open");
+      name.addEventListener("click", () => openProfile(id));
+    }
     li.append(name);
     const admin = r.admins.includes(id);
     if (admin) {
@@ -3279,6 +3358,7 @@ function connectEvents() {
     const c = JSON.parse(e.data);
     state.contacts.set(c.id, c);
     renderContacts();
+    if (c.id === state.profile && $("profile-dialog").open) renderProfile();
     if (c.id === state.current) {
       renderHeader();
       if (c.unread > 0) markReadIfVisible();
@@ -3413,7 +3493,16 @@ function bind() {
   $("settings-form").addEventListener("submit", saveSettings);
   $("alias-btn").addEventListener("click", openAlias);
   $("group-btn").addEventListener("click", openGroup);
-  $("identity-btn").addEventListener("click", openIdentity);
+  $("identity-btn").addEventListener("click", () => openIdentity());
+  // Ficha: el avatar y el nombre del encabezado; en una sala, sus miembros.
+  for (const id of ["peer-avatar", "peer-who"]) {
+    $(id).addEventListener("click", () => (roomId(state.current) ? openMembers() : openProfile(state.current)));
+  }
+  $("profile-chat").addEventListener("click", () => {
+    $("profile-dialog").close();
+    openChat(state.profile);
+  });
+  $("profile-identity").addEventListener("click", () => openIdentity(state.profile));
   $("trust-btn").addEventListener("click", trustIdentity);
   $("group-form").addEventListener("submit", saveGroup);
   $("alias-form").addEventListener("submit", saveAlias);

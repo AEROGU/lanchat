@@ -52,8 +52,9 @@
 
       <header id="chat-header" hidden>
         <button id="back-btn" class="icon-btn" data-i18n-title="chat.back" data-i18n-aria-label="chat.back">‹</button>
-        <span id="peer-avatar"></span>
-        <div class="who">
+        <!-- El avatar y el nombre abren la ficha del contacto (o los miembros de la sala). -->
+        <button id="peer-avatar" type="button" class="avatar-btn" data-i18n-title="profile.open"></button>
+        <div class="who" id="peer-who">
           <strong id="peer-name"></strong>
           <small id="peer-detail"></small>
         </div>
@@ -478,6 +479,32 @@
       <div class="actions">
         <button value="cancel" formnovalidate data-i18n="dialog.cancel"></button>
         <button value="save" class="primary" data-i18n="composer.save"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Ficha de un contacto: su foto en grande, su mensaje de estado y sus datos. -->
+  <dialog id="profile-dialog">
+    <form method="dialog" class="profile">
+      <div id="profile-photo" class="profile-photo"></div>
+      <h2 id="profile-name"></h2>
+      <p id="profile-presence" class="profile-presence"></p>
+      <p id="profile-status" class="profile-status" hidden></p>
+      <dl id="profile-fields" class="profile-fields"></dl>
+      <!-- La huella de seguridad, aparte: es lo que se compara con la otra persona. -->
+      <div class="profile-identity">
+        <label data-i18n="profile.fingerprint"></label>
+        <code id="profile-fingerprint" class="fingerprint"></code>
+        <div id="profile-new-box" hidden>
+          <label data-i18n="identity.new"></label>
+          <code id="profile-new" class="fingerprint danger"></code>
+        </div>
+        <small class="help" data-i18n="profile.fingerprintHelp"></small>
+      </div>
+      <div class="actions">
+        <button type="button" id="profile-identity" data-i18n="chat.identity"></button>
+        <button type="button" id="profile-chat" data-i18n="profile.chat"></button>
+        <button value="close" class="primary" data-i18n="dialog.close"></button>
       </div>
     </form>
   </dialog>

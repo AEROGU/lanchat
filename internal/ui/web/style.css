@@ -1116,3 +1116,24 @@ dialog input, dialog textarea, dialog select {
   font-size: 12px;
 }
 .hidden-hint .link-btn { font-size: 12px; }
+
+/* Ficha de un contacto: la foto a su tamaño completo (thumb.AvatarSide). */
+#profile-dialog { width: min(380px, calc(100% - 32px)); }
+.profile h2 { margin: 12px 0 2px; text-align: center; overflow-wrap: anywhere; }
+.profile-photo { display: flex; justify-content: center; }
+.profile-photo .avatar { --side: min(256px, 60vw, 40vh); width: var(--side); height: var(--side); font-size: calc(var(--side) * 0.3); }
+.profile-presence { margin: 0; text-align: center; color: var(--muted); font-size: 13px; }
+.profile-presence .dot { display: inline-block; margin-right: 6px; vertical-align: middle; }
+.profile-status { margin: 10px 0 0; text-align: center; font-style: italic; overflow-wrap: anywhere; white-space: pre-line; }
+.profile-fields { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 16px 0 0; font-size: 13px; }
+.profile-fields dt { color: var(--muted); }
+.profile-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.profile-fields dd.copyable { cursor: copy; }
+.profile-fields dd.copyable:hover { text-decoration: underline dotted; }
+.profile-identity { margin-top: 14px; }
+.profile-identity label { margin-top: 10px; }
+.profile-identity .fingerprint.copyable { cursor: copy; }
+.profile-identity .fingerprint.danger { color: var(--danger); }
+#peer-who { cursor: pointer; }
+.member-list .profile-link { cursor: pointer; }
+.member-list .profile-link:hover { text-decoration: underline; }

@@ -629,5 +629,17 @@
   "alias.title": "Renombrar contacto",
   "alias.label": "Nombre que verás tú",
   "alias.help": "Solo lo ves tú. Déjalo vacío para usar el nombre que eligió el otro usuario.",
-  "viewer.label": "Imagen"
+  "viewer.label": "Imagen",
+  "profile.open": "Ver la ficha",
+  "profile.chat": "Enviar mensaje",
+  "profile.name": "Nombre",
+  "profile.group": "Grupo",
+  "profile.host": "Equipo",
+  "profile.ip": "IP",
+  "profile.version": "Versión",
+  "profile.fingerprint": "Huella de seguridad",
+  "profile.fingerprintHelp": "Compárala con la que ve esa persona en su LanChat (por teléfono o en persona): si coinciden, hablas con el equipo correcto.",
+  "profile.lastSeen": "Última vez: {when}",
+  "profile.copy": "Clic para copiar",
+  "profile.copied": "Copiado: {what}"
 }

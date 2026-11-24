@@ -629,5 +629,17 @@
   "alias.title": "Rename contact",
   "alias.label": "Name you'll see",
   "alias.help": "Only you see it. Leave it empty to use the name the other user chose.",
-  "viewer.label": "Image"
+  "viewer.label": "Image",
+  "profile.open": "View profile",
+  "profile.chat": "Send message",
+  "profile.name": "Name",
+  "profile.group": "Group",
+  "profile.host": "Computer",
+  "profile.ip": "IP",
+  "profile.version": "Version",
+  "profile.fingerprint": "Security fingerprint",
+  "profile.fingerprintHelp": "Compare it with the one that person sees in their LanChat (by phone or in person): if they match, you are talking to the right computer.",
+  "profile.lastSeen": "Last seen: {when}",
+  "profile.copy": "Click to copy",
+  "profile.copied": "Copied: {what}"
 }
