@@ -7,6 +7,8 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -89,6 +91,54 @@ func TestExifOrientation(t *testing.T) {
 	}
 }
 
+// testdata/rotada.heic: 600×800 a la vista (franja roja arriba, barra amarilla
+// a la izquierda), guardada acostada (800×600) con irot y EXIF Orientation 6,
+// como la foto de un teléfono.
+func TestHEICRotated(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "rotada.heic"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	isYellow := func(c color.Color) bool {
+		r, g, b, _ := c.RGBA()
+		return r > 0xC000 && g > 0x9000 && b < 0x6000
+	}
+	if !IsHEIC(bytes.NewReader(data)) || IsHEIC(bytes.NewReader([]byte("no es una imagen"))) {
+		t.Error("IsHEIC no reconoció el contenido")
+	}
+
+	b, err := FromReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := decode(t, b)
+	if img.Bounds().Size() != image.Pt(240, MaxSide) {
+		t.Fatalf("tamaño = %v, quería 240×320 (derecha)", img.Bounds().Size())
+	}
+	if !isRed(img.At(120, 10)) || !isYellow(img.At(5, 160)) {
+		t.Error("la miniatura no quedó derecha (rojo arriba, amarillo a la izquierda)")
+	}
+
+	b, err = ViewJPEG(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := jpeg.Decode(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full.Bounds().Size() != image.Pt(600, 800) {
+		t.Fatalf("visor: tamaño = %v, quería 600×800 (sin agrandar)", full.Bounds().Size())
+	}
+	if !isRed(full.At(300, 30)) || !isYellow(full.At(20, 400)) {
+		t.Error("el visor no quedó derecho")
+	}
+
+	if _, err := Avatar(bytes.NewReader(data)); err != nil {
+		t.Errorf("foto de perfil desde HEIC: %v", err)
+	}
+}
+
 func TestRejects(t *testing.T) {
 	if _, err := FromReader(bytes.NewReader([]byte("no es una imagen"))); err == nil {
 		t.Error("un texto no debía dar miniatura")
@@ -97,7 +147,7 @@ func TestRejects(t *testing.T) {
 		t.Error("Valid aceptó algo que no es una miniatura")
 	}
 	for name, want := range map[string]bool{"foto.JPG": true, "a.webp": true, "b.png": true,
-		"c.gif": true, "video.mp4": false, "doc.pdf": false, "foto.heic": false, "sin": false} {
+		"c.gif": true, "video.mp4": false, "doc.pdf": false, "foto.HEIC": true, "b.heif": true, "sin": false} {
 		if Supported(name) != want {
 			t.Errorf("Supported(%q) = %v", name, !want)
 		}

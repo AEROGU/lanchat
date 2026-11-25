@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"log/slog"
@@ -571,6 +572,8 @@ func TestPreviewRoutes(t *testing.T) {
 		{Index: 1, Name: "pendiente.png", Path: received.Path},                                // sin terminar
 		{Index: 2, Name: "falsa.png", Done: true, Path: write("falsa.png", []byte("<html>"))}, // no es imagen
 		{Index: 3, Name: "notas.txt", Done: true, Path: write("notas.txt", []byte("hola"))},
+		{Index: 4, Name: "foto.heic", Done: true, Path: filepath.Join("..", "thumb", "testdata", "rotada.heic")},
+		{Index: 5, Name: "falsa.heic", Done: true, Path: write("falsa.heic", []byte("<html>"))},
 	}}
 	t.Cleanup(func() { delete(testTransfers, "p1") })
 
@@ -599,7 +602,16 @@ func TestPreviewRoutes(t *testing.T) {
 		!strings.Contains(resp.Header.Get("Content-Security-Policy"), "sandbox") || !bytes.Equal(b, img.Bytes()) {
 		t.Errorf("imagen: %d %q %q", resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Security-Policy"))
 	}
+	// El HEIC llega convertido a JPEG, derecho (guardado acostado, 800×600).
+	resp, b = get("/api/files/view?id=p1&index=4")
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" ||
+		!strings.Contains(resp.Header.Get("Content-Security-Policy"), "sandbox") {
+		t.Errorf("HEIC: %d %q %q", resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Security-Policy"))
+	} else if cfg, err := jpeg.DecodeConfig(bytes.NewReader(b)); err != nil || cfg.Width != 600 || cfg.Height != 800 {
+		t.Errorf("HEIC: %v %dx%d, quería 600x800", err, cfg.Width, cfg.Height)
+	}
 	for path, want := range map[string]int{
+		"/api/files/view?id=p1&index=5":   http.StatusUnsupportedMediaType, // HTML con nombre de HEIC
 		"/api/files/view?id=p1&index=1":   http.StatusNotFound,             // sin terminar
 		"/api/files/view?id=p1&index=2":   http.StatusUnsupportedMediaType, // HTML con nombre de imagen
 		"/api/files/view?id=p1&index=3":   http.StatusNotFound,             // no es imagen

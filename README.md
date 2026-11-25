@@ -64,7 +64,7 @@
   contact in the list): the other person has to accept them (into their
   downloads folder or, on the PC, with **Save to…** into the folder they
   choose); they're downloaded only once, resume if the network drops and are
-  verified with SHA-256. Images (JPG, PNG, GIF, WebP) arrive with a
+  verified with SHA-256. Images (JPG, PNG, GIF, WebP, HEIC) arrive with a
   **preview** before being accepted and open full size with a click.
 - **Status**: Available, Away and Busy, with a message and automatic away.
 - **Encryption**: TLS 1.3 between PCs, with a warning if a device's identity

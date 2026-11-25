@@ -67,7 +67,7 @@
   sobre un contacto de la lista): el otro debe
   aceptarlos (en su carpeta de descargas, o en la PC con **Guardar en…** en
   la carpeta que elija), se descargan una sola vez, se reanudan si se corta la red y se
-  verifican con SHA-256. Las imágenes (JPG, PNG, GIF, WebP) llegan con
+  verifican con SHA-256. Las imágenes (JPG, PNG, GIF, WebP, HEIC) llegan con
   **vista previa** antes de aceptarlas y se abren completas con un clic.
 - **Estados** Disponible, Ausente y Ocupado, con mensaje y ausente automático.
 - **Cifrado** TLS 1.3 entre PCs, con aviso si la identidad de un equipo cambia.

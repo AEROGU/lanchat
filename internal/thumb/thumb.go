@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gen2brain/h265/heic" // Go puro; también registra el formato
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp" // registra el formato para image.Decode
 )
@@ -41,11 +42,36 @@ var (
 	errTooHeavy = errors.New("la miniatura no cabe en el tamaño máximo")
 )
 
-var exts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true}
+var exts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true,
+	".heic": true, ".heif": true}
 
 // Supported indica si name es de una imagen con vista previa (JPG, PNG, GIF,
-// WebP). Video, PDF o HEIC no: Go no los decodifica sin cgo.
+// WebP, HEIC). Video o PDF no.
 func Supported(name string) bool { return exts[strings.ToLower(filepath.Ext(name))] }
+
+// ViewSide es el lado mayor de un HEIC al abrirlo en el visor (ViewJPEG).
+const ViewSide = 2048
+
+// IsHEIC indica si el contenido de r es HEIC. Deja r al principio.
+func IsHEIC(r io.ReadSeeker) bool {
+	_, format, err := image.DecodeConfig(bufio.NewReader(r))
+	_, serr := r.Seek(0, io.SeekStart)
+	return err == nil && serr == nil && format == "heic"
+}
+
+// ViewJPEG convierte una imagen (un HEIC, que la página no sabe mostrar) a
+// JPEG para el visor: derecha y reducida a ViewSide.
+func ViewJPEG(r io.ReadSeeker) ([]byte, error) {
+	img, orientation, err := decodeImage(r)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, orient(scale(img, ViewSide), orientation), &jpeg.Options{Quality: 85}); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
 
 // FromFile genera la miniatura de la imagen en path.
 func FromFile(path string) ([]byte, error) {
@@ -112,6 +138,12 @@ func decodeImage(r io.ReadSeeker) (image.Image, int, error) {
 	}
 	if _, err := r.Seek(0, io.SeekStart); err != nil {
 		return nil, 0, err
+	}
+	if format == "heic" {
+		// La orientación de un HEIC está en el contenedor (irot/imir), no
+		// en el EXIF; AutoRotate la aplica.
+		img, err := heic.Decode(bufio.NewReader(r), heic.Options{AutoRotate: true})
+		return img, orientation, err
 	}
 	img, _, err := image.Decode(bufio.NewReader(r))
 	return img, orientation, err

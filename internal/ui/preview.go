@@ -57,6 +57,20 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+	h := w.Header()
+	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	h.Set("Cache-Control", "private, no-cache")
+	// Un HEIC no lo muestra la página (ni la WebView): va convertido a JPEG.
+	if thumb.IsHEIC(file) {
+		b, err := thumb.ViewJPEG(file)
+		if err != nil {
+			http.Error(w, errNoPreview.Error(), http.StatusUnsupportedMediaType)
+			return
+		}
+		h.Set("Content-Type", "image/jpeg")
+		w.Write(b)
+		return
+	}
 	ctype, ok := imageType(file)
 	if !ok {
 		http.Error(w, errNoPreview.Error(), http.StatusUnsupportedMediaType)
@@ -67,10 +81,7 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h := w.Header()
 	h.Set("Content-Type", ctype)
-	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	h.Set("Cache-Control", "private, no-cache")
 	http.ServeContent(w, r, "", fi.ModTime(), file)
 }
 
@@ -86,7 +97,8 @@ func previewTarget(w http.ResponseWriter, r *http.Request) (string, int, bool) {
 }
 
 // imageType reconoce el contenido real del archivo: solo JPEG, PNG, GIF y
-// WebP (lo que también admite la miniatura). Deja el archivo al principio.
+// WebP, lo que la página muestra tal cual (el HEIC se convierte antes).
+// Deja el archivo al principio.
 func imageType(f io.ReadSeeker) (string, bool) {
 	var head [512]byte
 	n, _ := io.ReadFull(f, head[:])

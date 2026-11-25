@@ -5,6 +5,7 @@ go 1.27.4
 require (
 	fyne.io/systray v1.12.2
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
+	github.com/gen2brain/h265 v0.2.7
 	github.com/magefile/mage v1.17.2
 	github.com/tc-hib/winres v0.3.1
 	golang.org/x/image v0.48.0

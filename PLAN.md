@@ -156,7 +156,8 @@ Compatibilidad: todos los campos nuevos son opcionales; una PC con 0.9.0 sigue c
     la conversación. Quien recibe solo acepta JPEG pequeños válidos.
   - Tocarla abre la imagen completa leída directo del archivo
     (`GET /api/files/view`: solo transferencias propias, solo si el contenido
-    es JPEG/PNG/GIF/WebP, nunca SVG, con CSP sandbox).
-  - Formatos: JPG, PNG, GIF y WebP. Video, PDF y HEIC se muestran como antes
-    (Go no los decodifica sin cgo). Imágenes de más de 50 Mpx, sin miniatura.
+    es JPEG/PNG/GIF/WebP, nunca SVG, con CSP sandbox). Un HEIC se entrega
+    convertido a JPEG (derecho, hasta 2048 px): la página no lo muestra.
+  - Formatos: JPG, PNG, GIF, WebP y HEIC (con github.com/gen2brain/h265, en Go
+    puro; respeta irot/imir). Video y PDF se muestran como antes. Imágenes de más de 50 Mpx, sin miniatura.
   - Lo recibido con versiones anteriores no tiene miniatura.
