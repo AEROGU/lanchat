@@ -190,10 +190,19 @@ puede llegar.
 Que aparezca en la lista solo prueba el descubrimiento (UDP 50000, que sale de
 cada PC). Los mensajes y archivos **entran** por TCP 50001, y eso lo bloquea el
 firewall del equipo que recibe. Pasa sobre todo si su red está como "Pública"
-o si la PC tiene varias redes (p. ej. Ethernet y Wi-Fi). La solución es una
-regla **de entrada** para `LanChat.exe` en **todas las redes** (privada,
-pública y dominio); no hace falta regla de salida. En una ventana de
-comandos como administrador, con la ruta de ese equipo:
+o si la PC tiene varias redes (p. ej. Ethernet y Wi-Fi).
+
+Solución: **solo en esa PC** (la mayoría no lo necesita), doble clic en
+**`Abrir puertos LanChat (solo si tienes problemas).bat`** (viene en el zip,
+junto a `LanChat.exe`; pide permiso de administrador). Abre solo
+UDP 50000 y TCP 50001 de entrada en todas las redes, sin depender de la
+carpeta de LanChat, y avisa si hay reglas que bloquean a LanChat. Sus reglas
+quedan en el grupo "LanChat (puertos)"; volver a ejecutarlo las reemplaza sin
+duplicarlas, y **`Quitar puertos LanChat.bat`** las borra.
+
+También sirve una regla **de entrada** para `LanChat.exe` en **todas las
+redes** (privada, pública y dominio); no hace falta regla de salida. En una
+ventana de comandos como administrador, con la ruta de ese equipo:
 
 ```bat
 netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\LanChat.exe"
@@ -307,7 +316,9 @@ esta PC: los demás conservan su copia de las conversaciones.
 El desinstalador pregunta antes de borrar nada. Luego cierra LanChat y quita:
 
 - el inicio con Windows y el registro de notificaciones;
-- las reglas del Firewall de Windows (pide permiso de administrador);
+- las reglas del Firewall de Windows (pide permiso de administrador). Las de
+  `Abrir puertos LanChat (solo si tienes problemas).bat` no dependen del
+  programa y se quedan: se quitan con `Quitar puertos LanChat.bat`;
 - la carpeta de datos `%APPDATA%\LanChat`: conversaciones, contactos, salas,
   ajustes, la identidad de la PC y el registro. La carpeta solo se elimina si
   no tiene archivos ajenos a LanChat;

@@ -27,8 +27,14 @@ SI VES A ALGUIEN PERO NO LE LLEGAN LOS MENSAJES
 -----------------------------------------------
 Que aparezca en la lista no basta: los mensajes ENTRAN a su PC por el
 puerto TCP 50001 y su firewall los bloquea. Pasa sobre todo si su red está
-como "Pública" o si la PC tiene varias redes (p. ej. Ethernet y Wi-Fi). En
-ESA PC crea una regla de entrada para LanChat.exe en todas las redes
+como "Pública" o si la PC tiene varias redes (p. ej. Ethernet y Wi-Fi).
+Solución: SOLO en esa PC (la mayoría no lo necesita), doble clic en
+"Abrir puertos LanChat (solo si tienes problemas).bat" (pide permiso de
+administrador). Abre solo UDP 50000 y TCP 50001 en todas las redes, aunque
+LanChat cambie de carpeta, y avisa si alguna regla bloquea a LanChat. Se
+puede ejecutar otra vez sin duplicar nada. Para revertirlo: "Quitar
+puertos LanChat.bat".
+O bien crea una regla de entrada para LanChat.exe en todas las redes
 (privada, pública y dominio); no hace falta regla de salida. En una ventana
 de comandos como administrador, con la ruta donde está LanChat.exe:
    netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\LanChat.exe"
@@ -147,8 +153,10 @@ En Windows: doble clic en "Desinstalar LanChat.cmd" (o Ajustes >
 "Desinstalar LanChat de esta PC"). Pregunta antes de borrar nada. Quita el
 inicio con Windows, las notificaciones, las reglas del firewall (pide
 permiso de administrador) y tus datos (conversaciones, contactos,
-identidad), y pregunta si también borra los archivos recibidos. Al final
-abre la carpeta del programa para que la borres: es lo único que queda.
+identidad), y pregunta si también borra los archivos recibidos. Si usaste
+"Abrir puertos LanChat (solo si tienes problemas).bat", ejecuta antes
+"Quitar puertos LanChat.bat": esas reglas no se quitan solas. Al final abre la carpeta del programa para
+que la borres: es lo único que queda.
 Si estás en salas y quieres avisar a los demás que sales, usa antes
 Ajustes > Privacidad > "Borrar todos mis datos".
 
@@ -176,6 +184,9 @@ registro de errores (lanchat.log).
 PARA EL ADMINISTRADOR
 ---------------------
 - Puertos: UDP 50000 (descubrimiento) y TCP 50001 (mensajes y archivos).
+  "Abrir puertos LanChat (solo si tienes problemas).bat" los abre en
+  todas las redes (grupo de reglas "LanChat (puertos)") y "Quitar puertos LanChat.bat" quita ese grupo. Si
+  cambiaste los puertos en config.json, edita también los scripts.
 - Crear la regla del firewall sin preguntar al usuario (como administrador):
       LanChat.exe -firewall add
   Quitarla:

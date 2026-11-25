@@ -18,6 +18,9 @@
     <string name="battery_message">Para avisarte en cuanto llega un mensaje, LanChat debe seguir funcionando en segundo plano. Si Android lo pausa para ahorrar batería, los mensajes pueden llegar con minutos de retraso.\n\nEn la siguiente pantalla elige «Permitir». Puedes cambiarlo después en Ajustes de LanChat.</string>
     <string name="battery_continue">Continuar</string>
     <string name="battery_later">Ahora no</string>
+    <string name="local_network_title">LanChat necesita la red local</string>
+    <string name="local_network_message">Sin el permiso «Dispositivos cercanos» (red local), Android no deja que LanChat encuentre ni hable con los demás equipos de la oficina, así que no verás a nadie.\n\nEn los ajustes de la app, entra a Permisos y permite «Dispositivos cercanos».</string>
+    <string name="local_network_settings">Abrir ajustes</string>
     <string name="file_outside_downloads">«%s» está fuera de la carpeta de archivos recibidos</string>
     <string name="no_app_to_open">No hay ninguna app para abrir «%s»</string>
     <string name="no_unknown_sources_setting">Android no tiene el ajuste para instalar apps</string>

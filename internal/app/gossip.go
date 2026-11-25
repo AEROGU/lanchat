@@ -119,7 +119,9 @@ func (a *App) gossip(ctx context.Context, wg *sync.WaitGroup, p discovery.Peer) 
 }
 
 // gossipLoop vuelve a preguntar periódicamente a los equipos en línea, por si
-// conocieron a alguien nuevo.
+// conocieron a alguien nuevo. De paso reintenta las fotos de perfil que no se
+// pudieron descargar: los anuncios que no cambian nada no generan eventos, así
+// que sin esto una foto fallida no llegaría hasta reiniciar.
 func (a *App) gossipLoop(ctx context.Context, wg *sync.WaitGroup) {
 	t := time.NewTicker(a.gossipEvery)
 	defer t.Stop()
@@ -131,6 +133,7 @@ func (a *App) gossipLoop(ctx context.Context, wg *sync.WaitGroup) {
 			for _, p := range a.disc.Peers() {
 				if p.Online {
 					a.gossip(ctx, wg, p)
+					a.syncPhoto(ctx, wg, p)
 				}
 			}
 		}

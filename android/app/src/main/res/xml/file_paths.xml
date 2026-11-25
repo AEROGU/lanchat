@@ -5,6 +5,8 @@
     <!-- El APK de una versión nueva, para el instalador de Android
          (LanChatHost.installUpdate); lo descarga el núcleo (mobile.updatesDir). -->
     <files-path name="actualizaciones" path="updates/" />
+    <!-- La foto de perfil convertida a JPEG, para la página (PhotoPick). -->
+    <cache-path name="foto" path="photo/" />
     <!-- Android 11+: Descargas/LanChat. -->
     <external-path name="descargas" path="Download/LanChat/" />
     <!-- Antes de Android 11, y lo recibido con versiones anteriores de la app. -->

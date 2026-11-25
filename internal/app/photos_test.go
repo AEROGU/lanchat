@@ -6,10 +6,14 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"testing"
+	"time"
 
 	"github.com/AEROGU/lanchat/internal/discovery"
+	"github.com/AEROGU/lanchat/internal/protocol"
 	"github.com/AEROGU/lanchat/internal/testutil"
+	"github.com/AEROGU/lanchat/internal/thumb"
 )
 
 // pngOf es una imagen PNG de un solo color.
@@ -100,5 +104,37 @@ func TestProfilePhotoSurvivesRestart(t *testing.T) {
 	waitFor(t, a, "A descarga la foto de B", func(ev any) bool { e, ok := ev.(PhotoChanged); return ok && e.PeerID == idB })
 	if c, _, _ := a.app.Contact(ctx, idB); c.Photo != photo {
 		t.Errorf("foto en A = %q", c.Photo)
+	}
+}
+
+// Si la descarga falla y el equipo sigue anunciando lo mismo (sin eventos de
+// discovery), la foto se reintenta en el ciclo periódico y llega igual.
+func TestProfilePhotoRetriedWithoutAnnounceChange(t *testing.T) {
+	ctx := context.Background()
+	tune := func(o *Options) { o.GossipInterval = 200 * time.Millisecond }
+	a := startNodeWith(t, testutil.TempDir(t), "PC-A", tune)
+	b := startNode(t, testutil.TempDir(t), "PC-B", a.udpPort())
+	idB := b.app.Self().ID
+	waitFor(t, a, "A ve a B", peerEvent(discovery.PeerOnline, idB))
+
+	// La foto que B va a poner ya "falló" en A: el anuncio que la trae no la
+	// descarga. Luego vence la espera sin que B anuncie nada distinto.
+	img := pngOf(t, color.RGBA{R: 90, G: 90, A: 255})
+	data, err := thumb.Avatar(img)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img.Seek(0, io.SeekStart)
+	id := protocol.PhotoID(data)
+	ph := a.app.photos
+	ph.mu.Lock()
+	ph.failed[idB] = failedGet{id, time.Now().Add(500 * time.Millisecond)}
+	ph.mu.Unlock()
+	if err := b.app.SetPhoto(ctx, img); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, a, "A reintenta y descarga la foto de B", func(ev any) bool { e, ok := ev.(PhotoChanged); return ok && e.PeerID == idB })
+	if c, _, _ := a.app.Contact(ctx, idB); c.Photo != id {
+		t.Errorf("foto en A = %q, quería %q", c.Photo, id)
 	}
 }

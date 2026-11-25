@@ -186,9 +186,19 @@ Showing up in the list only proves discovery (UDP 50000, which goes out from
 each PC). Messages and files come **in** through TCP 50001, and that's
 blocked by the receiving device's firewall. It happens mostly if its network
 is set as "Public" or if the PC has several networks (e.g. Ethernet and
-Wi-Fi). The fix is an **inbound** rule for `LanChat.exe` on **all networks**
-(private, public and domain); no outbound rule is needed. In a command prompt
-as administrator, with that device's path:
+Wi-Fi).
+
+The fix: **only on that PC** (most don't need it), double-click
+**`Abrir puertos LanChat (solo si tienes problemas).bat`** ("open LanChat ports
+(only if you have problems)"; it's in the zip, next to `LanChat.exe`; it asks
+for administrator permission). It opens only inbound UDP 50000 and TCP 50001 on all networks,
+regardless of LanChat's folder, and warns if some rule blocks LanChat. Its
+rules go in the "LanChat (puertos)" group; running it again replaces them
+without duplicates, and **`Quitar puertos LanChat.bat`** removes them.
+
+An **inbound** rule for `LanChat.exe` on **all networks** (private, public
+and domain) also works; no outbound rule is needed. In a command prompt as
+administrator, with that device's path:
 
 ```bat
 netsh advfirewall firewall add rule name="LanChat" dir=in action=allow enable=yes profile=any program="C:\LanChat\LanChat.exe"
@@ -304,7 +314,9 @@ The uninstaller asks before deleting anything. Then it closes LanChat and
 removes:
 
 - starting with Windows and the notification registration;
-- the Windows Firewall rules (it asks for administrator permission);
+- the Windows Firewall rules (it asks for administrator permission). The
+  ones from `Abrir puertos LanChat (solo si tienes problemas).bat` don't depend
+  on the program and are left in place: remove them with `Quitar puertos LanChat.bat`;
 - the data folder `%APPDATA%\LanChat`: conversations, contacts, rooms,
   settings, the PC's identity and the log. The folder is only removed if it
   has no files unrelated to LanChat;
