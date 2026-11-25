@@ -509,6 +509,7 @@
   "sidebar.noContacts": "No device has been seen on the network yet.",
   "chat.empty": "Choose a contact to chat.",
   "chat.back": "Back",
+  "chat.close": "Close chat (Esc)",
   "chat.more": "More options",
   "chat.identity": "Identity",
   "chat.identityTitle": "See this contact's security fingerprint",

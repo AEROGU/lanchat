@@ -509,6 +509,7 @@
   "sidebar.noContacts": "Aún no se ha visto ningún equipo en la red.",
   "chat.empty": "Elige un contacto para conversar.",
   "chat.back": "Volver",
+  "chat.close": "Cerrar conversación (Esc)",
   "chat.more": "Más opciones",
   "chat.identity": "Identidad",
   "chat.identityTitle": "Ver la huella de seguridad de este contacto",

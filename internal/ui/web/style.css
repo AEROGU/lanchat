@@ -278,6 +278,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 #chat-header { background: var(--panel); position: relative; }
 
 #back-btn { display: none; font-size: 22px; }
+#close-chat-btn { font-size: 16px; line-height: 1; }
 
 .chat-actions { display: flex; align-items: center; gap: 10px; }
 #more-btn { display: none; font-size: 20px; line-height: 1; }
@@ -651,6 +652,7 @@ dialog input, dialog textarea, dialog select {
   #app:not(.chatting) #chat { display: none; }
   #back-btn { display: block; }
   #more-btn { display: block; }
+  #close-chat-btn { display: none; }
   /* En el teléfono el encabezado queda en dos líneas: el equipo está en la ficha. */
   #peer-detail { display: none; }
   .chat-actions {

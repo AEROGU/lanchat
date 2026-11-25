@@ -2017,6 +2017,13 @@ function setMenu(open) {
 // NARROW coincide con la ventana angosta de style.css (una columna).
 const NARROW = window.matchMedia("(max-width: 640px)");
 
+// overlayOpen indica si hay algo abierto sobre la conversación que Esc (o
+// Atrás) debe cerrar primero.
+const overlayOpen = () =>
+  Boolean(document.querySelector("dialog[open]")) || $("chat-actions").classList.contains("open") ||
+  !$("msg-menu").hidden || state.selecting || Boolean(state.editing) || Boolean(state.replyTo) ||
+  !$("emoji-panel").hidden;
+
 // lanchatBack lo llama el botón Atrás de Android (MainActivity): cierra lo
 // que esté abierto encima y devuelve true; con false la app pasa a segundo plano.
 window.lanchatBack = () => {
@@ -3532,6 +3539,16 @@ function bind() {
   $("group-form").addEventListener("submit", saveGroup);
   $("alias-form").addEventListener("submit", saveAlias);
   $("back-btn").addEventListener("click", closeChat);
+  $("close-chat-btn").addEventListener("click", showEmpty);
+  // Esc en ventana ancha cierra la conversación, como en WhatsApp Web, solo
+  // si no hay nada encima que cerrar ni texto escrito. En captura: decide
+  // antes de que los demás Escape cierren lo suyo.
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.isComposing || !state.current || NARROW.matches) return;
+    if (e.target.closest?.("input, textarea, select, [contenteditable]") && e.target.id !== "input") return;
+    if ($("input").value !== "" || overlayOpen()) return;
+    showEmpty();
+  }, true);
   // Visor de imágenes: tocar en cualquier parte lo cierra; al cerrar se suelta
   // la imagen (puede ser grande).
   $("viewer").addEventListener("click", () => $("viewer").close());
