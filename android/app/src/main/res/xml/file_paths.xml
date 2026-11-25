@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Lo que LanChatHost.openFile puede pasar a otras apps: solo los archivos
+<!-- Lo que LanChatHost.openFile y shareFiles pueden pasar a otras apps: solo los archivos
      recibidos (ver LanChatService.downloadDir). -->
 <paths>
     <!-- El APK de una versión nueva, para el instalador de Android
@@ -7,6 +7,9 @@
     <files-path name="actualizaciones" path="updates/" />
     <!-- La foto de perfil convertida a JPEG, para la página (PhotoPick). -->
     <cache-path name="foto" path="photo/" />
+    <!-- Las carpetas recibidas como .zip, para el "Compartir" de Android
+         (LanChatHost.shareFiles); las prepara el núcleo (mobile.shareDir). -->
+    <files-path name="compartir" path="share/" />
     <!-- Android 11+: Descargas/LanChat. -->
     <external-path name="descargas" path="Download/LanChat/" />
     <!-- Antes de Android 11, y lo recibido con versiones anteriores de la app. -->

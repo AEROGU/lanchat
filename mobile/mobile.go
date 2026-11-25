@@ -37,6 +37,9 @@ const (
 	// updatesDir: dentro de la carpeta de datos, donde se descarga el APK de
 	// una versión nueva (la app lo comparte con el instalador de Android).
 	updatesDir = "updates"
+	// shareDir: dentro de la carpeta de datos, donde se preparan los .zip de
+	// las carpetas recibidas para compartirlas (ver res/xml/file_paths.xml).
+	shareDir = "share"
 )
 
 // Host es lo que la app de Android ofrece al núcleo; lo implementa Kotlin.
@@ -49,6 +52,10 @@ type Host interface {
 	UnreadChanged(total int)
 	// OpenFile abre un archivo recibido con la app que corresponda.
 	OpenFile(path string) error
+	// ShareFiles abre el "Compartir" de Android con uno o más archivos
+	// recibidos; paths son las rutas separadas por saltos de línea
+	// (gomobile no pasa listas).
+	ShareFiles(paths string) error
 	// OpenURL abre un enlace en el navegador (la página del proyecto).
 	OpenURL(url string) error
 	// IdleSeconds: cuánto lleva la pantalla apagada, en segundos (0 si está
@@ -142,7 +149,12 @@ func Start(dataDir, deviceName, downloadDir, languages, chosen string, host Host
 	}
 	srv.OnUnreadChanged = host.UnreadChanged
 	srv.OnLanguageChanged = func(string) { host.LanguageChanged(a.Self().Language) }
-	srv.Shell = &ui.Shell{OpenFile: host.OpenFile, OpenURL: host.OpenURL}
+	srv.Shell = &ui.Shell{
+		OpenFile:   host.OpenFile,
+		OpenURL:    host.OpenURL,
+		ShareFiles: func(paths []string) error { return host.ShareFiles(strings.Join(paths, "\n")) },
+		ShareDir:   filepath.Join(dataDir, shareDir),
+	}
 	srv.Updates = &ui.UpdatePlatform{
 		Asset:   update.APKName,
 		Dir:     filepath.Join(dataDir, updatesDir),

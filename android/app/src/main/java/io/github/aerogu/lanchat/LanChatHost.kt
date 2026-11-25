@@ -1,6 +1,7 @@
 package io.github.aerogu.lanchat
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -39,6 +40,49 @@ class LanChatHost(private val context: Context, private val screen: ScreenIdle) 
             .setDataAndType(uri, type)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         start(intent, text(R.string.no_app_to_open, file.name))
+    }
+
+    /**
+     * Abre el "Compartir" de Android (WhatsApp, correo, Drive…) con uno o más
+     * archivos recibidos; [paths] son las rutas separadas por saltos de línea.
+     * Con varios archivos usa ACTION_SEND_MULTIPLE: Android solo muestra las
+     * apps que aceptan varios a la vez.
+     */
+    override fun shareFiles(paths: String) {
+        val files = paths.split('\n').filter { it.isNotEmpty() }.map(::File)
+        if (files.isEmpty()) return
+        val uris = ArrayList(files.map { file ->
+            try {
+                FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+            } catch (_: IllegalArgumentException) {
+                throw Exception(text(R.string.file_outside_downloads, file.name))
+            }
+        })
+        val type = commonType(files.map {
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(it.extension.lowercase()) ?: "application/octet-stream"
+        })
+        val send = if (uris.size == 1) {
+            Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0])
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        }
+        send.type = type
+        // El permiso de lectura viaja con el ClipData (EXTRA_STREAM solo no
+        // basta para varios archivos).
+        send.clipData = ClipData.newRawUri(files[0].name, uris[0]).apply {
+            uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+        }
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        start(Intent.createChooser(send, text(R.string.share_title)), text(R.string.no_app_to_share))
+    }
+
+    // El tipo MIME que abarca a todos: el mismo si coinciden, la familia
+    // (imagen, video…) con comodín, o cualquiera.
+    private fun commonType(types: List<String>): String {
+        val first = types.first()
+        if (types.all { it == first }) return first
+        val family = first.substringBefore('/')
+        return if (types.all { it.substringBefore('/') == family }) "$family/*" else "*/*"
     }
 
     override fun notifyUpdate(title: String, body: String) = Notifications.update(context, title, body)

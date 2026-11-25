@@ -338,6 +338,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/transfers/save-as", s.handleSaveAs)
 	mux.HandleFunc("POST /api/transfers/{action}", s.handleTransferAction)
 	mux.HandleFunc("POST /api/files/open", s.handleOpenFile)
+	mux.HandleFunc("POST /api/files/share", s.handleShareFiles)
 	mux.HandleFunc("GET /api/files/thumb", s.handleThumb)
 	mux.HandleFunc("GET /api/files/view", s.handleView)
 	mux.HandleFunc("POST /api/download-dir", s.handleDownloadDir)

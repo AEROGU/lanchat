@@ -8,6 +8,11 @@ import "github.com/AEROGU/lanchat/internal/i18n"
 type Shell struct {
 	OpenFile func(path string) error
 	OpenURL  func(url string) error
+	// ShareFiles pasa archivos recibidos al "Compartir" del sistema.
+	ShareFiles func(paths []string) error
+	// ShareDir: donde se preparan los .zip de las carpetas para compartir
+	// (la app debe poder pasárselos a otras apps).
+	ShareDir string
 }
 
 var (

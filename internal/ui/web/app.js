@@ -166,6 +166,8 @@ const api = {
   transfer: (action, id) => request("POST", `/api/transfers/${action}`, { id }),
   saveAs: (id) => request("POST", "/api/transfers/save-as", { id }),
   openFile: (id, index, reveal) => request("POST", "/api/files/open", { id, index, reveal }),
+  shareFiles: (id, indexes) => request("POST", "/api/files/share", { id, indexes }),
+  shareFolder: (id, dir) => request("POST", "/api/files/share", { id, dir }),
   downloadDir: (dir) => request("POST", "/api/download-dir", { dir }),
   openDownloadDir: () => request("POST", "/api/download-dir/open", {}),
   system: () => request("GET", "/api/system"),
@@ -1589,6 +1591,7 @@ function transferCard(m) {
     actions.append(act(t(tr.outgoing ? "transfer.cancelSend" : "transfer.cancel"), "cancel", false,
       t(tr.outgoing ? "transfer.cancelSendAsk" : "transfer.cancelDownloadAsk")));
   }
+  if (!tr.outgoing && state.mobile) actions.append(...shareButtons(tr));
   if (actions.childElementCount) div.append(actions);
 
   div.append(metaElement(m));
@@ -1700,6 +1703,7 @@ function fileList(tr) {
       if (!tr.outgoing && f.done) {
         li.append(textButton(t("files.open"), () => openReceived(tr, f, false)));
         if (!state.mobile) li.append(textButton(t("files.showInFolder"), () => openReceived(tr, f, true)));
+        else li.append(textButton(t("files.share"), () => shareReceived(() => api.shareFiles(tr.id, [f.index]))));
       }
     }
     ul.append(li);
@@ -1743,6 +1747,40 @@ async function transferAction(action, id, confirmText) {
     await api.transfer(action, id);
   } catch (e) {
     showBanner(e.message, 5000);
+  }
+}
+
+// shareButtons: en el teléfono, compartir de una vez los archivos sueltos
+// recibidos (si son varios) y cada carpeta como .zip, porque WhatsApp y casi
+// todas las apps no aceptan carpetas. Cada archivo tiene además su botón.
+function shareButtons(tr) {
+  const out = [];
+  const loose = tr.files.filter((f) => !f.dir && f.done).map((f) => f.index);
+  if (loose.length > 1) {
+    out.push(textButton(t("files.shareAll"), () => shareReceived(() => api.shareFiles(tr.id, loose))));
+  }
+  const roots = new Set(tr.files.filter((f) => f.dir && f.done).map((f) => f.dir.split("/")[0]));
+  for (const root of roots) {
+    out.push(textButton(t("files.shareFolder", { name: root }), () =>
+      shareReceived(() => api.shareFolder(tr.id, root), t("files.zipping", { name: root }))));
+  }
+  return out;
+}
+
+// sharing evita abrir el "Compartir" dos veces mientras se prepara un .zip.
+let sharing = false;
+
+async function shareReceived(call, waitText) {
+  if (sharing) return;
+  sharing = true;
+  if (waitText) showBanner(waitText);
+  try {
+    await call();
+    if (waitText) hideBanner();
+  } catch (e) {
+    showBanner(e.message, 5000);
+  } finally {
+    sharing = false;
   }
 }
 

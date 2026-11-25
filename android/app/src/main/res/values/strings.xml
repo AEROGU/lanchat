@@ -24,6 +24,8 @@
     <string name="local_network_message">Without the “Nearby devices” (local network) permission, Android blocks LanChat from finding and talking to the other devices in the office, so you won\'t see anyone.\n\nIn the app\'s settings, open Permissions and allow “Nearby devices”.</string>
     <string name="local_network_settings">Open settings</string>
     <string name="file_outside_downloads">“%s” is outside the received files folder</string>
+    <string name="share_title">Share with</string>
+    <string name="no_app_to_share">There\'s no app to share files with</string>
     <string name="no_app_to_open">There\'s no app to open “%s”</string>
     <string name="no_unknown_sources_setting">Android doesn\'t have the setting to install apps</string>
     <string name="allow_unknown_sources">Turn on “Allow from this source” for LanChat, come back and tap “Update” again.</string>
