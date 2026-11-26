@@ -162,6 +162,9 @@ type Server struct {
 	// Shell, si no es nil, reemplaza las funciones del escritorio (Android);
 	// la página lo sabe por stateJSON.Mobile. Debe asignarse antes de Serve.
 	Shell *Shell
+	// ShareDir: donde se preparan los .zip de las carpetas para compartir o
+	// copiar (otras apps deben poder leerlos). Debe asignarse antes de Serve.
+	ShareDir string
 	// Updates, si no es nil, permite que LanChat se actualice solo (ver
 	// StartUpdates). Debe asignarse antes de Serve.
 	Updates *UpdatePlatform

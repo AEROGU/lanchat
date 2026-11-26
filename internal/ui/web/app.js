@@ -166,8 +166,7 @@ const api = {
   transfer: (action, id) => request("POST", `/api/transfers/${action}`, { id }),
   saveAs: (id) => request("POST", "/api/transfers/save-as", { id }),
   openFile: (id, index, reveal) => request("POST", "/api/files/open", { id, index, reveal }),
-  shareFiles: (id, indexes) => request("POST", "/api/files/share", { id, indexes }),
-  shareFolder: (id, dir) => request("POST", "/api/files/share", { id, dir }),
+  shareFiles: (id, indexes, dirs) => request("POST", "/api/files/share", { id, indexes, dirs }),
   downloadDir: (dir) => request("POST", "/api/download-dir", { dir }),
   openDownloadDir: () => request("POST", "/api/download-dir/open", {}),
   system: () => request("GET", "/api/system"),
@@ -1183,7 +1182,9 @@ function canForward(m) {
   return m.kind === "files" && Boolean(m.transfer) && (m.transfer.outgoing || m.transfer.state === "completed");
 }
 
-// withActions agrega al globo el botón que abre el menú del mensaje.
+// withActions agrega al globo el botón que abre el menú del mensaje y, si
+// trae archivos que siguen en el equipo (recibidos o enviados), debajo el de
+// compartirlos (teléfono) o copiarlos al portapapeles (PC).
 function withActions(div, m) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -1196,6 +1197,20 @@ function withActions(div, m) {
     openMsgMenu(m.id, btn);
   });
   div.append(btn);
+  const tr = m.kind === "files" && !m.deleted ? m.transfer : null;
+  if (tr?.shareable) {
+    const share = document.createElement("button");
+    share.type = "button";
+    share.className = "msg-act msg-share";
+    share.title = t(state.mobile ? "files.share" : "files.copyTitle");
+    share.setAttribute("aria-label", t(state.mobile ? "files.share" : "files.copy"));
+    share.append(iconElement(state.mobile ? "share" : "copy"));
+    share.addEventListener("click", (e) => {
+      e.stopPropagation();
+      shareTransfer(tr);
+    });
+    div.append(share);
+  }
   return div;
 }
 
@@ -1212,6 +1227,8 @@ const ICONS = {
   copy: "M10 9h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2ZM5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5",
   select: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 12l3 3 5-6",
   trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6",
+  // Tres puntos unidos, el "Compartir" de Android.
+  share: "M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.6 13.5l6.8 4M15.4 6.5l-6.8 4",
   // Un monitor con una X: borrar solo en este equipo.
   erase: "M5 4h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM8 20h8M12 16v4M10 8l4 4M14 8l-4 4",
 };
@@ -1320,7 +1337,7 @@ function openMsgMenu(id, anchor, showMore = false, at = null) {
 function msgContextMenu(e) {
   if (state.mobile || state.selecting || !document.getSelection().isCollapsed) return;
   const el = e.target.closest(".msg[data-id]");
-  const btn = el?.querySelector(":scope > .msg-act");
+  const btn = el?.querySelector(":scope > .msg-act:not(.msg-share)");
   if (!btn) return; // avisos y eliminados no tienen menú
   e.preventDefault();
   closeMsgMenu();
@@ -1591,7 +1608,6 @@ function transferCard(m) {
     actions.append(act(t(tr.outgoing ? "transfer.cancelSend" : "transfer.cancel"), "cancel", false,
       t(tr.outgoing ? "transfer.cancelSendAsk" : "transfer.cancelDownloadAsk")));
   }
-  if (!tr.outgoing && state.mobile) actions.append(...shareButtons(tr));
   if (actions.childElementCount) div.append(actions);
 
   div.append(metaElement(m));
@@ -1703,7 +1719,6 @@ function fileList(tr) {
       if (!tr.outgoing && f.done) {
         li.append(textButton(t("files.open"), () => openReceived(tr, f, false)));
         if (!state.mobile) li.append(textButton(t("files.showInFolder"), () => openReceived(tr, f, true)));
-        else li.append(textButton(t("files.share"), () => shareReceived(() => api.shareFiles(tr.id, [f.index]))));
       }
     }
     ul.append(li);
@@ -1750,33 +1765,31 @@ async function transferAction(action, id, confirmText) {
   }
 }
 
-// shareButtons: en el teléfono, compartir de una vez los archivos sueltos
-// recibidos (si son varios) y cada carpeta como .zip, porque WhatsApp y casi
-// todas las apps no aceptan carpetas. Cada archivo tiene además su botón.
-function shareButtons(tr) {
-  const out = [];
-  const loose = tr.files.filter((f) => !f.dir && f.done).map((f) => f.index);
-  if (loose.length > 1) {
-    out.push(textButton(t("files.shareAll"), () => shareReceived(() => api.shareFiles(tr.id, loose))));
-  }
-  const roots = new Set(tr.files.filter((f) => f.dir && f.done).map((f) => f.dir.split("/")[0]));
-  for (const root of roots) {
-    out.push(textButton(t("files.shareFolder", { name: root }), () =>
-      shareReceived(() => api.shareFolder(tr.id, root), t("files.zipping", { name: root }))));
-  }
-  return out;
+// shareTransfer comparte (teléfono) o copia al portapapeles (PC) de una
+// vez los archivos de la oferta (enviados, o recibidos y completados): los
+// sueltos tal cual y cada carpeta como .zip, porque WhatsApp y casi todas las
+// apps no aceptan carpetas.
+function shareTransfer(tr) {
+  const ready = tr.files.filter((f) => tr.outgoing || f.done);
+  const loose = ready.filter((f) => !f.dir).map((f) => f.index);
+  const roots = [...new Set(ready.filter((f) => f.dir).map((f) => f.dir.split("/")[0]))];
+  const waitText = roots.length === 0 ? "" :
+    roots.length === 1 ? t("files.zipping", { name: roots[0] }) : t("files.zippingMany");
+  const doneText = state.mobile ? "" : t("files.copied", { n: loose.length + roots.length });
+  shareReceived(() => api.shareFiles(tr.id, loose, roots), waitText, doneText);
 }
 
 // sharing evita abrir el "Compartir" dos veces mientras se prepara un .zip.
 let sharing = false;
 
-async function shareReceived(call, waitText) {
+async function shareReceived(call, waitText, doneText) {
   if (sharing) return;
   sharing = true;
   if (waitText) showBanner(waitText);
   try {
     await call();
-    if (waitText) hideBanner();
+    if (doneText) showBanner(doneText, 4000);
+    else if (waitText) hideBanner();
   } catch (e) {
     showBanner(e.message, 5000);
   } finally {

@@ -19,73 +19,91 @@ import (
 // app ya los copió (WhatsApp, el correo…) o los vuelve a pedir al compartir.
 const shareMaxAge = 24 * time.Hour
 
+// shareProbe: archivos de una oferta enviada que se revisan para saber si
+// sigue en el equipo (cada mensaje dibujado los revisa).
+const shareProbe = 10
+
 var errNoShare = i18n.E("shell.noShare")
 
-// handleShareFiles pasa archivos recibidos al "Compartir" del sistema
-// (Android). Con Dir comparte esa carpeta raíz como un .zip; si no, los
-// archivos de Indexes tal cual. Como al abrir, solo acepta archivos
-// completados de transferencias recibidas, nunca rutas arbitrarias.
+// handleShareFiles pasa archivos recibidos a otras apps: el "Compartir" de
+// Android o el portapapeles de Windows (ver shareFiles), todo de una vez:
+// los archivos de Indexes tal cual y cada carpeta raíz de Dirs como un .zip.
+// Solo acepta archivos de la oferta (ver ready), nunca rutas arbitrarias.
 func (s *Server) handleShareFiles(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ID      string `json:"id"`
-		Indexes []int  `json:"indexes"`
-		Dir     string `json:"dir"`
+		ID      string   `json:"id"`
+		Indexes []int    `json:"indexes"`
+		Dirs    []string `json:"dirs"`
 	}
 	if !s.decode(w, r, &req) {
 		return
 	}
-	if s.Shell == nil || s.Shell.ShareFiles == nil {
-		s.fail(w, http.StatusBadRequest, errNoShare)
-		return
-	}
 	t, ok, err := s.b.Transfer(r.Context(), req.ID)
-	if err != nil || !ok || t.Outgoing {
+	if err != nil || !ok || len(req.Indexes)+len(req.Dirs) == 0 {
 		s.fail(w, http.StatusBadRequest, i18n.E("files.unavailable"))
 		return
 	}
 	var paths []string
-	if req.Dir != "" {
-		zipPath, err := s.zipFolder(r.Context(), t, req.Dir)
+	for _, i := range req.Indexes {
+		if i < 0 || i >= len(t.Files) || !ready(t, t.Files[i]) {
+			s.fail(w, http.StatusBadRequest, i18n.E("files.unavailable"))
+			return
+		}
+		if _, err := os.Stat(t.Files[i].Path); err != nil {
+			s.fail(w, http.StatusBadRequest, i18n.E("files.moved"))
+			return
+		}
+		paths = append(paths, t.Files[i].Path)
+	}
+	for _, dir := range req.Dirs {
+		zipPath, err := s.zipFolder(r.Context(), t, dir)
 		if err != nil {
 			s.fail(w, http.StatusBadRequest, err)
 			return
 		}
-		paths = []string{zipPath}
-	} else {
-		if len(req.Indexes) == 0 {
-			s.fail(w, http.StatusBadRequest, i18n.E("files.unavailable"))
-			return
-		}
-		for _, i := range req.Indexes {
-			if i < 0 || i >= len(t.Files) || !t.Files[i].Done {
-				s.fail(w, http.StatusBadRequest, i18n.E("files.unavailable"))
-				return
-			}
-			if _, err := os.Stat(t.Files[i].Path); err != nil {
-				s.fail(w, http.StatusBadRequest, i18n.E("files.moved"))
-				return
-			}
-			paths = append(paths, t.Files[i].Path)
-		}
+		paths = append(paths, zipPath)
 	}
-	if err := s.Shell.ShareFiles(paths); err != nil {
+	if err := s.shareFiles(paths); err != nil {
 		s.fail(w, http.StatusBadRequest, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// zipFolder comprime los archivos completados de la carpeta raíz root de una
-// transferencia recibida en Shell.ShareDir/<id>/<root>.zip y devuelve su ruta.
-// Dentro del zip, las rutas empiezan en la carpeta raíz.
+// ready: el archivo de la oferta se puede compartir. Uno enviado está en el
+// equipo desde el principio (si no se borró); uno recibido, al completarse.
+func ready(t store.Transfer, f store.TransferFile) bool { return t.Outgoing || f.Done }
+
+// shareable: la oferta tiene algo que compartir. De una enviada se mira si
+// sigue en el equipo, porque las copias temporales (lo arrastrado a la
+// ventana y todo lo enviado desde Android) se borran al terminar el envío;
+// basta el primer archivo que exista. Las copias se borran todas juntas, así
+// que de una enviada solo se revisan los primeros shareProbe.
+func shareable(t store.Transfer) bool {
+	for i, f := range t.Files {
+		if !t.Outgoing && f.Done {
+			return true
+		}
+		if t.Outgoing && i < shareProbe {
+			if st, err := os.Stat(f.Path); err == nil && st.Mode().IsRegular() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// zipFolder comprime los archivos de la carpeta raíz root de una oferta (ver
+// ready) en ShareDir/<id>/<root>.zip y devuelve su ruta. Dentro del zip, las
+// rutas empiezan en la carpeta raíz.
 func (s *Server) zipFolder(ctx context.Context, t store.Transfer, root string) (string, error) {
 	var files []store.TransferFile
 	for _, f := range t.Files {
-		if r, _, _ := strings.Cut(f.Dir, "/"); r == root && f.Done {
+		if r, _, _ := strings.Cut(f.Dir, "/"); r == root && ready(t, f) {
 			files = append(files, f)
 		}
 	}
-	if t.Dir == "" || len(files) == 0 || s.Shell.ShareDir == "" {
+	if (!t.Outgoing && t.Dir == "") || len(files) == 0 || s.ShareDir == "" {
 		return "", i18n.E("files.folderUnavailable")
 	}
 	for _, f := range files {
@@ -93,8 +111,8 @@ func (s *Server) zipFolder(ctx context.Context, t store.Transfer, root string) (
 			return "", i18n.E("files.moved")
 		}
 	}
-	cleanShareDir(s.Shell.ShareDir, time.Now())
-	dir := filepath.Join(s.Shell.ShareDir, safeName(t.ID))
+	cleanShareDir(s.ShareDir, time.Now())
+	dir := filepath.Join(s.ShareDir, safeName(t.ID))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}

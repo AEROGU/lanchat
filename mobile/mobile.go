@@ -153,8 +153,8 @@ func Start(dataDir, deviceName, downloadDir, languages, chosen string, host Host
 		OpenFile:   host.OpenFile,
 		OpenURL:    host.OpenURL,
 		ShareFiles: func(paths []string) error { return host.ShareFiles(strings.Join(paths, "\n")) },
-		ShareDir:   filepath.Join(dataDir, shareDir),
 	}
+	srv.ShareDir = filepath.Join(dataDir, shareDir)
 	srv.Updates = &ui.UpdatePlatform{
 		Asset:   update.APKName,
 		Dir:     filepath.Join(dataDir, updatesDir),

@@ -10,9 +10,6 @@ type Shell struct {
 	OpenURL  func(url string) error
 	// ShareFiles pasa archivos recibidos al "Compartir" del sistema.
 	ShareFiles func(paths []string) error
-	// ShareDir: donde se preparan los .zip de las carpetas para compartir
-	// (la app debe poder pasárselos a otras apps).
-	ShareDir string
 }
 
 var (
@@ -40,6 +37,21 @@ func (s *Server) openFolder(dir string) error {
 		return errNoFolders
 	}
 	return openPath(dir)
+}
+
+// clipboardCopy pone archivos en el portapapeles (las pruebas lo reemplazan).
+var clipboardCopy = copyFiles
+
+// shareFiles pasa archivos recibidos a otras apps: el "Compartir" de
+// Android o, en la PC, el portapapeles, como al copiar en el Explorador.
+func (s *Server) shareFiles(paths []string) error {
+	if s.Shell == nil {
+		return clipboardCopy(paths)
+	}
+	if s.Shell.ShareFiles == nil {
+		return errNoShare
+	}
+	return s.Shell.ShareFiles(paths)
 }
 
 func (s *Server) openURL(url string) error {

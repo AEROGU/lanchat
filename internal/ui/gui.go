@@ -32,6 +32,9 @@ const (
 	// toastSize: ícono de las notificaciones.
 	toastSize      = 128
 	edgeProfileDir = "edge"
+	// shareDirName: dentro de la carpeta de datos, donde se preparan los .zip
+	// de las carpetas recibidas para copiarlas al portapapeles.
+	shareDirName = "share"
 	// reopenGuard evita abrir dos ventanas si el usuario hace doble clic en la
 	// bandeja antes de que la primera termine de cargar.
 	reopenGuard = 5 * time.Second
@@ -110,6 +113,7 @@ func RunGUI(o Options) error {
 
 	g := &gui{app: a, srv: srv, log: o.Log, profileDir: filepath.Join(o.Dir, edgeProfileDir)}
 	srv.OnOpen = g.show
+	srv.ShareDir = filepath.Join(o.Dir, shareDirName)
 	srv.OnQuit = systray.Quit
 	srv.OnUnreadChanged = g.setUnread
 	srv.OnLanguageChanged = g.languageChanged

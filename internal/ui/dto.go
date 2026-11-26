@@ -301,6 +301,8 @@ type transferJSON struct {
 	Total     int64      `json:"total"`
 	Dir       string     `json:"dir"`
 	Files     []fileJSON `json:"files"`
+	// Shareable: hay archivos para compartir o copiar (ver shareable).
+	Shareable bool `json:"shareable"`
 }
 
 type fileJSON struct {
@@ -330,6 +332,7 @@ func toTransferJSON(t store.Transfer) transferJSON {
 		Total:     t.TotalSize(),
 		Dir:       t.Dir,
 		Files:     make([]fileJSON, len(t.Files)),
+		Shareable: shareable(t),
 	}
 	for i, f := range t.Files {
 		out.Files[i] = fileJSON{Index: f.Index, Name: f.Name, Size: f.Size, Done: f.Done, Dir: f.Dir,

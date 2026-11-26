@@ -857,6 +857,9 @@ dialog input, dialog textarea, dialog select {
   line-height: 1;
   opacity: 0;
 }
+/* Compartir o copiar lo recibido: redondo, debajo del ☺. */
+.msg-act.msg-share { top: 32px; display: grid; place-items: center; }
+.msg-act.msg-share .icon { width: 14px; height: 14px; }
 .msg.in .msg-act { right: -32px; }
 .msg.out .msg-act { left: -32px; }
 .msg:hover .msg-act, .msg-act:focus-visible, .msg-act.open { opacity: 1; }

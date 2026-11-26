@@ -21,5 +21,8 @@ func pickFolder(string, bool) (string, error) {
 	return "", i18n.E("shell.folderPickerWindows")
 }
 
+// copyFiles: el portapapeles de archivos solo está hecho para Windows.
+func copyFiles([]string) error { return errNoShare }
+
 // RevealFile abre la carpeta del archivo.
 func RevealFile(path string) error { return revealPath(path) }
